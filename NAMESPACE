@@ -1,1 +1,5 @@
 exportPattern("^[[:alpha:]]+")
+export()
+import(data.table)
+import(enviPat)
+import(stringr)

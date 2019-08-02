@@ -21,9 +21,8 @@ openBaseDB <- function(outfolder, dbname){
   conn
 }
 
-removeBaseDB <- function(outfolder, dbname){
+removeDB <- function(outfolder, dbname){
   db <- file.path(normalizePath(outfolder), paste0(dbname))
-  print(db)
   if(file.exists(db)) file.remove(db)
 }
 
@@ -31,20 +30,3 @@ writeDB <- function(conn, table, tblname){
   DBI::dbWriteTable(conn, tblname, table, append=T)
 }
 
-makeExtDB <- function(outfolder){
-  outfolder <- normalizePath(outfolder)
-  data(isotopes, package = "enviPat")
-  base.db <- file.path(outfolder, paste0(dbname, ".base.db"))
-  full.db <<- file.path(outfolder, paste0("extended.db"))
-
-  first.db = if(!file.exists(full.db)) T else F
-  full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
-
-  RSQLite::dbExecute(full.conn, gsubfn::fn$paste("PRAGMA foreign_keys = ON"))
-}
-
-removeExtDB <- function(outfolder){
-  outfolder <- normalizePath(outfolder)
-  db <- file.path(outfolder, paste0("extended.db"))
-  if(file.exists(db)) file.remove(db)
-}

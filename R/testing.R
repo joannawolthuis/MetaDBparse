@@ -13,39 +13,27 @@
 #   Check Package:             'Cmd + Shift + E'
 #   Test Package:              'Cmd + Shift + T'
 
-options(stringsAsFactors = FALSE,"java.parameters" = c("-Xmx16g")) # give java enough memory for smiles parsing
-
-outfolder = "/Users/jwolthuis/MetaDBparse/dbtest/"
-
-removeBaseDB(outfolder, "chebi.db")
-conn <- openBaseDB(outfolder, "chebi.db")
-db.orig <- build.CHEBI(outfolder)
-db.orig <- build.MACONDA(outfolder)
-
-iats = smiles.to.iatom(db.orig$structure)
-valid.struct <- unlist(lapply(iats, function(x) !is.null(x)))
-iats.valid <- iats[valid.struct]
-
-# - - - - - - - -
-
-require(enviPat)
-
-new.smiles = iatom.to.smiles(iats.valid, smitype = "Canonical")
-new.charge = iatom.to.charge(iats.valid)
-new.formula = iatom.to.formula(iats.valid)
-
-db.redone.struct <- db.orig
-db.redone.struct$structure[valid.struct] <- new.smiles
-db.redone.struct$baseformula[valid.struct] <- new.formula
-db.redone.struct$charge[valid.struct] <- new.charge
-
-# - - - - - - - - -
-
-db.removed.invalid <- db.redone.struct
-checked <- enviPat::check_chemform(isotopes, as.character(db.removed.invalid$baseformula))
-db.removed.invalid$baseformula <- checked$new_formula
-# remove these
-no.structure.no.formula <- which(checked$warning & !valid.struct)
-db.removed.invalid <- db.removed.invalid[-no.structure.no.formula,]
-
-writeDB(conn, db.removed.invalid, "base")
+# options(stringsAsFactors = FALSE,"java.parameters" = c("-Xmx16g")) # give java enough memory for smiles parsing
+#
+# outfolder = "/Users/jwolthuis/MetaDBparse/dbtest/"
+#
+outfolder <- "~/MetaboShiny/databases/"
+buildBaseDB(outfolder, "chebi")
+buildExtDB(outfolder,
+           base.dbname = "chebi",
+           cl = 0,
+           blocksize = 600,
+           mzrange = c(60,600),
+           adduct_table = adducts,
+           adduct_rules = adduct_rules)
+#
+# # === intermezzo ===
+#
+# adducts <- fread("~/Google Drive/MetaboShiny/backend/adducts/adduct_rule_table.csv", header = T) # V2 has di/trimers
+# adduct_rules <- fread("~/Google Drive/MetaboShiny/backend/adducts/adduct_rule_smarts.csv", header = T) # V2 has di/trimers
+#
+# usethis::use_data(adducts, overwrite=T)
+# usethis::use_data(adduct_rules, overwrite=T)
+#
+# # install package
+# devtools::install()

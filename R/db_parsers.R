@@ -48,10 +48,10 @@ build.HMDB <- function(outfolder){
 
     currNode <<- currNode
 
-    db.formatted[idx, "compoundname"] <<- xmlValue(currNode[['name']])
-    db.formatted[idx, "identifier"] <<- xmlValue(currNode[['accession']])
-    db.formatted[idx, "baseformula"] <<- xmlValue(currNode[['chemical_formula']])
-    db.formatted[idx, "structure"] <<- xmlValue(currNode[['smiles']])
+    db.formatted[idx, "compoundname"] <<- XML::xmlValue(currNode[['name']])
+    db.formatted[idx, "identifier"] <<- XML::xmlValue(currNode[['accession']])
+    db.formatted[idx, "baseformula"] <<- XML::xmlValue(currNode[['chemical_formula']])
+    db.formatted[idx, "structure"] <<- XML::xmlValue(currNode[['smiles']])
     db.formatted[idx, "description"] <<- paste("HMDB:",
                                                xmlValue(currNode[['cs_description']]),
                                                "CHEMSPIDER:",
@@ -59,7 +59,7 @@ build.HMDB <- function(outfolder){
     )
     x <- currNode[['predicted_properties']]
     properties <- currNode[['predicted_properties']]
-    db.formatted[idx, "charge"] <<- str_match(xmlValue(properties),
+    db.formatted[idx, "charge"] <<- stringr::str_match(xmlValue(properties),
                                               pattern = "formal_charge([+|\\-]\\d*|\\d*)")[,2]
   }
 
@@ -71,7 +71,8 @@ build.HMDB <- function(outfolder){
 }
 
 build.METACYC <- function(outfolder){
-  # NOTE: Requires downloading this SmartTable as delimited file: https://metacyc.org/group?id=biocyc17-31223-3729417004
+  cat("Requires downloading this SmartTable as delimited file: https://metacyc.org/group?id=biocyc17-31223-3729417004\n")
+  cat("Please place this file in the metacyc_source folder (make it if it's not there) in your database storage directory.")
   # May need to remake smartTable if anything on the website changes unfortunately
   # TODO: download file directly from link, will need a javascript. Maybe Rselenium??
 
@@ -751,45 +752,85 @@ build.SMPDB <- function(outfolder){
 
 build.KEGG <- function(outfolder){
   batches <- split(0:2300, ceiling(seq_along(0:2300)/100))
-  cpds <- pbapply::pblapply(batches, cl=session_cl, FUN=function(batch){
+  cpds <- pbapply::pblapply(batches, FUN=function(batch){
     names(KEGGREST::keggFind("compound", batch, "mol_weight"))
   })
   cpd.ids <- Reduce(c, cpds)
   id.batches <- split(cpd.ids, ceiling(seq_along(cpd.ids)/10))
 
   # --- GET COMPOUNDS ---
-  parallel::clusterExport(session_cl, c("kegg.charge", "rbindlist"))
 
-  kegg.cpd.list <- pbapply::pblapply(id.batches, cl=0, FUN=function(batch){
+  kegg.cpd.list <- pbapply::pblapply(id.batches, FUN=function(batch){
     rest.result <- KEGGREST::keggGet(batch)
     # ---------------------------
     base.list <- lapply(rest.result, FUN=function(cpd){
       cpd$NAME_FILT <- gsub(cpd$NAME, pattern = ";", replacement = "")
       data.table::data.table(compoundname = c(paste(cpd$NAME_FILT, collapse=", ")),
-                             description = c(if("BRITE" %in% names(cpd)) paste(cpd$BRITE, collapse=", ") else{NA}),
+                             description = paste0("Involved in pathways: ",
+                                                  paste0(cpd$PATHWAY, collapse = ", "),
+                                                  ". More specifically: ",
+                                                  paste0(cpd$MODULE, collapse = ", "),
+                                                  ". Also associated with compound classes: ",
+                                                  paste0(
+                                                    unique(trimws(
+                                                      gsub(cpd$BRITE, pattern = "\\[.*\\]|  D\\d* |\\(.*\\)|\\d*", replacement= "")
+                                                    )
+                                                    ), collapse = ", ")
+                             ),
                              baseformula = c(cpd$FORMULA),
                              identifier = c(cpd$ENTRY),
-                             #widentifier = c(paste(cpd$DBLINKS, collapse=";")),
-                             charge = c(kegg.charge(cpd$ATOM)),
-                             structure = {
-                               res = NA
-                               try({
-                                 res = BioMedR::BMgetDrugSmiKEGG(cpd$ENTRY,parallel = 1)
-                               })
-                               #print(res)
-                               res
-                             }
-                             #,pathway = if("PATHWAY" %in% names(cpd)) names(cpd$PATHWAY) else{NA}
+                             charge = 0,
+                             structure = NA
+                             ,pathway = if("PATHWAY" %in% names(cpd)) names(cpd$PATHWAY) else{NA}
       )
     })
     res = rbindlist(base.list)
     res
   })
 
-  db.formatted <- rbindlist(kegg.cpd.list)
+  # - - -
+  db.formatted <- data.table::rbindlist(kegg.cpd.list)
 
-  db.formatted$baseformula <- gsub(pattern = " |\\.", replacement = "", db.formatted$baseformula) # fix salt and spacing issues
+  base.loc <- file.path(outfolder, "kegg_source")
+  if(!dir.exists(base.loc)) dir.create(base.loc)
 
+  kegg.mol.paths = pbapply::pblapply(id.batches, cl=0, FUN=function(batch){
+    #mols = Rcpi::getMolFromKEGG(batch, parallel = 1)
+    bigmol = KEGGREST::keggGet(batch, "mol")
+    mols = strsplit(x = paste0("\n \n \n",bigmol), split = "\\$\\$\\$\\$\n")[[1]]
+    fps = normalizePath(file.path(base.loc, paste0(stringr::str_match(mols, pattern = "<ENTRY>\ncpd:(.*)\n")[,2], ".mol")),mustWork = F)
+    sapply(1:length(mols), function(i) writeLines(text = mols[[i]],
+                                                  con = fps[i]))
+    fps
+  })
+
+  fns = unlist(kegg.mol.paths)
+
+  rJava::.jcall("java/lang/System","V","gc")
+  gc()
+
+  smiles.rows = pbapply::pblapply(fns, function(fn){
+    smiles=NA
+    try({
+      iatom = rcdk::load.molecules(molfiles = fn)[[1]]
+      smiles = rcdk::get.smiles(molecule = iatom)
+      charge = rcdk::get.total.formal.charge(molecule = iatom)
+    })
+    id = gsub(basename(fn), pattern = "\\.mol", replacement="")
+    data.table::data.table(identifier = id, smiles = smiles, calcharge = charge)
+  })
+
+  smitable <- data.table::rbindlist(smiles.rows)
+
+  db.merged <- merge(db.formatted, smitable, by = "identifier")
+
+  db.formatted <- data.table(compoundname = db.merged$compoundname,
+                             description = db.merged$description,
+                             baseformula = db.merged$baseformula,
+                             identifier = db.merged$identifier,
+                             charge = db.merged$calcharge,
+                             structure = db.merged$smiles)
+  # - - - - - -
   db.formatted
 }
 
@@ -1277,7 +1318,7 @@ build.SUPERNATURAL <- function(outfolder){
   tables <- readHTMLTable(theurl)
   stats = data.table::rbindlist(tables)
   n = as.numeric(
-    gsub(str_match(theurl, pattern="contains (.*) natural compounds")[,2], pattern = ",", replacement = '')
+    gsub(stringr::str_match(theurl, pattern="contains (.*) natural compounds")[,2], pattern = ",", replacement = '')
   )
 
   # http://bioinf-applied.charite.de/supernatural_new/src/download_mol.php?sn_id=SN00000001
