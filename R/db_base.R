@@ -2,44 +2,46 @@ smiles.to.iatom <- function(smiles){
 
   require(rcdk)
 
-  iatoms <- pbapply::pbsapply(smiles, function(x){
+  iatoms <- sapply(smiles, function(x){
     mol=NULL
     try({
       mol = rcdk::parse.smiles(x,kekulise = F)[[1]]
       rcdk::do.aromaticity(mol)
       rcdk::do.typing(mol)
       rcdk::do.isotopes(mol)
-    })
+    }, silent=T)
     mol
   })
 
   try({
     rJava::.jcall("java/lang/System","V","gc")
     gc()
-  })
+  }, silent=T)
 
   return(iatoms)
 }
 
-iatom.to.smiles <- function(iatoms, smitype="Canonical"){
+iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=T){
 
-  cat("Valid SMILES output options include:\n\n")
-  cat(c(" - - - \n" , "Absolute", "AtomAtomMap", "AtomicMass",
-        "AtomicMassStrict", "Canonical", "Cx2dCoordinates", "Cx3dCoordinates",
-        "CxAtomLabel", "CxAtomValue", "CxCoordinates", "CxFragmentGroup",
-        "CxMulticenter", "CxPolymer", "CxRadical", "CxSmiles",
-        "CxSmilesWithCoords", "Default", "Generic", "InChILabelling",
-        "Isomeric", "Stereo", "StereoCisTrans", "StereoExTetrahedral",
-        "StereoTetrahedral", "Unique", "UniversalSmiles", "UseAromaticSymbols\n", "- - - \n\n"))
-  cat("Defaulting to 'Canonical'.")
+  if(!silent){
+    cat("Valid SMILES output options include:\n\n")
+    cat(c(" - - - \n" , "Absolute", "AtomAtomMap", "AtomicMass",
+          "AtomicMassStrict", "Canonical", "Cx2dCoordinates", "Cx3dCoordinates",
+          "CxAtomLabel", "CxAtomValue", "CxCoordinates", "CxFragmentGroup",
+          "CxMulticenter", "CxPolymer", "CxRadical", "CxSmiles",
+          "CxSmilesWithCoords", "Default", "Generic", "InChILabelling",
+          "Isomeric", "Stereo", "StereoCisTrans", "StereoExTetrahedral",
+          "StereoTetrahedral", "Unique", "UniversalSmiles", "UseAromaticSymbols\n", "- - - \n\n"))
+    cat("Defaulting to 'Canonical'.")
+  }
 
   require(rcdk)
 
-  new.smiles <- pbapply::pbsapply(iatoms, function(mol){
+  new.smiles <- sapply(iatoms, function(mol){
     smi = ""
     try({
       smi <- if(is.null(mol)) smi = "" else rcdk::get.smiles(mol, flavor = rcdk::smiles.flavors(smitype))
-    })
+    }, silent=T)
     smi
   })
 
@@ -53,7 +55,7 @@ iatom.to.charge <- function(iatoms){
 
   require(rcdk)
 
-  new.charges <- pbapply::pbsapply(iatoms, function(mol){
+  new.charges <- sapply(iatoms, function(mol){
     ch = rcdk::get.total.formal.charge(molecule = mol)
   })
 
@@ -67,11 +69,11 @@ iatom.to.formula <- function(iatoms){
 
   require(rcdk)
 
-  new.formulas <- pbapply::pbsapply(iatoms, function(mol){
+  new.formulas <- sapply(iatoms, function(mol){
     form = NULL
     try({
       form = rcdk::get.mol2formula(mol)@string
-    })
+    }, silent=T)
     form
   })
 
@@ -140,7 +142,18 @@ buildBaseDB <- function(outfolder, dbname, smitype = "Canonical"){
   #no.structure.no.formula <- which(checked$warning & !valid.struct)
   db.removed.invalid <- db.removed.invalid[-invalid.formula,]
 
-  writeDB(conn, db.removed.invalid, "base")
+  deuterated = which(grepl("D\\d*", x = db.removed.invalid$baseformula))
+  nondeuterated = gsub("D(\\d)*", "H\\1", db.removed.invalid$baseformula[deuterated])
+  matching = db.removed.invalid[baseformula %in% nondeuterated,]
+  if(nrow(matching)>0){
+    print("in progress... merge descriptions and add a note for deuterated")
+  }else{
+    db.removed.invalid$baseformula[deuterated] <- gsub("D(\\d)*", "H\\1", db.removed.invalid$baseformula[deuterated])
+    db.removed.invalid$description[deuterated] <- paste0("THIS DESCRIPTION IS FOR A SPECIFIC ISOTOPE, LIKELY NOT THE 100 PEAK! ", db.removed.invalid$description[deuterated])
+  }
 
+  # - - - - - - - - - - - - - - - - - -
+  writeDB(conn, db.removed.invalid, "base")
+  DBI::dbDisconnect(conn)
 }
 

@@ -18,22 +18,47 @@
 # outfolder = "/Users/jwolthuis/MetaDBparse/dbtest/"
 #
 outfolder <- "~/MetaboShiny/databases/"
-buildBaseDB(outfolder, "chebi")
-buildExtDB(outfolder,
-           base.dbname = "chebi",
-           cl = 0,
-           blocksize = 600,
-           mzrange = c(60,600),
-           adduct_table = adducts,
-           adduct_rules = adduct_rules)
-#
-# # === intermezzo ===
-#
-# adducts <- fread("~/Google Drive/MetaboShiny/backend/adducts/adduct_rule_table.csv", header = T) # V2 has di/trimers
-# adduct_rules <- fread("~/Google Drive/MetaboShiny/backend/adducts/adduct_rule_smarts.csv", header = T) # V2 has di/trimers
-#
-# usethis::use_data(adducts, overwrite=T)
-# usethis::use_data(adduct_rules, overwrite=T)
-#
-# # install package
-# devtools::install()
+dbname="kegg"
+
+buildBaseDB(outfolder, dbname)
+
+require(parallel)
+require(data.table)
+require(enviPat)
+data(isotopes)
+
+adduct_rules <- fread("~/Google Drive/MetaboShiny/backend/adducts/adduct_rule_smarts.csv")
+adducts <- fread("~/Google Drive/MetaboShiny/backend/adducts/adduct_rule_table.csv")
+
+usethis::use_data(adduct_rules, overwrite=T)
+usethis::use_data(adducts, overwrite=T)
+
+{
+  #file.remove(file.path(outfolder, "extended.db"))
+  # try({
+  #   parallel::stopCluster(session_cl)
+  # },silent=T)
+  # session_cl <- parallel::makeCluster(max(c(1, parallel::detectCores()-1)), outfile="/Users/jwolthuis/MetaboShiny/databases/log_cores.txt")
+  # #session_cl = parallel::makeCluster(3, outfile="/Users/jwolthuis/MetaboShiny/databases/log_cores.txt")
+  # parallel::clusterExport(session_cl, c("smiles.to.iatom",
+  #                                       "countAdductRuleMatches",
+  #                                       "checkAdductRule",
+  #                                       "doAdduct",
+  #                                       "iatom.to.smiles",
+  #                                       "adduct_rules",
+  #                                       "adducts",
+  #                                       "doIsotopes",
+  #                                       "isotopes"))
+  # parallel::clusterEvalQ(cl = session_cl, expr = {
+  #   library(data.table)
+  #   library(enviPat)
+  #   library(pbapply)
+  # })
+  buildExtDB(outfolder,
+             base.dbname = dbname,
+             cl = 0,#session_cl,
+             blocksize = 400,
+             mzrange = c(60,600),
+             adduct_table = adducts,
+             adduct_rules = adduct_rules)
+}

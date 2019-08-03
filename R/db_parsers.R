@@ -71,8 +71,6 @@ build.HMDB <- function(outfolder){
 }
 
 build.METACYC <- function(outfolder){
-  cat("Requires downloading this SmartTable as delimited file: https://metacyc.org/group?id=biocyc17-31223-3729417004\n")
-  cat("Please place this file in the metacyc_source folder (make it if it's not there) in your database storage directory.")
   # May need to remake smartTable if anything on the website changes unfortunately
   # TODO: download file directly from link, will need a javascript. Maybe Rselenium??
 
@@ -81,7 +79,7 @@ build.METACYC <- function(outfolder){
 
   source.file = file.path(base.loc, "All_compounds_of_MetaCyc.txt")
   if(!file.exists(source.file)){
-    message("Please download SmartTable from 'https://metacyc.org/group?id=biocyc17-31223-3729417004' as 'All_compounds_of_MetaCyc.txt' and save in the backend/db/metacyc_source folder.")
+    message("Please download SmartTable from 'https://metacyc.org/group?id=biocyc17-31223-3729417004' as 'All_compounds_of_MetaCyc.txt' and save in the outfolder/metacyc_source folder.")
     return(NULL)
   }
   metacyc.raw = read.table(source.file,header = T, sep = "\t",
@@ -90,7 +88,7 @@ build.METACYC <- function(outfolder){
   colnames(metacyc.raw) <- gsub(x=as.character(colnames(metacyc.raw)), pattern = '\\"', replacement="")
   metacyc.raw[] <- lapply(metacyc.raw, gsub, pattern = '\\"', replacement = "")
 
-  compounds <- pbapply::pbsapply(metacyc.raw$Compound, cl=session_cl, FUN=function(pw){
+  compounds <- pbapply::pbsapply(metacyc.raw$Compound, FUN=function(pw){
     pw <- iconv(pw, "latin1", "UTF-8",sub='')
     pw <- pw[pw != " // "]
     pw <- gsub(pw, pattern = "&", replacement="")
@@ -99,10 +97,10 @@ build.METACYC <- function(outfolder){
     paste0(res, collapse=" --- ")
   })
 
-  db.formatted <- data.table(compoundname = compounds,
+  db.formatted <- data.table::data.table(compoundname = compounds,
                              description = metacyc.raw$Summary,
                              baseformula = metacyc.raw$`Chemical Formula`,
-                             identifier = paste0("METACYC_CP_", 1:length(charges)),
+                             identifier = paste0("METACYC_CP_", 1:nrow(metacyc.raw)),
                              charge = c(0),
                              structure = metacyc.raw$SMILES)
 
@@ -402,7 +400,7 @@ build.WIKIDATA <- function(outfolder){
 
   # NOTE: tool - myFAIR, SOAR, EUDAT, JUNIPER (ML, can use R, jupyter notebooks?), GALAXY'S GUI/API CAN BE CHANGED??
 
-  db.2 <- as.data.table(aggregate(db.1, by=list(db.1$chemical_compoundLabel), function(x) c(unique((x)))))
+  db.2 <-  data.table::as.data.table(aggregate(db.1, by=list(db.1$chemical_compoundLabel), function(x) c(unique((x)))))
 
   db.2$description = apply(db.2[,c("roleLabel", "chemical_compoundDescription")], 1, FUN=function(x){
     x <- unlist(x)
@@ -496,7 +494,7 @@ build.RESPECT <- function(outfolder){
       split.lines <- sapply(lines, strsplit, ": ")
       names(split.lines) <- sapply(split.lines, function(x) x[1])
       split.lines <- lapply(split.lines, function(x) x[2:length(x)])
-      row <- data.table(
+      row <- data.table::data.table(
         compoundname = split.lines$`CH$NAME`,
         description = split.lines$RECORD_TITLE,
         baseformula = split.lines$`CH$FORMULA`,
@@ -631,7 +629,7 @@ build.HSDB <- function(outfolder){
   require(webchem)
   cas_ids <- xmlApply(parsed[[1]]$children$hsdb, function(x) xmlValue(x['CASRegistryNumber'][[1]]))
 
-  smiles = pbapply::pbsapply(cas_ids, cl = F, function(id) webchem::cir_query(id, representation = "smiles", resolver = NULL,
+  smiles = pbapply::pbsapply(cas_ids, function(id) webchem::cir_query(id, representation = "smiles", resolver = NULL,
                                                                               first = FALSE)[[1]])
 
   # TBA
@@ -731,7 +729,7 @@ build.SMPDB <- function(outfolder){
 
   smpdb.paths <- list.files(path = base.loc, pattern = "\\.csv$", full.names = T)
 
-  subtables <- pbapply::pblapply(smpdb.paths, cl = session_cl, fread)
+  subtables <- pbapply::pblapply(smpdb.paths, fread)
   smpdb.tab <- rbindlist(subtables, fill = T)
 
   db.formatted <- data.table::data.table(compoundname = smpdb.tab$`Metabolite Name`,
@@ -794,7 +792,7 @@ build.KEGG <- function(outfolder){
   base.loc <- file.path(outfolder, "kegg_source")
   if(!dir.exists(base.loc)) dir.create(base.loc)
 
-  kegg.mol.paths = pbapply::pblapply(id.batches, cl=0, FUN=function(batch){
+  kegg.mol.paths = pbapply::pblapply(id.batches, FUN=function(batch){
     #mols = Rcpi::getMolFromKEGG(batch, parallel = 1)
     bigmol = KEGGREST::keggGet(batch, "mol")
     mols = strsplit(x = paste0("\n \n \n",bigmol), split = "\\$\\$\\$\\$\n")[[1]]
@@ -846,7 +844,7 @@ build.DRUGBANK <- function(outfolder){
 
   theurl <- getURL("https://www.drugbank.ca/stats",.opts = list(ssl.verifypeer = FALSE) )
   tables <- readHTMLTable(theurl,header = F)
-  stats = as.data.table(tables[[1]])
+  stats =  data.table::as.data.table(tables[[1]])
   colnames(stats) <- c("Description", "Count")
   n = as.numeric(as.character(gsub(x = stats[Description == "Total Number of Drugs"]$Count, pattern = ",", replacement="")))
 
@@ -1010,7 +1008,7 @@ build.METABOLIGHTS <- function(outfolder){
 
   # require(RCurl)
   #
-  uris <- pbapply::pblapply(metabs, cl = F, FUN=function(id){
+  uris <- pbapply::pblapply(metabs, FUN=function(id){
     met_info = NA
     url <- paste0("https://www.ebi.ac.uk/metabolights/webservice/beta/compound/", id)
   })
@@ -1027,7 +1025,7 @@ build.METABOLIGHTS <- function(outfolder){
   #
   # metab_rows <- pbapply::pblapply(all_info$compoundMapping, cl = F, FUN=function(cpd){
   #   met_info <- cpd[[1]]$mafEntry
-  #   data.table(compoundname = met_info$metaboliteIdentification,
+  #   data.table::data.table(compoundname = met_info$metaboliteIdentification,
   #              description = if(!is.null(met_info$description)) met_info$description else "unknown",
   #              baseformula = met_info$chemicalFormula,
   #              identifier = if(!is.null(met_info$identifier)) met_info$identifier else "unknown",
@@ -1038,7 +1036,7 @@ build.METABOLIGHTS <- function(outfolder){
   #metab_tbl <- rbindlist(metab_rows)
 
 
-  db_rows <- pbapply::pblapply(metabs[!is.na(metabs)], cl = 0, FUN=function(met_info){
+  db_rows <- pbapply::pblapply(metabs[!is.na(metabs)],FUN=function(met_info){
     formula <- NA
     charge <- NA
     try({
@@ -1064,7 +1062,7 @@ build.METABOLIGHTS <- function(outfolder){
         formula <- rcdk::get.mol2formula(iatom, charge = charge)@string
       }
     }
-    met_dt <- data.table(compoundname = met_info$name,
+    met_dt <- data.table::data.table(compoundname = met_info$name,
                          description = if(!is.null(met_info$definition)) met_info$definition else "Unknown",
                          baseformula = formula,
                          identifier = met_info$id,
@@ -1106,7 +1104,7 @@ build.DIMEDB <- function(outfolder){
   joined <- rbind(ids, atom)
   casted <- reshape2::dcast(joined, InChIKey ~ Property, function(vec) paste0(vec, collapse=","))
 
-  db.formatted <- data.table(compoundname = Hmisc::capitalize(tolower(casted$Name)),
+  db.formatted <- data.table::data.table(compoundname = Hmisc::capitalize(tolower(casted$Name)),
                              description = do.call(paste0, c(casted[,c("IUPAC Name", "Synonym")], col="-")),
                              baseformula = casted$`Molecular Formula`,
                              identifier =  casted$InChIKey,
@@ -1272,7 +1270,7 @@ build.MASSBANK <- function(outfolder){
 
   # - - - - - - - - - - - - - - -
 
-  db_rows <- pbapply::pblapply(cpd_files, cl=session_cl, function(fn){
+  db_rows <- pbapply::pblapply(cpd_files, function(fn){
     row = NA
 
     try({
@@ -1280,7 +1278,7 @@ build.MASSBANK <- function(outfolder){
       split.lines <- sapply(lines, strsplit, ": ")
       names(split.lines) <- sapply(split.lines, function(x) x[1])
       split.lines <- lapply(split.lines, function(x) x[2:length(x)])
-      row <- data.table(
+      row <- data.table::data.table(
         compoundname = split.lines$`CH$NAME`,
         description = split.lines$RECORD_TITLE,
         baseformula = split.lines$`CH$FORMULA`,
@@ -1329,7 +1327,7 @@ build.SUPERNATURAL <- function(outfolder){
 
   all.ids = paste0("SN", str_pad(1:n, 8, pad = "0"))
 
-  pbapply::pbsapply(all.ids, cl = F, function(id, file.url, base.loc){
+  pbapply::pbsapply(all.ids, function(id, file.url, base.loc){
     mol.file <- file.path(base.loc, paste0(id, ".mol"))
     utils::download.file(file.url, mol.file, mode = "w",quiet = T)
   }, file.url = file.url, base.loc = base.loc)
