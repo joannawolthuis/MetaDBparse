@@ -1,4 +1,4 @@
-smiles.to.iatom <- function(smiles){
+smiles.to.iatom <- function(smiles, silent=T, cl=0){
 
   require(rcdk)
 
@@ -9,14 +9,12 @@ smiles.to.iatom <- function(smiles){
       rcdk::do.aromaticity(mol)
       rcdk::do.typing(mol)
       rcdk::do.isotopes(mol)
-    }, silent=T)
+    }, silent=silent)
     mol
   })
 
-  try({
-    rJava::.jcall("java/lang/System","V","gc")
-    gc()
-  }, silent=T)
+  rJava::.jcall("java/lang/System","V","gc")
+  gc()
 
   return(iatoms)
 }
@@ -37,11 +35,11 @@ iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=T){
 
   require(rcdk)
 
-  new.smiles <- sapply(iatoms, function(mol){
+  new.smiles <- sapply(iatoms, function(mol, silent=T){
     smi = ""
     try({
       smi <- if(is.null(mol)) smi = "" else rcdk::get.smiles(mol, flavor = rcdk::smiles.flavors(smitype))
-    }, silent=T)
+    }, silent=silent)
     smi
   })
 
@@ -51,12 +49,16 @@ iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=T){
   return(new.smiles)
 }
 
-iatom.to.charge <- function(iatoms){
+iatom.to.charge <- function(iatoms, silent=T){
 
   require(rcdk)
 
   new.charges <- sapply(iatoms, function(mol){
-    ch = rcdk::get.total.formal.charge(molecule = mol)
+    ch=0
+    try({
+      ch = rcdk::get.total.formal.charge(molecule = mol)
+    }, silent=silent)
+    ch
   })
 
   rJava::.jcall("java/lang/System","V","gc")
@@ -65,7 +67,7 @@ iatom.to.charge <- function(iatoms){
   return(new.charges)
 }
 
-iatom.to.formula <- function(iatoms){
+iatom.to.formula <- function(iatoms, silent=T){
 
   require(rcdk)
 
@@ -73,20 +75,24 @@ iatom.to.formula <- function(iatoms){
     form = NULL
     try({
       form = rcdk::get.mol2formula(mol)@string
-    }, silent=T)
-    form
+    }, silent=silent)
+    form[[1]]
   })
+
+  rJava::.jcall("java/lang/System","V","gc")
+  gc()
 
   return(new.formulas)
 }
 
 # BIG BOI
 
-buildBaseDB <- function(outfolder, dbname, smitype = "Canonical"){
+buildBaseDB <- function(outfolder, dbname, smitype = "Canonical", silent=T, cl=0){
 
   removeDB(outfolder, paste0(dbname,".db"))
+  base.loc <- file.path(outfolder, paste0(dbname, "_source"))
   conn <- openBaseDB(outfolder, paste0(dbname,".db"))
-  db.orig <- switch(dbname,
+  db.formatted <- switch(dbname,
                     chebi = build.CHEBI(outfolder),
                     maconda = build.MACONDA(outfolder),
                     kegg = build.KEGG(outfolder),
@@ -109,51 +115,90 @@ buildBaseDB <- function(outfolder, dbname, smitype = "Canonical"){
                     smpdb = build.SMPDB(outfolder),
                     supernatural = build.SUPERNATURAL(outfolder))
 
-  iats = smiles.to.iatom(db.orig$structure)
-  valid.struct <- unlist(lapply(iats, function(x) !is.null(x)))
-  iats.valid <- iats[valid.struct]
 
-  require(enviPat)
+  db.formatted <- data.table::as.data.table(db.formatted)
+  blocks = split(1:nrow(db.formatted), ceiling(seq_along(1:nrow(db.formatted))/1000))
 
-  new.smiles = iatom.to.smiles(iats.valid, smitype = "Canonical")
-  new.charge = iatom.to.charge(iats.valid)
-  new.formula = iatom.to.formula(iats.valid)
-
-  db.redone.struct <- db.orig
-  db.redone.struct$structure[valid.struct] <- new.smiles
-  db.redone.struct$baseformula[valid.struct] <- new.formula
-  db.redone.struct$charge[valid.struct] <- new.charge
-
-  # - - - - - - - - -
-
-  db.removed.invalid <- db.redone.struct
-  checked <- enviPat::check_chemform(isotopes, chemforms = as.character(db.removed.invalid$baseformula))
-  db.removed.invalid$baseformula <- checked$new_formula
-
-  invalid.struct <- !valid.struct
-
-  # dummy structures
-  db.removed.invalid$structure[which(invalid.struct)] <- paste0("[",
-                                                         db.removed.invalid$baseformula[invalid.struct],
-                                                         "]",
-                                                         db.removed.invalid$charge[invalid.struct])
-  # remove these
-  invalid.formula <- which(checked$warning)
-  #no.structure.no.formula <- which(checked$warning & !valid.struct)
-  db.removed.invalid <- db.removed.invalid[-invalid.formula,]
-
-  deuterated = which(grepl("D\\d*", x = db.removed.invalid$baseformula))
-  nondeuterated = gsub("D(\\d)*", "H\\1", db.removed.invalid$baseformula[deuterated])
-  matching = db.removed.invalid[baseformula %in% nondeuterated,]
-  if(nrow(matching)>0){
-    print("in progress... merge descriptions and add a note for deuterated")
-  }else{
-    db.removed.invalid$baseformula[deuterated] <- gsub("D(\\d)*", "H\\1", db.removed.invalid$baseformula[deuterated])
-    db.removed.invalid$description[deuterated] <- paste0("THIS DESCRIPTION IS FOR A SPECIFIC ISOTOPE, LIKELY NOT THE 100 PEAK! ", db.removed.invalid$description[deuterated])
+  if(cl != 0){
+    parallel::clusterExport(cl, c("db.formatted",
+                                  "iatom.to.smiles",
+                                  "smiles.to.iatom",
+                                  "iatom.to.formula",
+                                  "iatom.to.charge",
+                                  "silent",
+                                  "isotopes"))
   }
 
+  print("Uniformizing formulas/SMILES/charges and checking for mistakes...")
+
+  db.fixed.rows <- pbapply::pblapply(blocks, cl=cl, function(block){
+    db.form.block = db.formatted[block,]
+    iats = smiles.to.iatom(db.form.block$structure,
+                           silent=silent)
+
+    valid.struct <- unlist(lapply(iats, function(x) !is.null(x)))
+
+    require(enviPat)
+
+    new.smiles = iatom.to.smiles(iats[valid.struct], smitype = "Canonical",silent=silent)
+
+    new.charge = iatom.to.charge(iats[valid.struct],silent=silent)
+
+    new.formula = iatom.to.formula(iats[valid.struct],silent=silent)
+
+    db.redone.struct <- db.form.block
+    db.redone.struct$structure[valid.struct] <- new.smiles
+    db.redone.struct$baseformula[valid.struct] <- new.formula
+    db.redone.struct$charge[valid.struct] <- new.charge
+
+    # - - - - - - - - -
+
+
+    db.removed.invalid <- db.redone.struct
+    formulas = as.character(db.redone.struct$baseformula)
+    null.or.na <- which(is.null(formulas) | is.na(formulas) | formulas == "NULL")
+
+    if(length(null.or.na)>0){
+      db.removed.invalid <- db.removed.invalid[-null.or.na,]
+      valid.struct = valid.struct[-null.or.na]
+    }
+
+    checked <- enviPat::check_chemform(isotopes,
+                                       chemforms = as.character(db.removed.invalid$baseformula))
+
+    db.removed.invalid$baseformula <- checked$new_formula
+
+    invalid.struct <- !valid.struct
+
+    # dummy structures
+    db.removed.invalid$structure[which(invalid.struct)] <- paste0("[",
+                                                                  db.removed.invalid$baseformula[invalid.struct],
+                                                                  "]",
+                                                                  db.removed.invalid$charge[invalid.struct])
+    # remove these
+    invalid.formula <- which(checked$warning)
+    #no.structure.no.formula <- which(checked$warning & !valid.struct)
+    if(length(invalid.formula) > 0){
+      db.removed.invalid <- db.removed.invalid[-invalid.formula,]
+    }
+
+    deuterated = which(grepl("D\\d*", x = db.removed.invalid$baseformula))
+    if(length(deuterated)>0){
+      nondeuterated = gsub("D(\\d)*", "H\\1", db.removed.invalid$baseformula[deuterated])
+      matching = db.removed.invalid[baseformula %in% nondeuterated,]
+      if(nrow(matching)>0){
+        print("in progress... merge descriptions and add a note for deuterated")
+      }else{
+        db.removed.invalid$baseformula[deuterated] <- gsub("D(\\d)*", "H\\1", db.removed.invalid$baseformula[deuterated])
+        db.removed.invalid$description[deuterated] <- paste0("THIS DESCRIPTION IS FOR A SPECIFIC ISOTOPE, LIKELY NOT THE 100 PEAK! ", db.removed.invalid$description[deuterated])
+      }
+    }
+    return(db.removed.invalid)
+  })
+
+  db.final <- data.table::rbindlist(db.fixed.rows)
   # - - - - - - - - - - - - - - - - - -
-  writeDB(conn, db.removed.invalid, "base")
+  writeDB(conn, db.final, "base")
   DBI::dbDisconnect(conn)
 }
 

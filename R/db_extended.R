@@ -195,8 +195,8 @@ buildExtDB <- function(outfolder,
   outfolder <- normalizePath(outfolder)
   full.db <- file.path(outfolder, paste0(ext.dbname, ".db"))
   full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
-  RSQLite::dbExecute(full.conn, gsubfn::fn$paste("PRAGMA foreign_keys = ON"))
   RSQLite::dbExecute(full.conn, "PRAGMA journal_mode=WAL;")
+  RSQLite::dbExecute(full.conn, gsubfn::fn$paste("PRAGMA foreign_keys = ON"))
   RSQLite::dbExecute(full.conn, "CREATE TABLE IF NOT EXISTS structures(
                      struct_id INT PRIMARY KEY,
                      smiles TEXT,
@@ -228,9 +228,8 @@ buildExtDB <- function(outfolder,
   first.db <- if(RSQLite::dbGetQuery(full.conn, "SELECT COUNT(*) FROM extended")[1,1] == 0) TRUE else FALSE
   base.db <- normalizePath(file.path(outfolder, paste0(base.dbname, ".db")))
   RSQLite::dbExecute(full.conn, gsubfn::fn$paste("ATTACH '$base.db' AS tmp"))
-  #res <- DBI::dbSendQuery(full.conn, "PRAGMA busy_timeout=500;")
-  DBI::dbClearResult(res)
 
+  if(first.db) RSQLite::dbExecute(full.conn, "CREATE INDEX IF NOT EXISTS e_idx2 on extended(fullmz, foundinmode)")
   if(first.db | length(new_adducts) > 0){
     to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge
                                        FROM tmp.base")
@@ -265,11 +264,12 @@ buildExtDB <- function(outfolder,
   #blocks = blocks[[1]]
 
   if(length(new_adducts) > 0){
-    adduct_table <- as.data.table(adduct_table)[Name %in% new_adducts,]
+    adduct_table <- data.table::as.data.table(adduct_table)[Name %in% new_adducts,]
   }
 
   # completely new compounds
   pbapply::pblapply(1:length(blocks), cl=cl, function(i){
+    print(i)
     # for each block
     block = mapper[blocks[[i]],]
 

@@ -6,7 +6,7 @@
 
 
 # should return data table!
-build.HMDB <- function(outfolder){
+build.HMDB <- function(outfolder){ # WORKS
   file.url <- "http://www.hmdb.ca/system/downloads/current/hmdb_metabolites.zip"
   # ----
   base.loc <- file.path(outfolder, "hmdb_source")
@@ -53,9 +53,9 @@ build.HMDB <- function(outfolder){
     db.formatted[idx, "baseformula"] <<- XML::xmlValue(currNode[['chemical_formula']])
     db.formatted[idx, "structure"] <<- XML::xmlValue(currNode[['smiles']])
     db.formatted[idx, "description"] <<- paste("HMDB:",
-                                               xmlValue(currNode[['cs_description']]),
+                                               XML::xmlValue(currNode[['cs_description']]),
                                                "CHEMSPIDER:",
-                                               xmlValue(currNode[['description']])
+                                               XML::xmlValue(currNode[['description']])
     )
     x <- currNode[['predicted_properties']]
     properties <- currNode[['predicted_properties']]
@@ -63,14 +63,14 @@ build.HMDB <- function(outfolder){
                                               pattern = "formal_charge([+|\\-]\\d*|\\d*)")[,2]
   }
 
-  xmlEventParse(input, branches =
+  XML::xmlEventParse(input, branches =
                   list(metabolite = metabolite))
 
   # - - - - - - - - - - - -
   db.formatted
 }
 
-build.METACYC <- function(outfolder){
+build.METACYC <- function(outfolder){ # WORKS
   # May need to remake smartTable if anything on the website changes unfortunately
   # TODO: download file directly from link, will need a javascript. Maybe Rselenium??
 
@@ -107,7 +107,7 @@ build.METACYC <- function(outfolder){
   db.formatted
 }
 
-build.CHEBI <- function(outfolder){
+build.CHEBI <- function(outfolder){ # WORKS
 
   db.full <- {
     release = "latest"
@@ -348,7 +348,7 @@ build.CHEBI <- function(outfolder){
   db.formatted
 }
 
-build.FOODB <- function(outfolder){
+build.FOODB <- function(outfolder){ # WORKS
   file.url <- "http://www.foodb.ca/system/foodb_2017_06_29_csv.tar.gz"
   base.loc <- file.path(outfolder, "foodb_source")
 
@@ -370,7 +370,7 @@ build.FOODB <- function(outfolder){
   db.formatted
 }
 
-build.WIKIDATA <- function(outfolder){
+build.WIKIDATA <- function(outfolder){ # WORKS
   sparql_query <- 'PREFIX wd: <http://www.wikidata.org/entity/>
                            PREFIX wds: <http://www.wikidata.org/entity/statement/>
                            PREFIX wdv: <http://www.wikidata.org/value/>
@@ -400,7 +400,7 @@ build.WIKIDATA <- function(outfolder){
 
   # NOTE: tool - myFAIR, SOAR, EUDAT, JUNIPER (ML, can use R, jupyter notebooks?), GALAXY'S GUI/API CAN BE CHANGED??
 
-  db.2 <-  data.table::as.data.table(aggregate(db.1, by=list(db.1$chemical_compoundLabel), function(x) c(unique((x)))))
+  db.2 <-  data.table::as.data.table(aggregate(db.1, by=list(db.1$chemical_compoundLabel, db.1$chemical_formula), function(x) c(unique((x)))))
 
   db.2$description = apply(db.2[,c("roleLabel", "chemical_compoundDescription")], 1, FUN=function(x){
     x <- unlist(x)
@@ -409,14 +409,14 @@ build.WIKIDATA <- function(outfolder){
 
   db.formatted <- data.table::data.table(compoundname = as.character(db.2$chemical_compoundLabel),
                                          description = as.character(db.2$description),
-                                         baseformula = as.character(db.2$baseformula),
+                                         baseformula = as.character(db.2$chemical_formula),
                                          identifier= as.character(db.2$chemical_compound),
-                                         charge= as.character(db.2$charge),
+                                         charge= c(),
                                          structure = as.character(db.2$canonical_SMILES))
 
-  #from = "\u2080\u2081\u2082\u2083\u2084\u2085\u2086\u2087\u2088\u2089"
-  #to = "0123456789"
-  #db.formatted$baseformula <- chartr(from, to, db.formatted$baseformula)
+  from = "\u2080\u2081\u2082\u2083\u2084\u2085\u2086\u2087\u2088\u2089"
+  to = "0123456789"
+  db.formatted$baseformula <- chartr(from, to, db.formatted$baseformula)
 
   db.formatted$description[db.formatted$description == ""] <- "Unknown"
   db.formatted$baseformula <- as.character(db.formatted$baseformula)
@@ -427,55 +427,57 @@ build.WIKIDATA <- function(outfolder){
   db.formatted
 }
 
-build.WIKIPATHWAYS <- function(outfolder){
-  chebi.loc <- file.path(outfolder, "chebi.base.db")
-  # ---------------------------------------------------
-  chebi <- SPARQL::SPARQL(url="http://sparql.wikipathways.org/",
-                          query='prefix wp:      <http://vocabularies.wikipathways.org/wp#>
-                                                   prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#>
-                                                   prefix dcterms: <http://purl.org/dc/terms/>
-                                                   prefix xsd:     <http://www.w3.org/2001/XMLSchema#>
-                                                   PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+# RE-ENABLE AFTER TALKING TO EGON
+# build.WIKIPATHWAYS <- function(outfolder){
+#   chebi.loc <- file.path(outfolder, "chebi.db")
+#   require(SPARQL)
+#   # ---------------------------------------------------
+#   chebi <- SPARQL::SPARQL(url="http://sparql.wikipathways.org/",
+#                           query='prefix wp:      <http://vocabularies.wikipathways.org/wp#>
+#                                                    prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#>
+#                                                    prefix dcterms: <http://purl.org/dc/terms/>
+#                                                    prefix xsd:     <http://www.w3.org/2001/XMLSchema#>
+#                                                    PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+#
+#                                                    select  ?mb
+#                                                    (group_concat(distinct str(?labelLit);separator=", ") as ?label )
+#                                                    ?idurl as ?csid
+#                                                    (group_concat(distinct ?pwTitle;separator=", ") as ?description)
+#                                                    ?pathway
+#                                                    where {
+#                                                    ?mb a wp:Metabolite ;
+#                                                    rdfs:label ?labelLit ;
+#                                                    wp:bdbChEBI ?idurl ;
+#                                                    dcterms:isPartOf ?pathway .
+#                                                    ?pathway a wp:Pathway ;
+#                                                    dc:title ?pwTitle .
+#                                                    FILTER (BOUND(?idurl))
+#                                                    }
+#                                                    GROUP BY ?mb ?wp ?idurl ?pathway')
+#   chebi.ids <- gsub(chebi$results$csid, pattern = ".*:|>", replacement = "")
+#   conn.chebi <- RSQLite::dbConnect(RSQLite::SQLite(), chebi.loc)
+#   chebi.join.table <- data.table::data.table(identifier = chebi.ids,
+#                                              description = chebi$results$description,
+#                                              widentifier = chebi$results$mb,
+#                                              pathway = chebi$results$pathway)
+#   RSQLite::dbWriteTable(conn.chebi, "wikipathways", chebi.join.table, overwrite=TRUE)
+#   db.formatted <- RSQLite::dbGetQuery(conn.chebi, "SELECT DISTINCT  b.compoundname,
+#                                                                b.identifier,
+#                                                                w.description,
+#                                                                b.baseformula,
+#                                                                b.charge,
+#                                                                b.structure
+#                                                                FROM base b
+#                                                                JOIN wikipathways w
+#                                                                ON b.identifier = w.identifier")
+#
+#   db.formatted$identifier <- gsub(db.formatted$identifier, pattern = "<|>", replacement = "")
+#   RSQLite::dbRemoveTable(conn.chebi, "wikipathways")
+#   RSQLite::dbDisconnect(conn.chebi)
+#   db.formatted
+# }
 
-                                                   select  ?mb
-                                                   (group_concat(distinct str(?labelLit);separator=", ") as ?label )
-                                                   ?idurl as ?csid
-                                                   (group_concat(distinct ?pwTitle;separator=", ") as ?description)
-                                                   ?pathway
-                                                   where {
-                                                   ?mb a wp:Metabolite ;
-                                                   rdfs:label ?labelLit ;
-                                                   wp:bdbChEBI ?idurl ;
-                                                   dcterms:isPartOf ?pathway .
-                                                   ?pathway a wp:Pathway ;
-                                                   dc:title ?pwTitle .
-                                                   FILTER (BOUND(?idurl))
-                                                   }
-                                                   GROUP BY ?mb ?wp ?idurl ?pathway')
-  chebi.ids <- gsub(chebi$results$csid, pattern = ".*:|>", replacement = "")
-  conn.chebi <- RSQLite::dbConnect(RSQLite::SQLite(), chebi.loc)
-  chebi.join.table <- data.table::data.table(identifier = chebi.ids,
-                                             description = chebi$results$description,
-                                             widentifier = chebi$results$mb,
-                                             pathway = chebi$results$pathway)
-  RSQLite::dbWriteTable(conn.chebi, "wikipathways", chebi.join.table, overwrite=TRUE)
-  db.formatted <- RSQLite::dbGetQuery(conn.chebi, "SELECT DISTINCT  b.compoundname,
-                                                               b.identifier,
-                                                               w.description,
-                                                               b.baseformula,
-                                                               b.charge,
-                                                               b.structure
-                                                               FROM base b
-                                                               JOIN wikipathways w
-                                                               ON b.identifier = w.identifier")
-
-  db.formatted$identifier <- gsub(db.formatted$identifier, pattern = "<|>", replacement = "")
-  RSQLite::dbRemoveTable(conn.chebi, "wikipathways")
-
-  db.formatted
-}
-
-build.RESPECT <- function(outfolder){
+build.RESPECT <- function(outfolder){ # WORKS
   file.url <- "http://spectra.psc.riken.jp/menta.cgi/static/respect/respect.zip"
 
   base.loc <- file.path(outfolder, "respect_source")
@@ -488,7 +490,7 @@ build.RESPECT <- function(outfolder){
                           full.names = T)
 
   db_rows <- pbapply::pblapply(cpd_files, function(fn){
-    row = NA
+    row = data.table::data.table()
     try({
       lines <- readLines(fn,skipNul = T, n = 100)
       split.lines <- sapply(lines, strsplit, ": ")
@@ -499,7 +501,7 @@ build.RESPECT <- function(outfolder){
         description = split.lines$RECORD_TITLE,
         baseformula = split.lines$`CH$FORMULA`,
         identifier = split.lines$ACCESSION,
-        charge = NA,
+        charge = c(NA),
         structure = split.lines$`CH$SMILES`
       )
       if(row$structure == "N/A") row$structure <- split.lines$`CH$INCHI`
@@ -507,13 +509,17 @@ build.RESPECT <- function(outfolder){
     row
   })
 
-  db.formatted <- rbindlist(db_rows[!is.na(db_rows)])
+  db.formatted <- data.table::rbindlist(db_rows[!is.na(db_rows)],fill = T)
   db.formatted <- unique(db.formatted[!is.na(baseformula),])
+  db.formatted <- aggregate(db.formatted, by = list(db.formatted$compoundname), FUN = function(x) paste0(unique(x), collapse="/"))
+  db.formatted <- db.formatted[,-1]
+
+  # - - -
 
   db.formatted
 }
 
-build.MACONDA <- function(outfolder){
+build.MACONDA <- function(outfolder){ # NEEDS SPECIAL FUNCTIONALITY
 
   file.url = "https://www.maconda.bham.ac.uk/downloads/MaConDa__v1_0__csv.zip"
 
@@ -556,7 +562,7 @@ build.MACONDA <- function(outfolder){
   return(db.base)
 }
 
-build.T3DB <- function(outfolder){
+build.T3DB <- function(outfolder){ # WORKS
   # t3db
   file.url <- "http://www.t3db.ca/system/downloads/current/toxins.csv.zip"
   # ----
@@ -566,20 +572,20 @@ build.T3DB <- function(outfolder){
   zip.file <- file.path(base.loc, "T3DB.zip")
   utils::download.file(file.url, zip.file,mode = "w")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
-  db.base <- data.table::fread(file.path(base.loc, "toxins.csv"), fill=T)
+  db.formatted <- data.table::fread(file.path(base.loc, "toxins.csv"), fill=T)
 
-  db.base <- data.table::data.table(
-    compoundname = db.base$Name,
-    baseformula = db.base$`Chemical Formula`,
-    description = db.base$Description,
+  db.formatted <- data.table::data.table(
+    compoundname = db.formatted$Name,
+    baseformula = db.formatted$`Chemical Formula`,
+    description = db.formatted$Description,
     charge = c(0),
-    identifier = db.base$`T3DB ID`,
-    structure = db.base$SMILES
+    identifier = db.formatted$`T3DB ID`,
+    structure = db.formatted$SMILES
   )
-  return(db.base)
+  return(db.formatted)
 }
 
-build.HSDB <- function(outfolder){
+build.HSDB <- function(outfolder){ # NEEDS WORK
   file.url = "ftp://ftp.nlm.nih.gov/nlmdata/.hsdblease/hsdb.xml.20190528.zip"
   base.loc <- file.path(outfolder, "hsdb_source")
   if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
@@ -637,7 +643,7 @@ build.HSDB <- function(outfolder){
   db.formatted
 }
 
-build.BLOODEXPOSOME <- function(outfolder){
+build.BLOODEXPOSOME <- function(outfolder){ # WORKS
   file.url = "https://exposome1.fiehnlab.ucdavis.edu/download/BloodExpsomeDatabase_version_1.0.xlsx"
 
   base.loc <- file.path(outfolder, "bloodexposome_source")
@@ -657,7 +663,7 @@ build.BLOODEXPOSOME <- function(outfolder){
   db.formatted
 }
 
-build.EXPOSOMEEXPLORER <- function(outfolder){
+build.EXPOSOMEEXPLORER <- function(outfolder){ # WORKS
   file.url <- "http://exposome-explorer.iarc.fr/system/downloads/current/biomarkers.csv.zip"
 
   base.loc <- file.path(outfolder, "exex_source")
@@ -717,7 +723,7 @@ build.EXPOSOMEEXPLORER <- function(outfolder){
   db.formatted
 }
 
-build.SMPDB <- function(outfolder){
+build.SMPDB <- function(outfolder){ # OK I THINK
   file.url <- "http://smpdb.ca/downloads/smpdb_metabolites.csv.zip"
   # ----
   base.loc <- file.path(outfolder, "smpdb_source")
@@ -729,8 +735,8 @@ build.SMPDB <- function(outfolder){
 
   smpdb.paths <- list.files(path = base.loc, pattern = "\\.csv$", full.names = T)
 
-  subtables <- pbapply::pblapply(smpdb.paths, fread)
-  smpdb.tab <- rbindlist(subtables, fill = T)
+  subtables <- pbapply::pblapply(smpdb.paths, data.table::fread)
+  smpdb.tab <- data.table::rbindlist(subtables, fill = T)
 
   db.formatted <- data.table::data.table(compoundname = smpdb.tab$`Metabolite Name`,
                                          description = paste0(smpdb.tab$`Pathway Name`,
@@ -748,7 +754,7 @@ build.SMPDB <- function(outfolder){
   db.formatted
 }
 
-build.KEGG <- function(outfolder){
+build.KEGG <- function(outfolder){ # WORKS
   batches <- split(0:2300, ceiling(seq_along(0:2300)/100))
   cpds <- pbapply::pblapply(batches, FUN=function(batch){
     names(KEGGREST::keggFind("compound", batch, "mol_weight"))
@@ -782,7 +788,7 @@ build.KEGG <- function(outfolder){
                              ,pathway = if("PATHWAY" %in% names(cpd)) names(cpd$PATHWAY) else{NA}
       )
     })
-    res = rbindlist(base.list)
+    res = data.table::rbindlist(base.list)
     res
   })
 
@@ -832,7 +838,7 @@ build.KEGG <- function(outfolder){
   db.formatted
 }
 
-build.DRUGBANK <- function(outfolder){
+build.DRUGBANK <- function(outfolder){  # WORKS
   base.loc <- file.path(outfolder, "drugbank_source")
   if(!dir.exists(base.loc)) dir.create(base.loc)
 
@@ -842,8 +848,8 @@ build.DRUGBANK <- function(outfolder){
   }
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
 
-  theurl <- getURL("https://www.drugbank.ca/stats",.opts = list(ssl.verifypeer = FALSE) )
-  tables <- readHTMLTable(theurl,header = F)
+  theurl <- RCurl::getURL("https://www.drugbank.ca/stats",.opts = list(ssl.verifypeer = FALSE) )
+  tables <- XML::readHTMLTable(theurl,header = F)
   stats =  data.table::as.data.table(tables[[1]])
   colnames(stats) <- c("Description", "Count")
   n = as.numeric(as.character(gsub(x = stats[Description == "Total Number of Drugs"]$Count, pattern = ",", replacement="")))
@@ -877,7 +883,7 @@ build.DRUGBANK <- function(outfolder){
       properties <- currNode[['experimental-properties']]
     }
 
-    proplist <- xmlToList(properties)
+    proplist <- XML::xmlToList(properties)
     if(length(proplist) == 0){
       return(NULL)
     }
@@ -916,15 +922,15 @@ build.DRUGBANK <- function(outfolder){
       return(NULL)
     }
 
-    db.formatted[idx, "compoundname"] <<- xmlValue(currNode[['name']])
-    db.formatted[idx, "identifier"] <<- xmlValue(currNode[['drugbank-id']])
+    db.formatted[idx, "compoundname"] <<- XML::xmlValue(currNode[['name']])
+    db.formatted[idx, "identifier"] <<- XML::xmlValue(currNode[['drugbank-id']])
     db.formatted[idx, "baseformula"] <<- proplist[[which.form]][['value']]
     db.formatted[idx, "structure"] <<- if(length(which.struc) > 0){
       proplist[[which.struc]][['value']]
     }else{
       ""
     }
-    db.formatted[idx, "description"] <<- xmlValue(currNode[['description']])
+    db.formatted[idx, "description"] <<- XML::xmlValue(currNode[['description']])
     db.formatted[idx, "charge"] <<- if(length(which.charge) > 0){
       proplist[[which.charge]][['value']]
     }else{
@@ -932,19 +938,21 @@ build.DRUGBANK <- function(outfolder){
     }
   }
 
-  res = xmlEventParse(file = file.path(base.loc, "full database.xml"), branches =
+  res = XML::xmlEventParse(file = file.path(base.loc, "full database.xml"), branches =
                         list("drug" = metabolite, "drugbank-metabolite-id-value" = print))
 
-  # - - - - - - - - - - - -
+  db.formatted <- db.formatted[-1,]
+
+  # - - -
+
   db.formatted
 }
 
-build.LIPIDMAPS <- function(outfolder){
-  file.url = "http://www.lipidmaps.org/resources/downloads/LMSDFDownload3Jan19.zip"
+build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking)
+  file.url = "https://www.lipidmaps.org/resources/downloads/LMSD/LMSD_20190711.sdf.zip"
 
   # ----
   base.loc <- file.path(outfolder, "lipidmaps_source")
-  if(!dir.exists(base.loc)) dir.create(base.loc)
   zip.file <- file.path(base.loc, "lipidmaps.zip")
   utils::download.file(file.url, zip.file)
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
@@ -958,7 +966,7 @@ build.LIPIDMAPS <- function(outfolder){
   desc <- function(sdfset){
     mat <- NULL
     try({
-      datablock = data.table::as.data.table(datablock2ma(datablocklist=datablock(sdfset)))
+      datablock = data.table::as.data.table(ChemmineR::datablock2ma(datablocklist=ChemmineR::datablock(sdfset)))
 
       last_cn <<- colnames(datablock)
 
@@ -977,15 +985,17 @@ build.LIPIDMAPS <- function(outfolder){
           compoundname = as.character(if("NAME" %in% colnames(datablock)) datablock$NAME else datablock$SYSTEMATIC_NAME),
           baseformula = as.character(datablock$FORMULA),
           structure = as.character(if("SMILES" %in% last_cn) datablock$SMILES else datablock$INCHI),
-          description = as.character(paste0("Main class: ", datablock$MAIN_CLASS,
-                                            ". Subclass: ", datablock$SUB_CLASS))
+          description = as.character(paste0("Also known as ", paste0(datablock$ABBREVIATION, " or ", datablock$SYSTEMATIC_NAME)))
         ))
       }
     })
-    return(mat)
+    mat
   }
 
-  sdfStream.joanna(input=sdf.path, output=file.path(base.loc, "lipidmaps_parsed.csv"), append=FALSE, fct=desc, silent = T)
+  sdfStream.joanna(input=sdf.path, output=file.path(base.loc, "lipidmaps_parsed.csv"),
+                       append=FALSE,
+                       fct=desc,
+                       silent = T)
 
   db.base <- data.table::fread(file.path(base.loc, "lipidmaps_parsed.csv"), fill = T, header=T)
 
@@ -1073,12 +1083,12 @@ build.METABOLIGHTS <- function(outfolder){
   })
 
   db_rows_a <- lapply(db_rows, function(x) x$metabs)
-  db.formatted <- rbindlist(db_rows_a[!is.na(db_rows_a)])
+  db.formatted <- data.table::rbindlist(db_rows_a[!is.na(db_rows_a)])
 
   db.formatted
 }
 
-build.DIMEDB <- function(outfolder){
+build.DIMEDB <- function(outfolder){ # WORKS
   files = c(#"structures.zip",
     "dimedb_pathways.zip",
     "dimedb_sources.zip",
@@ -1094,10 +1104,10 @@ build.DIMEDB <- function(outfolder){
     utils::download.file(url, zip.file)
     utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
   })
-  atom <- fread(file.path(base.loc,"dimedb_pc_info.tsv"))
-  ids <- fread(file.path(base.loc,"dimedb_id_info.tsv"))
-  source <- fread(file.path(base.loc,"dimedb_sources.tsv"))
-  pathway <- fread(file.path(base.loc, "dimedb_pathways.tsv"))
+  atom <- data.table::fread(file.path(base.loc,"dimedb_pc_info.tsv"))
+  ids <- data.table::fread(file.path(base.loc,"dimedb_id_info.tsv"))
+  source <- data.table::fread(file.path(base.loc,"dimedb_sources.tsv"))
+  pathway <- data.table::fread(file.path(base.loc, "dimedb_pathways.tsv"))
 
   unique.inchi <- unique(ids$InChIKey)
 
@@ -1112,18 +1122,19 @@ build.DIMEDB <- function(outfolder){
                              structure = casted$SMILES
                              #pathway = c(NA)
   )
-
-  # - - -
-
   db.formatted[which(db.formatted$description == "-")] <- c("Unknown")
   db.formatted$description <- gsub(db.formatted$description, pattern = "^-|-$", replacement = "")
 
-  # - - -
+  rmv = which(db.formatted$baseformula == "Unknown")
+
+  db.formatted = db.formatted[-rmv,]
+
+  # - - - -
 
   db.formatted
 }
 
-build.VMH <- function(outfolder){
+build.VMH <- function(outfolder){ # WORKS
   api_url <- "https://vmh.uni.lu/_api/metabolites/"
 
   pagerange = 150
@@ -1191,7 +1202,7 @@ build.VMH <- function(outfolder){
   db.formatted
 }
 
-build.PHENOLEXPLORER <- function(outfolder){
+build.PHENOLEXPLORER <- function(outfolder){ # WORKS
   file.urls = paste0(
     "http://phenol-explorer.eu/system/downloads/current/",
     c("composition-data.xlsx.zip",
@@ -1200,7 +1211,6 @@ build.PHENOLEXPLORER <- function(outfolder){
       "metabolites.csv.zip",
       "metabolites-structures.csv.zip"))
 
-  # ---
   base.loc <- file.path(outfolder, "phenolexplorer_source")
   if(!dir.exists(base.loc)) dir.create(base.loc)
 
@@ -1222,32 +1232,33 @@ build.PHENOLEXPLORER <- function(outfolder){
 
   db.base <- unique(compo_tbl[, c("compound", "description")])
 
-  merged.cpds <- merge(db.base, struct_tbl_keep, by.x = "compound", by.y = "name")
 
   # unique structure info
-  struct_tbl <- fread(file.path(base.loc,"compounds-structures.csv"))
-  struct_tbl_keep <- struct_tbl[, c("id", "smiles", "name")]
+  struct_tbl <- data.table::fread(file.path(base.loc,"compounds-structures.csv"))
+  struct_tbl_keep <- struct_tbl[, c("id", "smiles", "name", "formula")]
+
+  merged.cpds <- merge(db.base, struct_tbl_keep, by.x = "compound", by.y = "name")
 
   # metabolites
-  met_tbl <- fread(file.path(base.loc,"metabolites.csv"))
-  met_struct <- fread(file.path(base.loc,"metabolites-structures.csv"))
-  met_struct_keep <- met_struct[, c("id", "smiles", "name")]
+  met_tbl <- data.table::fread(file.path(base.loc,"metabolites.csv"))
+  met_struct <- data.table::fread(file.path(base.loc,"metabolites-structures.csv"))
+  met_struct_keep <- met_struct[, c("id", "smiles", "formula", "name")]
 
   missing = (!(met_tbl$name %in% compo_tbl$compound))
   mis_mets <- met_tbl[missing,]
 
   merged.mets <- merge(mis_mets, met_struct_keep, by.x = "name", by.y = "name")
-  merged.mets <- merged.mets[, c("name", "synonyms", "id.x", "smiles")]
-  colnames(merged.mets) <- c("compound", "description", "id", "smiles")
+  merged.mets <- merged.mets[, c("name", "synonyms", "id.x", "formula.x", "smiles")]
+  colnames(merged.mets) <- c("compound", "description", "id", "formula", "smiles")
   merged.mets$description <- paste0("Metabolite of compound in food.", merged.mets$description)
 
   merged <- unique(rbind(merged.cpds, merged.mets))
 
   db.formatted <- data.table::data.table(compoundname = merged$compound,
                                          description = merged$description,
-                                         baseformula = merged$baseformula,
+                                         baseformula = merged$formula,
                                          identifier= merged$id,
-                                         charge= merged$charge,
+                                         charge= c(NA),
                                          structure= merged$smiles)
 
   db.formatted <- db.formatted[ , .(description = paste(description, collapse=". ")),
@@ -1256,7 +1267,7 @@ build.PHENOLEXPLORER <- function(outfolder){
   db.formatted
 }
 
-build.MASSBANK <- function(outfolder){
+build.MASSBANK <- function(outfolder){ # WORKS
   file.url <- "https://github.com/MassBank/MassBank-data/archive/master.zip"
   base.loc <- file.path(outfolder, "massbank_source")
   if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
@@ -1299,13 +1310,17 @@ build.MASSBANK <- function(outfolder){
     row
   })
 
-  db.formatted <- rbindlist(db_rows[!is.na(db_rows)], fill=TRUE)
+  db.formatted <- data.table::rbindlist(db_rows[!is.na(db_rows)], fill=TRUE)
   db.formatted <- db.formatted[!is.na(baseformula),]
 
+  db.formatted <- aggregate(db.formatted, by = list(db.formatted$structure),
+                            FUN = function(x) paste0(unique(x), collapse="/"))
+
+  db.formatted <- db.formatted[,-1]
   db.formatted
 }
 
-build.SUPERNATURAL <- function(outfolder){
+build.SUPERNATURAL <- function(outfolder){ # NEEDS WORK, REALLY SLOW TOO INFEASIBLE
   base.loc <- file.path(outfolder, "supernatural_source")
   if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
 
