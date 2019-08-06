@@ -2,7 +2,9 @@ smiles.to.iatom <- function(smiles, silent=T, cl=0){
 
   require(rcdk)
 
-  iatoms <- sapply(smiles, function(x){
+  print(silent)
+
+  iatoms <- sapply(smiles, function(x, silent){
     mol=NULL
     try({
       mol = rcdk::parse.smiles(x,kekulise = F)[[1]]
@@ -11,10 +13,12 @@ smiles.to.iatom <- function(smiles, silent=T, cl=0){
       rcdk::do.isotopes(mol)
     }, silent=silent)
     mol
-  })
+  },silent=silent)
 
-  rJava::.jcall("java/lang/System","V","gc")
-  gc()
+  try({
+    rJava::.jcall("java/lang/System","V","gc")
+    gc()
+  })
 
   return(iatoms)
 }
@@ -35,16 +39,18 @@ iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=T){
 
   require(rcdk)
 
-  new.smiles <- sapply(iatoms, function(mol, silent=T){
+  new.smiles <- sapply(iatoms, function(mol, silent){
     smi = ""
     try({
       smi <- if(is.null(mol)) smi = "" else rcdk::get.smiles(mol, flavor = rcdk::smiles.flavors(smitype))
     }, silent=silent)
     smi
-  })
+  },silent=silent)
 
-  rJava::.jcall("java/lang/System","V","gc")
-  gc()
+  try({
+    rJava::.jcall("java/lang/System","V","gc")
+    gc()
+  })
 
   return(new.smiles)
 }
@@ -53,16 +59,18 @@ iatom.to.charge <- function(iatoms, silent=T){
 
   require(rcdk)
 
-  new.charges <- sapply(iatoms, function(mol){
+  new.charges <- sapply(iatoms, function(mol, silent){
     ch=0
     try({
       ch = rcdk::get.total.formal.charge(molecule = mol)
     }, silent=silent)
     ch
-  })
+  },silent=silent)
 
-  rJava::.jcall("java/lang/System","V","gc")
-  gc()
+  try({
+    rJava::.jcall("java/lang/System","V","gc")
+    gc()
+  })
 
   return(new.charges)
 }
@@ -71,16 +79,18 @@ iatom.to.formula <- function(iatoms, silent=T){
 
   require(rcdk)
 
-  new.formulas <- sapply(iatoms, function(mol){
+  new.formulas <- sapply(iatoms, function(mol,silent){
     form = NULL
     try({
       form = rcdk::get.mol2formula(mol)@string
     }, silent=silent)
     form[[1]]
-  })
+  },silent=silent)
 
-  rJava::.jcall("java/lang/System","V","gc")
-  gc()
+  try({
+    rJava::.jcall("java/lang/System","V","gc")
+    gc()
+  })
 
   return(new.formulas)
 }
