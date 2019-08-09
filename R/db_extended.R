@@ -174,14 +174,14 @@ doIsotopes <- function(formula, charge){
 }
 
 buildExtDB <- function(outfolder,
-                       ext.dbname="extended",
+                       ext.dbname = "extended",
                        base.dbname,
-                       cl=0,
-                       blocksize=600,
-                       mzrange=c(60,600),
+                       cl = 0,
+                       blocksize = 600,
+                       mzrange = c(60,600),
                        adduct_table = adducts,
                        adduct_rules = adduct_rules,
-                       silent=silent){
+                       silent = silent){
   # A
   outfolder <- normalizePath(outfolder)
 
@@ -234,7 +234,7 @@ buildExtDB <- function(outfolder,
     return(data.table::data.table())
   }
 
-  done.structures = RSQLite::dbGetQuery(full.conn, "SELECT COUNT(*) FROM structures")[,1]
+  done.structures = RSQLite::dbGetQuery(full.conn, "SELECT MAX(struct_id) FROM structures")[,1]
   start.id = done.structures + 1
 
   # new will be written
@@ -333,17 +333,22 @@ buildExtDB <- function(outfolder,
         return(unique(meta.table[,-"structure"]))
     }})
 
-    repeat{
-      rv <- try({
-        RSQLite::dbAppendTable(full.conn,
-                               "extended",
-                               data.table::rbindlist(per.adduct.tables))
-        RSQLite::dbAppendTable(full.conn,
-                               "structures",
-                               unique(blocks[[i]][,c("struct_id", "smiles")]))
+    to.write = data.table::rbindlist(per.adduct.tables)
+
+    if(nrow(to.write)>0){
+      print(head(to.write))
+      repeat{
+        rv <- try({
+          RSQLite::dbAppendTable(full.conn,
+                                 "extended",
+                                 to.write)
+          RSQLite::dbAppendTable(full.conn,
+                                 "structures",
+                                 unique(blocks[[i]][,c("struct_id", "smiles")]))
         },silent = silent)
-      if(!is(rv, "try-error")){
-        break
+        if(!is(rv, "try-error")){
+          break
+        }
       }
     }
     RSQLite::dbDisconnect(full.conn)

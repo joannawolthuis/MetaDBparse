@@ -79,5 +79,5 @@
 #              adduct_table = adducts,
 #              adduct_rules = adduct_rules,
 #              silent = F,
-#              ext.dbname = "extended_v2")
+#              ext.dbname = "extended")
 # }
