@@ -2,8 +2,6 @@ smiles.to.iatom <- function(smiles, silent=T, cl=0){
 
   require(rcdk)
 
-  print(silent)
-
   iatoms <- sapply(smiles, function(x, silent){
     mol=NULL
     try({
@@ -199,8 +197,10 @@ buildBaseDB <- function(outfolder, dbname, smitype = "Canonical", silent=T, cl=0
       if(nrow(matching)>0){
         print("in progress... merge descriptions and add a note for deuterated")
       }else{
-        db.removed.invalid$baseformula[deuterated] <- gsub("D(\\d)*", "H\\1", db.removed.invalid$baseformula[deuterated])
-        db.removed.invalid$description[deuterated] <- paste0("THIS DESCRIPTION IS FOR A SPECIFIC ISOTOPE, LIKELY NOT THE 100 PEAK! ", db.removed.invalid$description[deuterated])
+        db.removed.invalid$baseformula[deuterated] <- gsub("D(\\d)*", "H\\1",
+                                                           db.removed.invalid$baseformula[deuterated])
+        db.removed.invalid$description[deuterated] <- paste0("THIS DESCRIPTION IS FOR A SPECIFIC ISOTOPE, LIKELY NOT THE 100 PEAK!",
+                                                             db.removed.invalid$description[deuterated])
       }
     }
     return(db.removed.invalid)

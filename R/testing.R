@@ -45,33 +45,39 @@
 # usethis::use_data(adduct_rules, overwrite=T)
 # usethis::use_data(adducts, overwrite=T)
 #
-{
-  try({
-    parallel::stopCluster(session_cl)
-  },silent=T)
-  session_cl <- parallel::makeCluster(3, outfile="")
-  parallel::clusterExport(session_cl, c("smiles.to.iatom",
-                                        "countAdductRuleMatches",
-                                        "checkAdductRule",
-                                        "doAdduct",
-                                        "iatom.to.smiles",
-                                        "adduct_rules",
-                                        "adducts",
-                                        "doIsotopes",
-                                        "isotopes"))
-  parallel::clusterEvalQ(cl = session_cl, expr = {
-    library(data.table)
-    library(enviPat)
-    library(pbapply)
-  })
-
-  buildExtDB(outfolder,
-             base.dbname = dbname,
-             cl = session_cl,
-             blocksize = 200,
-             mzrange = c(60,600),
-             adduct_table = adducts,
-             adduct_rules = adduct_rules,
-             silent=F,
-             ext.dbname = "extended_tester")
-  }
+# {
+#   try({
+#     parallel::stopCluster(session_cl)
+#   },silent=T)
+#
+#   session_cl <- parallel::makeCluster(3, outfile="")
+#
+#   parallel::clusterExport(session_cl, c("smiles.to.iatom",
+#                                         "countAdductRuleMatches",
+#                                         "checkAdductRule",
+#                                         "doAdduct",
+#                                         "iatom.to.smiles",
+#                                         "smiles.to.iatom",
+#                                         "iatom.to.formula",
+#                                         "iatom.to.charge",
+#                                         "adduct_rules",
+#                                         "adducts",
+#                                         "doIsotopes",
+#                                         "isotopes"))
+#
+#   parallel::clusterEvalQ(cl = session_cl, expr = {
+#     library(data.table)
+#     library(enviPat)
+#     library(pbapply)
+#   })
+#
+#   buildExtDB(outfolder,
+#              base.dbname = dbname,
+#              cl = session_cl,
+#              blocksize = 200,
+#              mzrange = c(60,600),
+#              adduct_table = adducts,
+#              adduct_rules = adduct_rules,
+#              silent = F,
+#              ext.dbname = "extended_v2")
+# }

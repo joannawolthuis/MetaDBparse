@@ -62,7 +62,6 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
   # query_adduct = "[M+H]1+"
   row = adduct_table[Name == query_adduct,]
   name <- row$Name
-  #print(name)
   ion_mode <- row$Ion_mode
 
   unique_formulas <- unique(data.table::data.table(
@@ -111,16 +110,7 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
 
   if(!(adduct_after %in% c("", "FALSE", FALSE, NA))){
     unique_formulas$adducted <- enviPat::mergeform(formula1 = unique_formulas$adducted,
-                                                   formula2 = adduct_after)
-
-    # for(formula in unique_formulas$adducted){
-    #   print(formula)
-    #   res = enviPat::mergeform(formula1 = formula,
-    #                      formula2 = adduct_after)
-    #   print(res)
-    #   print(" - - - ")
-    # }
-  }
+                                                   formula2 = adduct_after)}
 
   # --- is deduction necessary? ---
   if(!(deduct_after  %in% c("", "FALSE", FALSE, NA))){
@@ -194,18 +184,16 @@ buildExtDB <- function(outfolder,
                        silent=silent){
   # A
   outfolder <- normalizePath(outfolder)
+
+  print(paste("Will calculate adducts + isotopes for the", base.dbname, "database."))
   full.db <- file.path(outfolder, paste0(ext.dbname, ".db"))
   full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
   RSQLite::dbExecute(full.conn, gsubfn::fn$paste("PRAGMA foreign_keys = ON"))
   RSQLite::dbExecute(full.conn, "CREATE TABLE IF NOT EXISTS structures(
-                     struct_id INT PRIMARY KEY,
-                     smiles TEXT,
-                     source TEXT)")
-  RSQLite::dbExecute(full.conn, "CREATE TABLE IF NOT EXISTS adducts_done(
-                     struct_id INT,
-                     adduct TEXT,
-                     FOREIGN KEY(struct_id) REFERENCES structures(struct_id))")
-  if(DBI::dbExistsTable(full.conn, "extended")){
+                                 struct_id INT PRIMARY KEY,
+                                 smiles TEXT,
+                                 UNIQUE(struct_id, smiles))")
+  if(RSQLite::dbExistsTable(full.conn, "extended")){
     new_adducts <- setdiff(adduct_table$Name,
                            RSQLite::dbGetQuery(full.conn,
                                                "SELECT DISTINCT adduct FROM extended")[,1])
@@ -214,16 +202,14 @@ buildExtDB <- function(outfolder,
   }
 
   RSQLite::dbExecute(full.conn, strwrap("CREATE TABLE IF NOT EXISTS extended(
-                           struct_id text,
-                           fullformula text,
-                           fullmz decimal(30,13),
-                           adduct text,
-                           isoprevalence float,
-                           foundinmode text,
-                           source text,
-                           FOREIGN KEY(struct_id) REFERENCES structures(id))", width=10000, simplify=TRUE))
+                                         struct_id text,
+                                         fullmz decimal(30,13),
+                                         adduct text,
+                                         isoprevalence float,
+                                         foundinmode text,
+                                         FOREIGN KEY(struct_id) REFERENCES structures(struct_id)
+                                         )", width=10000, simplify=TRUE))
   RSQLite::dbExecute(full.conn, gsubfn::fn$paste("PRAGMA auto_vacuum = 1;"))
-
 
   # B
   first.db <- if(RSQLite::dbGetQuery(full.conn, "SELECT COUNT(*) FROM extended")[1,1] == 0) TRUE else FALSE
@@ -238,7 +224,6 @@ buildExtDB <- function(outfolder,
     to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge
                                             FROM tmp.base")
     to.do$struct_id <- c(NA)
-    to.do$source = dbname
   }else{
     to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge
                                             FROM tmp.base LEFT JOIN structures str
@@ -256,11 +241,15 @@ buildExtDB <- function(outfolder,
   mapper = data.table::data.table(struct_id = seq(start.id, start.id + nrow(to.do) - 1, 1),
                                   smiles = to.do$structure,
                                   baseformula = to.do$baseformula,
-                                  charge = to.do$charge,
-                                  source = c(base.dbname))
-  blocks = split(1:nrow(mapper), ceiling(seq_along(1:nrow(mapper))/blocksize))
+                                  charge = to.do$charge)
 
-  DBI::dbDisconnect(full.conn)
+  print(paste("Parsing", nrow(mapper), "new compounds..."))
+
+  blocks = split(mapper, ceiling(seq_along(1:nrow(mapper))/blocksize))
+
+  #blocks = split(1:nrow(mapper), ceiling(seq_along(1:nrow(mapper))/blocksize))
+
+  RSQLite::dbDisconnect(full.conn)
 
   # - - - - L O O P  T H I S - - - - -
   if(length(new_adducts) > 0){
@@ -268,13 +257,13 @@ buildExtDB <- function(outfolder,
   }
 
   # completely new compounds
-  pbapply::pblapply(1:length(blocks), cl=cl, function(i, mzrange){
+  per.adduct.tables = pbapply::pblapply(1:length(blocks), cl=cl, function(i, mzrange=mzrange, silent=silent){
 
     full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
-    RSQLite::dbExecute(full.conn, "PRAGMA busy_timeout=10000;")
+    RSQLite::dbExecute(full.conn, "PRAGMA busy_timeout=5000;")
 
     # for each block
-    block = mapper[blocks[[i]],]
+    block = blocks[[i]]
 
     # convert to iatom
     iatoms <- smiles.to.iatom(block$smiles, silent=silent)
@@ -285,11 +274,13 @@ buildExtDB <- function(outfolder,
 
     # = = = FOR THE GOOD STRUCTURES = = =
     parsable.iats = iatoms[good.structures]
-    structure.reactive.groups = countAdductRuleMatches(parsable.iats, adduct_rules)
-    structure.adducts.possible = checkAdductRule(structure.reactive.groups, adducts)
+    structure.reactive.groups = countAdductRuleMatches(parsable.iats,
+                                                       adduct_rules)
+    structure.adducts.possible = checkAdductRule(structure.reactive.groups,
+                                                 adducts)
 
     # now loop through adducts
-    adduct_rows = lapply(adduct_table$Name, function(add){# make cl session_cl later
+    per.adduct.tables = lapply(adduct_table$Name, function(add){# make cl session_cl later
 
       has.structure.can.adduct = block[good.structures[unlist(structure.adducts.possible[,..add])]]
       no.structure = block[bad.structures]
@@ -315,7 +306,6 @@ buildExtDB <- function(outfolder,
       if(length(keepers) == 0){
         return(data.table::data.table())
       }else{
-
         isotable <- doIsotopes(formula = adducted[keepers,]$final,
                                charge = adducted[keepers,]$final.charge)
 
@@ -328,43 +318,34 @@ buildExtDB <- function(outfolder,
 
         # ==== MAKE FINAL TABLE ====
 
-        meta.table <- data.table::data.table(fullformula = adducted.plus.isotopes$final,
-                                             fullmz = adducted.plus.isotopes$fullmz,
+        meta.table <- data.table::data.table(fullmz = adducted.plus.isotopes$fullmz,
                                              adduct = c(add),
                                              isoprevalence = adducted.plus.isotopes$isoprevalence,
-                                             foundinmode = c(adduct_table[Name == add, Ion_mode]),
-                                             structure = adducted.plus.isotopes$structure.x,
-                                             source = c(base.dbname))
+                                             structure = adducted.plus.isotopes$structure.x)
 
         # map SMILES to smile_id
         ids <- mapper$struct_id[match(meta.table$structure,
                                       mapper$smiles)]
         meta.table$struct_id <- ids
 
-        # === WRITE ===
+        # === RETURN ===
 
-        repeat{
-          rv <- try({
-            RSQLite::dbAppendTable(full.conn, "extended",
-                                   meta.table[,-"structure"])
-          },silent = silent)
-          if(!is(rv, "try-error")){
-            break
-            }
-        }
+        return(unique(meta.table[,-"structure"]))
     }})
 
     repeat{
       rv <- try({
         RSQLite::dbAppendTable(full.conn,
+                               "extended",
+                               data.table::rbindlist(per.adduct.tables))
+        RSQLite::dbAppendTable(full.conn,
                                "structures",
-                               unique(mapper[blocks[[i]],c("struct_id",
-                                                           "smiles")]))
+                               unique(blocks[[i]][,c("struct_id", "smiles")]))
         },silent = silent)
       if(!is(rv, "try-error")){
-        RSQLite::dbDisconnect(full.conn)
         break
       }
     }
-  },mzrange=mzrange)
+    RSQLite::dbDisconnect(full.conn)
+  },mzrange=mzrange, silent=silent)
 }
