@@ -201,12 +201,14 @@ buildExtDB <- function(outfolder,
     new_adducts <- adduct_table$Name
   }
 
+  RSQLite::dbExecute(full.conn, "DROP TABLE IF EXISTS adducts")
+  RSQLite::dbWriteTable(conn, "adducts", adduct_table)
+
   RSQLite::dbExecute(full.conn, strwrap("CREATE TABLE IF NOT EXISTS extended(
                                          struct_id text,
                                          fullmz decimal(30,13),
                                          adduct text,
-                                         isoprevalence float,
-                                         foundinmode text,
+                                         isoprevalence float
                                          FOREIGN KEY(struct_id) REFERENCES structures(struct_id)
                                          )", width=10000, simplify=TRUE))
   RSQLite::dbExecute(full.conn, gsubfn::fn$paste("PRAGMA auto_vacuum = 1;"))
@@ -231,7 +233,8 @@ buildExtDB <- function(outfolder,
                                             WHERE str.smiles IS NULL")}
   if(nrow(to.do) == 0){
     print("all already done")
-    return(data.table::data.table())
+    RSQLite::dbDisconnect(full.conn)
+    return(NULL)
   }
 
   done.structures = RSQLite::dbGetQuery(full.conn, "SELECT MAX(struct_id) FROM structures")[,1]

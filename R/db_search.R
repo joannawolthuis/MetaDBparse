@@ -34,56 +34,58 @@ searchMZ <- function(mzs, ionmodes, outfolder, base.dbname, ppm, ext.dbname="ext
                             ID INTEGER PRIMARY KEY AUTOINCREMENT,
                             mzmin decimal(30,13),
                             mzmax decimal(30,13));",width=10000, simplify=TRUE)
+
   RSQLite::dbExecute(conn, sql.make.rtree)
   RSQLite::dbWriteTable(conn, "mzranges", mzranges, append=TRUE) # insert into
 
   # query
-
-  if(!DBI::dbExistsTable(conn, "unfiltered") | !append)
-  {
-    RSQLite::dbExecute(conn, 'DROP TABLE IF EXISTS unfiltered')
-    query <- gsubfn::fn$paste(strwrap(
-      "CREATE TABLE unfiltered AS
+  RSQLite::dbExecute(conn, 'DROP TABLE IF EXISTS unfiltered')
+  query <- gsubfn::fn$paste(strwrap(
+    "CREATE TABLE unfiltered AS
           SELECT DISTINCT
           cpd.adduct as adduct,
           cpd.isoprevalence as isoprevalence,
           struc.smiles as structure,
           mz.mzmed as query_mz,
-          (ABS(mz.mzmed - cpd.fullmz) / mz.mzmed)/1e6 AS dppm
+          (cpd.fullmz/ABS(mz.mzmed - cpd.fullmz))/1e6 AS dppm
           FROM mzvals mz
           JOIN mzranges rng ON rng.ID = mz.ID
           JOIN extended cpd indexed by e_idx2
           ON cpd.fullmz BETWEEN rng.mzmin AND rng.mzmax
-          AND mz.foundinmode = cpd.foundinmode
+          JOIN adducts
+          ON cpd.adduct = adducts.Name
+          AND mz.foundinmode = adducts.Ion_Mode
           JOIN structures struc
           ON cpd.struct_id = struc.struct_id",width=10000, simplify=TRUE))
-    RSQLite::dbExecute(conn, query)
-  }
+  RSQLite::dbExecute(conn, query)
+
 
   table.per.db <- lapply(base.dbname, function(db){
-    base.db = file.path(outfolder, paste0(base.dbname, ".db"))
+    dbpath = file.path(outfolder, paste0(db, ".db"))
     try({
-      query = gsubfn::fn$paste("DETACH base")
+      DBI::dbExecute(conn, gsubfn::fn$paste("DETACH base"))
     },silent=T)
-    query = gsubfn::fn$paste("ATTACH '$db' AS base")
+    query = gsubfn::fn$paste("ATTACH '$dbpath' AS base")
     RSQLite::dbExecute(conn, query)
     results <- DBI::dbGetQuery(conn, strwrap("SELECT
-                                     b.compoundname as name,
-                                     b.baseformula,
-                                     u.adduct,
-                                     u.isoprevalence as perciso,
-                                     u.dppm,
-                                     b.identifier,
-                                     b.description,
-                                     u.structure,
-                                     u.query_mz
-                                     FROM unfiltered u
-                                     JOIN base.base b
-                                     ON u.structure = b.structure",width=10000, simplify=TRUE))
-    results$perciso <- round(results$perciso, 2)
-    results$dppm <- signif(results$dppm, 2)
-    colnames(results)[which(colnames(results) == "perciso")] <- "%iso"
-
+                                             b.compoundname as name,
+                                             b.baseformula,
+                                             u.adduct,
+                                             u.isoprevalence as perciso,
+                                             u.dppm,
+                                             b.identifier,
+                                             b.description,
+                                             u.structure,
+                                             u.query_mz
+                                             FROM unfiltered u
+                                             JOIN base.base b
+                                             ON u.structure = b.structure",width=10000, simplify=TRUE))
+    if(nrow(results)>0){
+      results$perciso <- round(results$perciso, 2)
+      results$dppm <- signif(results$dppm, 2)
+      results$source <- c(db)
+      colnames(results)[which(colnames(results) == "perciso")] <- "%iso"
+    }
     # return
     results
   })

@@ -135,3 +135,99 @@ sdfStream.joanna <- function (input, output, append = FALSE, fct, Nlines = 10000
   }
 }
 
+#Overwrite RSQLite's sqliteWriteTable function with this one to be able to reject duplicates
+#example:
+#create table foo(x int, y int, z int, constraint id primary key(x,y));
+#insert or ignore into foo(x,y,z) values(1,2,3);
+#insert or ignore into foo(x,y,z) values(1,2,3);
+#
+#In R
+#mysqliteWriteTable(con, "foo", data.frame(x=1,y=2,z=3), row.names=F, ignore=T)
+mysqliteWriteTable = function (con, name, value, row.names = TRUE, overwrite = FALSE,
+                               append = FALSE, field.types = NULL, ignore = FALSE, ...)
+{
+  if (overwrite && append)
+    stop("overwrite and append cannot both be TRUE")
+  if (length(RSQLite::dbListResults(con))) {
+    new.con <- RSQLite::dbConnect(con)
+    on.exit(RSQLite::dbDisconnect(new.con))
+  }
+  else {
+    new.con <- con
+  }
+  foundTable <- RSQLite::dbExistsTable(con, name)
+  new.table <- !foundTable
+  createTable <- (new.table || foundTable && overwrite)
+  removeTable <- (foundTable && overwrite)
+  success <- RSQLite::dbBeginTransaction(con)
+  if (!success) {
+    warning("unable to begin transaction")
+    return(FALSE)
+  }
+  if (foundTable && !removeTable && !append) {
+    warning(paste("table", name, "exists in database: aborting dbWriteTable"))
+    success <- FALSE
+  }
+  if (removeTable) {
+    success <- tryCatch({
+      if (RSQLite::dbRemoveTable(con, name)) {
+        TRUE
+      }
+      else {
+        warning(paste("table", name, "couldn't be overwritten"))
+        FALSE
+      }
+    }, error = function(e) {
+      warning(conditionMessage(e))
+      FALSE
+    })
+  }
+  if (!success) {
+    RSQLite::dbRollback(con)
+    return(FALSE)
+  }
+  if (row.names) {
+    value <- cbind(row.names(value), value, stringsAsFactors = FALSE)
+    names(value)[1] <- "row.names"
+  }
+  if (createTable) {
+    sql <- RSQLite::dbBuildTableDefinition(new.con, name, value, field.types = field.types,
+                                  row.names = FALSE)
+    success <- tryCatch({
+      RSQLite::dbGetQuery(new.con, sql)
+      TRUE
+    }, error = function(e) {
+      warning(conditionMessage(e))
+      FALSE
+    })
+    if (!success) {
+      RSQLite::dbRollback(con)
+      return(FALSE)
+    }
+  }
+  valStr <- paste(rep("?", ncol(value)), collapse = ",")
+  if (ignore) sql <- sprintf("insert or ignore into %s values (%s)", name, valStr)
+  else sql <- sprintf("insert into %s values (%s)", name, valStr)
+  success <- tryCatch({
+    ret <- FALSE
+    rs <- RSQLite::dbSendPreparedQuery(new.con, sql, bind.data = value)
+    ret <- TRUE
+  }, error = function(e) {
+    warning(conditionMessage(e))
+    ret <- FALSE
+  }, finally = {
+    if (exists("rs"))
+      RSQLite::dbClearResult(rs)
+    ret
+  })
+  if (!success)
+    RSQLite::dbRollback(con)
+  else {
+    success <- RSQLite::dbCommit(con)
+    if (!success) {
+      warning(RSQLite::dbGetException(con)[["errorMsg"]])
+      RSQLite::dbRollback(con)
+    }
+  }
+  success
+}
