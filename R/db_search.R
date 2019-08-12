@@ -10,7 +10,10 @@ showAllBase <- function(outfolder, base.dbname){
 }
 
 
-searchMZ <- function(mzs, ionmodes, outfolder, base.dbname, ppm, ext.dbname="extended", append=F){
+searchMZ <- function(mzs, ionmodes, outfolder,
+                     base.dbname, ppm,
+                     ext.dbname="extended",
+                     append=F){
 
   # connect to extended DB
   conn <- RSQLite::dbConnect(RSQLite::SQLite(), file.path(outfolder, paste0(ext.dbname, ".db")))
@@ -42,26 +45,22 @@ searchMZ <- function(mzs, ionmodes, outfolder, base.dbname, ppm, ext.dbname="ext
 
   # query
   RSQLite::dbExecute(conn, 'DROP TABLE IF EXISTS unfiltered')
-  query <- gsubfn::fn$paste(strwrap(
-    "CREATE TABLE unfiltered AS
-    SELECT DISTINCT
-    cpd.adduct as adduct,
-    cpd.isoprevalence as isoprevalence,
-    struc.smiles as structure,
-    mz.mzmed as query_mz,
-    (1e6*ABS(mz.mzmed - cpd.fullmz)/cpd.fullmz) AS dppm
-    FROM mzvals mz
-    JOIN mzranges rng ON rng.ID = mz.ID
-    JOIN extended cpd indexed by e_idx2
-    ON cpd.fullmz BETWEEN rng.mzmin AND rng.mzmax
-    JOIN adducts
-    ON cpd.adduct = adducts.Name
-    AND mz.foundinmode = adducts.Ion_Mode
-    JOIN structures struc
-    ON cpd.struct_id = struc.struct_id",width=10000, simplify=TRUE))
-  RSQLite::dbExecute(conn, query)
-
-
+  RSQLite::dbExecute(conn, "CREATE TABLE unfiltered AS
+                            SELECT DISTINCT
+                            cpd.adduct as adduct,
+                            cpd.isoprevalence as isoprevalence,
+                            struc.smiles as structure,
+                            mz.mzmed as query_mz,
+                            (1e6*ABS(mz.mzmed - cpd.fullmz)/cpd.fullmz) AS dppm
+                            FROM mzvals mz
+                            JOIN mzranges rng ON rng.ID = mz.ID
+                            JOIN extended cpd INDEXED BY e_idx2
+                            ON cpd.fullmz BETWEEN rng.mzmin AND rng.mzmax
+                            JOIN adducts
+                            ON cpd.adduct = adducts.Name
+                            AND mz.foundinmode = adducts.Ion_Mode
+                            JOIN structures struc
+                            ON cpd.struct_id = struc.struct_id")
   table.per.db <- lapply(base.dbname, function(db){
     dbpath = file.path(outfolder, paste0(db, ".db"))
     try({
@@ -140,4 +139,6 @@ searchRev <- function(structure, ext.dbname="extended"){
   res = RSQLite::dbFetch(result)
   RSQLite::dbClearResult(result)
   RSQLite::dbDisconnect(conn)
+  # - - -
+  res
 }

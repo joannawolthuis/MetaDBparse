@@ -85,8 +85,34 @@
 # dbs = gsub(basename(list.files(outfolder, pattern="\\.db$")), pattern = "\\.db", replacement="")
 # dbs = dbs[dbs!="extended"]
 #
-# res = searchMZ(mzs = "70",
+# res = searchMZ(mzs = "110.071176455696",
 #                ionmodes = "positive",
 #                outfolder = outfolder,
 #                base.dbname = dbs,
 #                ppm = 5)
+#
+# "SELECT DISTINCT
+# cpd.adduct as adduct,
+# cpd.isoprevalence as isoprevalence,
+# struc.smiles as structure,
+# mz.mzmed as query_mz,
+# (1e6*ABS(mz.mzmed - cpd.fullmz)/cpd.fullmz) AS dppm
+# FROM mzvals mz
+# JOIN mzranges rng ON rng.ID = mz.ID
+# JOIN extended cpd INDEXED BY e_idx2
+# ON cpd.fullmz BETWEEN rng.mzmin AND rng.mzmax
+# JOIN adducts
+# ON cpd.adduct = adducts.Name
+# AND mz.foundinmode = adducts.Ion_Mode
+# JOIN structures struc
+# ON cpd.struct_id = struc.struct_id"
+#
+# dbs = list.files(outfolder, pattern = "\\.db$")
+# dbs = gsub(dbs[dbs != "extended.db"], pattern="\\.db", replacement="")
+#
+# for(db in dbs){
+#   print(db)
+#   conn = openBaseDB(outfolder, db)
+#   RSQLite::dbExecute(conn,"CREATE INDEX IF NOT EXISTS b_idx1 ON base(structure);")
+#   RSQLite::dbDisconnect(conn)
+# }

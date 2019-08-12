@@ -204,13 +204,12 @@ buildExtDB <- function(outfolder,
   RSQLite::dbExecute(full.conn, "DROP TABLE IF EXISTS adducts")
   RSQLite::dbWriteTable(conn, "adducts", adduct_table)
 
+
   RSQLite::dbExecute(full.conn, strwrap("CREATE TABLE IF NOT EXISTS extended(
                                          struct_id text,
                                          fullmz decimal(30,13),
                                          adduct text,
-                                         isoprevalence float
-                                         FOREIGN KEY(struct_id) REFERENCES structures(struct_id)
-                                         )", width=10000, simplify=TRUE))
+                                         isoprevalence float)", width=10000, simplify=TRUE))
   RSQLite::dbExecute(full.conn, gsubfn::fn$paste("PRAGMA auto_vacuum = 1;"))
 
   # B
@@ -219,7 +218,9 @@ buildExtDB <- function(outfolder,
   RSQLite::dbExecute(full.conn, gsubfn::fn$paste("ATTACH '$base.db' AS tmp"))
 
   if(first.db){
-    RSQLite::dbExecute(full.conn, "CREATE INDEX IF NOT EXISTS e_idx2 on extended(fullmz, foundinmode)")
+    RSQLite::dbExecute(full.conn, "CREATE INDEX st_idx1 ON structures(smiles)")
+    RSQLite::dbExecute(full.conn, "CREATE INDEX e_idx1 on extended(struct_id)")
+    RSQLite::dbExecute(full.conn, "CREATE INDEX e_idx2 on extended(fullmz)")
     RSQLite::dbExecute(full.conn, "PRAGMA journal_mode=WAL;")
     }
   if(first.db | length(new_adducts) > 0){
@@ -339,7 +340,6 @@ buildExtDB <- function(outfolder,
     to.write = data.table::rbindlist(per.adduct.tables)
 
     if(nrow(to.write)>0){
-      print(head(to.write))
       repeat{
         rv <- try({
           RSQLite::dbAppendTable(full.conn,
