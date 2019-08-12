@@ -3,10 +3,12 @@
 showAllBase <- function(outfolder, base.dbname){
   conn <- RSQLite::dbConnect(RSQLite::SQLite(), file.path(outfolder, paste0(base.dbname,".db"))) # change this to proper var later
   # --- browse ---
-  result <- RSQLite::dbGetQuery(conn, "SELECT DISTINCT * FROM base")
+  result <- RSQLite::dbGetQuery(conn, "SELECT DISTINCT compoundname as name, baseformula as formula, structure as structure, description as description, charge as charge FROM base")
+  RSQLite::dbDisconnect(conn)
   # --- result ---
   result
 }
+
 
 searchMZ <- function(mzs, ionmodes, outfolder, base.dbname, ppm, ext.dbname="extended", append=F){
 
@@ -42,21 +44,21 @@ searchMZ <- function(mzs, ionmodes, outfolder, base.dbname, ppm, ext.dbname="ext
   RSQLite::dbExecute(conn, 'DROP TABLE IF EXISTS unfiltered')
   query <- gsubfn::fn$paste(strwrap(
     "CREATE TABLE unfiltered AS
-          SELECT DISTINCT
-          cpd.adduct as adduct,
-          cpd.isoprevalence as isoprevalence,
-          struc.smiles as structure,
-          mz.mzmed as query_mz,
-          (cpd.fullmz/ABS(mz.mzmed - cpd.fullmz))/1e6 AS dppm
-          FROM mzvals mz
-          JOIN mzranges rng ON rng.ID = mz.ID
-          JOIN extended cpd indexed by e_idx2
-          ON cpd.fullmz BETWEEN rng.mzmin AND rng.mzmax
-          JOIN adducts
-          ON cpd.adduct = adducts.Name
-          AND mz.foundinmode = adducts.Ion_Mode
-          JOIN structures struc
-          ON cpd.struct_id = struc.struct_id",width=10000, simplify=TRUE))
+    SELECT DISTINCT
+    cpd.adduct as adduct,
+    cpd.isoprevalence as isoprevalence,
+    struc.smiles as structure,
+    mz.mzmed as query_mz,
+    (1e6*ABS(mz.mzmed - cpd.fullmz)/cpd.fullmz) AS dppm
+    FROM mzvals mz
+    JOIN mzranges rng ON rng.ID = mz.ID
+    JOIN extended cpd indexed by e_idx2
+    ON cpd.fullmz BETWEEN rng.mzmin AND rng.mzmax
+    JOIN adducts
+    ON cpd.adduct = adducts.Name
+    AND mz.foundinmode = adducts.Ion_Mode
+    JOIN structures struc
+    ON cpd.struct_id = struc.struct_id",width=10000, simplify=TRUE))
   RSQLite::dbExecute(conn, query)
 
 
@@ -85,6 +87,8 @@ searchMZ <- function(mzs, ionmodes, outfolder, base.dbname, ppm, ext.dbname="ext
       results$dppm <- signif(results$dppm, 2)
       results$source <- c(db)
       colnames(results)[which(colnames(results) == "perciso")] <- "%iso"
+    }else{
+      results = data.table::data.table()
     }
     # return
     results
@@ -95,38 +99,45 @@ searchMZ <- function(mzs, ionmodes, outfolder, base.dbname, ppm, ext.dbname="ext
   DBI::dbDisconnect(conn)
 
   return(merged.results)
-}
+  }
 
 searchFormula <- function(formula, outfolder, base.dbname){
   table.per.db <- lapply(base.dbname, function(db){
     conn <- RSQLite::dbConnect(RSQLite::SQLite(), file.path(outfolder, paste0(db,".db"))) # change this to proper var later
-    if(length(formula)==1){
-      res <- RSQLite::dbGetQuery(conn,
-                                 gsubfn::fn$paste(strwrap(
-                                   "SELECT DISTINCT compoundname as name,
-                                                    baseformula as formula,
-                                                    identifier,
-                                                    description,
-                                                    structure
-                                                    FROM base
-                                   WHERE baseformula = '$formula'"
-                                   , width=10000, simplify=TRUE)))
-    }else{
-     RSQLite::dbExecute(conn, "CREATE TEMP TABLE formulas(formula text)")
-     RSQLite::dbWriteTable(conn, data.table::data.table(formula = formula))
-     res = RSQLite::dbGetQuery(conn, "SELECT DISTINCT compoundname as name,
-                               baseformula as formula,
-                               identifier,
-                               description,
-                               structure
-                               FROM base
-                               JOIN formulas
-                               ON base.baseformula = formulas.baseformula")
-    }
+
+    RSQLite::dbExecute(conn, "CREATE TEMP TABLE formulas(formula text,
+                       charge TEXT)")
+    RSQLite::dbWriteTable(conn, data.table::data.table(formula = formula,
+                                                       charge = charge))
+    res = RSQLite::dbGetQuery(conn, "SELECT DISTINCT compoundname as name,
+                              baseformula as formula,
+                              identifier,
+                              description,
+                              structure
+                              FROM base
+                              JOIN formulas
+                              ON base.baseformula = formulas.baseformula
+                              AND base.basecharge = formulas.charge")
+
     res
   })
 
   merged.results <- data.table::rbindlist(table.per.db)
 
   return(merged.results)
+}
+
+searchRev <- function(structure, ext.dbname="extended"){
+  conn <- RSQLite::dbConnect(RSQLite::SQLite(), file.path(outfolder,
+                                                          paste0(ext.dbname,".db"))) # change this to proper var later
+  result = RSQLite::dbSendStatement(conn,
+                                    "SELECT DISTINCT fullmz, adduct, isoprevalence
+                                    FROM extended ext
+                                    JOIN structures struct
+                                    ON ext.struct_id = struct.struct_id
+                                    WHERE struct.smiles = $structure")
+  RSQLite::dbBind(result, list(structure = structure))
+  res = RSQLite::dbFetch(result)
+  RSQLite::dbClearResult(result)
+  RSQLite::dbDisconnect(conn)
 }

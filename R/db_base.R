@@ -159,9 +159,6 @@ buildBaseDB <- function(outfolder, dbname, smitype = "Canonical", silent=T, cl=0
     db.redone.struct$baseformula[valid.struct] <- new.formula
     db.redone.struct$charge[valid.struct] <- new.charge
 
-    # - - - - - - - - -
-
-
     db.removed.invalid <- db.redone.struct
     formulas = as.character(db.redone.struct$baseformula)
     null.or.na <- which(is.null(formulas) | is.na(formulas) | formulas == "NULL")

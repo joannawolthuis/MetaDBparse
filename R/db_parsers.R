@@ -566,7 +566,6 @@ build.T3DB <- function(outfolder){ # WORKS
   # t3db
   file.url <- "http://www.t3db.ca/system/downloads/current/toxins.csv.zip"
   # ----
-  # base.loc = "~/MetaboShiny/databases/t3db_source"
   base.loc <- file.path(outfolder, "t3db_source")
   if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
   zip.file <- file.path(base.loc, "T3DB.zip")

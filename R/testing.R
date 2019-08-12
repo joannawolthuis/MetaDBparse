@@ -81,3 +81,12 @@
 #              silent = F,
 #              ext.dbname = "extended")
 # }
+#
+# dbs = gsub(basename(list.files(outfolder, pattern="\\.db$")), pattern = "\\.db", replacement="")
+# dbs = dbs[dbs!="extended"]
+#
+# res = searchMZ(mzs = "70",
+#                ionmodes = "positive",
+#                outfolder = outfolder,
+#                base.dbname = dbs,
+#                ppm = 5)
