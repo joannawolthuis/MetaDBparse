@@ -202,7 +202,7 @@ buildExtDB <- function(outfolder,
   }
 
   RSQLite::dbExecute(full.conn, "DROP TABLE IF EXISTS adducts")
-  RSQLite::dbWriteTable(conn, "adducts", adduct_table)
+  RSQLite::dbWriteTable(full.conn, "adducts", adduct_table)
 
 
   RSQLite::dbExecute(full.conn, strwrap("CREATE TABLE IF NOT EXISTS extended(

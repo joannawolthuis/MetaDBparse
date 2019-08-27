@@ -1323,6 +1323,8 @@ build.SUPERNATURAL <- function(outfolder){ # NEEDS WORK, REALLY SLOW TOO INFEASI
   base.loc <- file.path(outfolder, "supernatural_source")
   if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
 
+  # http://bioinf-applied.charite.de/supernatural_new/src/download_mols.php?sn_id=SN00270303,SN00332107,SN00371241,SN00399119,SN00429427,SN00332221,SN00228244,SN00355833,SN00295142,SN00295267,SN00228769,SN00268639,SN00288836,SN00372987,SN00297293
+
   library(XML)
   library(RCurl)
   library(rlist)
@@ -1335,16 +1337,14 @@ build.SUPERNATURAL <- function(outfolder){ # NEEDS WORK, REALLY SLOW TOO INFEASI
 
   # http://bioinf-applied.charite.de/supernatural_new/src/download_mol.php?sn_id=SN00000001
   base.url = "http://bioinf-applied.charite.de/supernatural_new/src/download_mol.php?sn_id="
-  id.nr = str_pad(i, 8, pad = "0")
+  id.nr = stringr::str_pad(i, 8, pad = "0")
   id.str = paste0("SN", id.nr)
   file.url = paste0(base.url, id.str)
 
-  all.ids = paste0("SN", str_pad(1:n, 8, pad = "0"))
+  all.ids = paste0("SN", stringr::str_pad(1:n, 8, pad = "0"))
 
-  pbapply::pbsapply(all.ids, function(id, file.url, base.loc){
-    mol.file <- file.path(base.loc, paste0(id, ".mol"))
-    utils::download.file(file.url, mol.file, mode = "w",quiet = T)
-  }, file.url = file.url, base.loc = base.loc)
+  # break into blocks
+
 
   # this might be too big... mail the ppl if they want to upload the whole thing..
 

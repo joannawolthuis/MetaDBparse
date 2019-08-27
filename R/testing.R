@@ -17,9 +17,10 @@
 #
 # outfolder = "/Users/jwolthuis/MetaDBparse/dbtest/"
 #
-# outfolder <- "~/MetaboShiny/databases/"
-# dbname="kegg"
+#outfolder <- "~/MetaboShiny/databases/"
+#db="chebi"
 #
+#cl = parallel::makeCluster(3)
 
 # options(stringsAsFactors = FALSE,"java.parameters" = c("-Xmx16G")) # give java enough memory for smiles parsing
 #
@@ -29,7 +30,7 @@
 # for(db in dbs){
 #   print(db)
 #   try({
-#     buildBaseDB(outfolder, db, silent=F)
+#     buildBaseDB(outfolder, db, cl=cl, silent=F)
 #   })
 # }
 #

@@ -97,8 +97,10 @@ iatom.to.formula <- function(iatoms, silent=T){
 
 buildBaseDB <- function(outfolder, dbname, smitype = "Canonical", silent=T, cl=0){
 
+  require(enviPat)
+  data(isotopes)
+
   removeDB(outfolder, paste0(dbname,".db"))
-  base.loc <- file.path(outfolder, paste0(dbname, "_source"))
   conn <- openBaseDB(outfolder, paste0(dbname,".db"))
   db.formatted <- switch(dbname,
                     chebi = build.CHEBI(outfolder),
@@ -123,18 +125,18 @@ buildBaseDB <- function(outfolder, dbname, smitype = "Canonical", silent=T, cl=0
                     smpdb = build.SMPDB(outfolder),
                     supernatural = build.SUPERNATURAL(outfolder))
 
-
   db.formatted <- data.table::as.data.table(db.formatted)
+
   blocks = split(1:nrow(db.formatted), ceiling(seq_along(1:nrow(db.formatted))/1000))
 
   if(cl != 0){
-    parallel::clusterExport(cl, c("db.formatted",
-                                  "iatom.to.smiles",
-                                  "smiles.to.iatom",
-                                  "iatom.to.formula",
-                                  "iatom.to.charge",
-                                  "silent",
-                                  "isotopes"))
+    parallel::clusterExport(cl, varlist = c("db.formatted",
+                                            "iatom.to.smiles",
+                                            "smiles.to.iatom",
+                                            "iatom.to.formula",
+                                            "iatom.to.charge",
+                                            "silent",
+                                            "isotopes"))
   }
 
   print("Uniformizing formulas/SMILES/charges and checking for mistakes...")
@@ -202,6 +204,8 @@ buildBaseDB <- function(outfolder, dbname, smitype = "Canonical", silent=T, cl=0
     }
     return(db.removed.invalid)
   })
+
+  print("!!!")
 
   db.final <- data.table::rbindlist(db.fixed.rows)
   # - - - - - - - - - - - - - - - - - -
