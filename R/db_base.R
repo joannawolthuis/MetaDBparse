@@ -128,6 +128,7 @@ buildBaseDB <- function(outfolder, dbname,
 
 
   db.formatted <- data.table::as.data.table(db.formatted)
+  print(nrow(db.formatted))
 
   blocks = split(1:nrow(db.formatted), ceiling(seq_along(1:nrow(db.formatted))/1000))
 
@@ -138,7 +139,8 @@ buildBaseDB <- function(outfolder, dbname,
                                             "iatom.to.formula",
                                             "iatom.to.charge",
                                             "silent",
-                                            "isotopes"))
+                                            "isotopes"),
+                            envir = environment())
   }
 
   print("Uniformizing formulas/SMILES/charges and checking for mistakes...")

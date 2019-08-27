@@ -19,6 +19,7 @@
 # outfolder = "/Users/jwolthuis/MetaDBparse/dbtest/"
 #
 #outfolder <- "~/MetaboShiny/databases/"
+
 db="chebi"
 #
 cl = parallel::makeCluster(3)
