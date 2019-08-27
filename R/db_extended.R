@@ -204,7 +204,6 @@ buildExtDB <- function(outfolder,
   RSQLite::dbExecute(full.conn, "DROP TABLE IF EXISTS adducts")
   RSQLite::dbWriteTable(full.conn, "adducts", adduct_table)
 
-
   RSQLite::dbExecute(full.conn, strwrap("CREATE TABLE IF NOT EXISTS extended(
                                          struct_id text,
                                          fullmz decimal(30,13),
@@ -281,7 +280,7 @@ buildExtDB <- function(outfolder,
     structure.reactive.groups = countAdductRuleMatches(parsable.iats,
                                                        adduct_rules)
     structure.adducts.possible = checkAdductRule(structure.reactive.groups,
-                                                 adducts)
+                                                 adduct_table)
 
     # now loop through adducts
     per.adduct.tables = lapply(adduct_table$Name, function(add){# make cl session_cl later

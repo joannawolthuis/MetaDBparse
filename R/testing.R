@@ -36,15 +36,15 @@
 #
 # #
 # require(parallel)
-# require(data.table)
+#require(data.table)
 # require(enviPat)
 # data(isotopes)
 #
-# adduct_rules <- fread("~/Google Drive/MetaboShiny/backend/adducts/adduct_rule_smarts.csv")
-# adducts <- fread("~/Google Drive/MetaboShiny/backend/adducts/adduct_rule_table.csv")
+#adduct_rules <- fread("~/Google Drive/MetaboShiny/backend/adducts/adduct_rule_smarts.csv")
+#adducts <- fread("~/Google Drive/MetaboShiny/backend/adducts/adduct_rule_table.csv")
 #
-# usethis::use_data(adduct_rules, overwrite=T)
-# usethis::use_data(adducts, overwrite=T)
+#usethis::use_data(adduct_rules, overwrite=T)
+#usethis::use_data(adducts, overwrite=T)
 #
 # {
 #   try({

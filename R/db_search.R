@@ -23,7 +23,6 @@ searchMZ <- function(mzs, ionmodes, outfolder,
                                   foundinmode=ionmodes)
   mzranges = data.table::data.table(mzmin=sapply(as.numeric(mzs), function(mz) mz - (mz*(ppm*1e-6))),
                                     mzmax=sapply(as.numeric(mzs), function(mz) mz + (mz*(ppm*1e-6))))
-
   # create tables
   RSQLite::dbExecute(conn, "DROP TABLE IF EXISTS mzvals")
   sql.make.meta <- strwrap("CREATE TABLE mzvals(
