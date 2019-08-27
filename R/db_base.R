@@ -95,7 +95,8 @@ iatom.to.formula <- function(iatoms, silent=T){
 
 # BIG BOI
 
-buildBaseDB <- function(outfolder, dbname, smitype = "Canonical", silent=T, cl=0){
+buildBaseDB <- function(outfolder, dbname,
+                        smitype = "Canonical", silent=T, cl=0){
 
   require(enviPat)
   data(isotopes)
@@ -125,11 +126,12 @@ buildBaseDB <- function(outfolder, dbname, smitype = "Canonical", silent=T, cl=0
                     smpdb = build.SMPDB(outfolder),
                     supernatural = build.SUPERNATURAL(outfolder))
 
+
   db.formatted <- data.table::as.data.table(db.formatted)
 
   blocks = split(1:nrow(db.formatted), ceiling(seq_along(1:nrow(db.formatted))/1000))
 
-  if(cl != 0){
+  if(is.list(cl)){
     parallel::clusterExport(cl, varlist = c("db.formatted",
                                             "iatom.to.smiles",
                                             "smiles.to.iatom",
@@ -142,6 +144,7 @@ buildBaseDB <- function(outfolder, dbname, smitype = "Canonical", silent=T, cl=0
   print("Uniformizing formulas/SMILES/charges and checking for mistakes...")
 
   db.fixed.rows <- pbapply::pblapply(blocks, cl=cl, function(block){
+
     db.form.block = db.formatted[block,]
     iats = smiles.to.iatom(db.form.block$structure,
                            silent=silent)
@@ -190,9 +193,10 @@ buildBaseDB <- function(outfolder, dbname, smitype = "Canonical", silent=T, cl=0
     }
 
     deuterated = which(grepl("D\\d*", x = db.removed.invalid$baseformula))
+
     if(length(deuterated)>0){
       nondeuterated = gsub("D(\\d)*", "H\\1", db.removed.invalid$baseformula[deuterated])
-      matching = db.removed.invalid[baseformula %in% nondeuterated,]
+      matching = data.table::as.data.table(db.removed.invalid)[baseformula %in% nondeuterated,]
       if(nrow(matching)>0){
         print("in progress... merge descriptions and add a note for deuterated")
       }else{
@@ -204,8 +208,6 @@ buildBaseDB <- function(outfolder, dbname, smitype = "Canonical", silent=T, cl=0
     }
     return(db.removed.invalid)
   })
-
-  print("!!!")
 
   db.final <- data.table::rbindlist(db.fixed.rows)
   # - - - - - - - - - - - - - - - - - -

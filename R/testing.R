@@ -1,5 +1,6 @@
 # Hello, world!
 #
+#usethis::use_build_ignore(c("R/testing.R"))
 # This is an example function named 'hello'
 # which prints 'Hello, world!'.
 #
@@ -18,9 +19,9 @@
 # outfolder = "/Users/jwolthuis/MetaDBparse/dbtest/"
 #
 #outfolder <- "~/MetaboShiny/databases/"
-#db="chebi"
+db="chebi"
 #
-#cl = parallel::makeCluster(3)
+cl = parallel::makeCluster(3)
 
 # options(stringsAsFactors = FALSE,"java.parameters" = c("-Xmx16G")) # give java enough memory for smiles parsing
 #
@@ -30,21 +31,23 @@
 # for(db in dbs){
 #   print(db)
 #   try({
-#     buildBaseDB(outfolder, db, cl=cl, silent=F)
+     buildBaseDB(outfolder = outfolder,
+                 dbname = db,
+                 cl=cl, silent=F)
 #   })
 # }
 #
 # #
 # require(parallel)
-#require(data.table)
+# require(data.table)
 # require(enviPat)
 # data(isotopes)
 #
-#adduct_rules <- fread("~/Google Drive/MetaboShiny/backend/adducts/adduct_rule_smarts.csv")
-#adducts <- fread("~/Google Drive/MetaboShiny/backend/adducts/adduct_rule_table.csv")
+# adduct_rules <- fread("~/Google Drive/MetaboShiny/backend/adducts/adduct_rule_smarts.csv")
+# adducts <- fread("~/Google Drive/MetaboShiny/backend/adducts/adduct_rule_table.csv")
 #
-#usethis::use_data(adduct_rules, overwrite=T)
-#usethis::use_data(adducts, overwrite=T)
+# usethis::use_data(adduct_rules, overwrite=T)
+# usethis::use_data(adducts, overwrite=T)
 #
 # {
 #   try({
