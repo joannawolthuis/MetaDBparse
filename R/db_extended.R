@@ -28,7 +28,8 @@ countAdductRuleMatches <- function(iatoms, adduct_rules){
 }
 
 checkAdductRule <- function(adduct_rule_scores, adduct_table){
-  adduct.qualify.rows = lapply(1:nrow(adduct_table), function(i){
+
+  adduct.qualify.cols = lapply(1:nrow(adduct_table), function(i){
     row <- adduct_table[i,]
     name <- row$Name
     ion_mode <- row$Ion_mode
@@ -48,12 +49,13 @@ checkAdductRule <- function(adduct_rule_scores, adduct_table){
                          equals = left == right,
                          above = left > right)
     }))
-    qualified.rule = apply(qualified_per_rule, MARGIN = 1, all)
+
+    qualified.rule = apply(qualified_per_rule, MARGIN = 2, all)
     add.row = data.table::data.table(qualified.rule)
     colnames(add.row) <- row$Name
     add.row
   })
-  qualified.per.adduct <- do.call("cbind", adduct.qualify.rows)
+  qualified.per.adduct <- do.call("cbind", adduct.qualify.cols)
   data.table::data.table(structure = adduct_rule_scores$structure,
                          qualified.per.adduct)
 }
