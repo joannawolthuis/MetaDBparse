@@ -20,23 +20,27 @@
 #
 #outfolder <- "~/MetaboShiny/databases/"
 
-db="chebi"
+db="expoexplorer"
 #
+
+
 cl = parallel::makeCluster(3)
 
 # options(stringsAsFactors = FALSE,"java.parameters" = c("-Xmx16G")) # give java enough memory for smiles parsing
 #
-# dbs = c("lipidmaps", "kegg", "phenolexplorer", "chebi", "vmh", "dimedb",
-#         "t3db", "expoexplorer", "wikidata", "massbank", "respect",
-#         "hmdb", "metacyc", "drugbank", "foodb", "smpdb")
-# for(db in dbs){
-#   print(db)
-#   try({
+dbs = c(#"lipidmaps", "phenolexplorer", "chebi", "dimedb",
+        # "t3db", "wikidata",
+        #"massbank", "respect",
+        # "drugbank", "foodb", "smpdb",
+        "bloodexposome")
+for(db in dbs){
+   print(db)
+   try({
      buildBaseDB(outfolder = outfolder,
                  dbname = db,
-                 cl=cl, silent=F)
-#   })
-# }
+                 cl=0, silent=F)
+   })
+ }
 #
 # #
 # require(parallel)

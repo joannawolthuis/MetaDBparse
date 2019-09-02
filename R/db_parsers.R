@@ -814,6 +814,7 @@ build.KEGG <- function(outfolder){ # WORKS
 
   smiles.rows = pbapply::pblapply(fns, function(fn){
     smiles=NA
+    charge = 0
     try({
       iatom = rcdk::load.molecules(molfiles = fn)[[1]]
       smiles = rcdk::get.smiles(molecule = iatom)

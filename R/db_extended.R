@@ -50,7 +50,7 @@ checkAdductRule <- function(adduct_rule_scores, adduct_table){
                          above = left > right)
     }))
 
-    qualified.rule = apply(qualified_per_rule, MARGIN = 2, all)
+    qualified.rule = apply(qualified_per_rule, MARGIN = 1, all)
     add.row = data.table::data.table(qualified.rule)
     colnames(add.row) <- row$Name
     add.row

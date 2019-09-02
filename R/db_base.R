@@ -5,7 +5,13 @@ smiles.to.iatom <- function(smiles, silent=T, cl=0){
   iatoms <- sapply(smiles, function(x, silent){
     mol=NULL
     try({
-      mol = rcdk::parse.smiles(x,kekulise = F)[[1]]
+      mol = NULL
+      try({
+        mol = rcdk::parse.smiles(x)[[1]]
+      })
+      if(is.null(mol)){
+        mol = rcdk::parse.smiles(x,kekulise = F)[[1]]
+      }
       rcdk::do.aromaticity(mol)
       rcdk::do.typing(mol)
       rcdk::do.isotopes(mol)
