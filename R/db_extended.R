@@ -209,7 +209,7 @@ buildExtDB <- function(outfolder,
   RSQLite::dbWriteTable(full.conn, "adducts", adduct_table)
 
   RSQLite::dbExecute(full.conn, strwrap("CREATE TABLE IF NOT EXISTS extended(
-                                         struct_id text,
+                                         struct_id INT,
                                          fullmz decimal(30,13),
                                          adduct text,
                                          isoprevalence float)", width=10000, simplify=TRUE))
@@ -235,7 +235,6 @@ buildExtDB <- function(outfolder,
                                             FROM tmp.base LEFT JOIN structures str
                                             ON base.structure = str.smiles
                                             WHERE str.smiles IS NULL")}
-
   if(nrow(to.do) == 0){
     print("all already done")
     RSQLite::dbDisconnect(full.conn)
@@ -339,7 +338,7 @@ buildExtDB <- function(outfolder,
         meta.table <- data.table::data.table(fullmz = adducted.plus.isotopes$fullmz,
                                              adduct = c(add),
                                              isoprevalence = adducted.plus.isotopes$isoprevalence,
-                                             structure = adducted.plus.isotopes$structure.x)
+                                             structure = adducted.plus.isotopes$structure)
 
         # map SMILES to smile_id
         ids <- mapper$struct_id[match(meta.table$structure,
