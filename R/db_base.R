@@ -220,6 +220,7 @@ buildBaseDB <- function(outfolder, dbname,
   db.final <- data.table::rbindlist(db.fixed.rows)
   # - - - - - - - - - - - - - - - - - -
   writeDB(conn, db.final, "base")
+  RSQLite::dbExecute(conn, "CREATE INDEX b_idx1 ON base(structure)")
   DBI::dbDisconnect(conn)
 }
 

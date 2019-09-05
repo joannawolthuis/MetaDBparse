@@ -28,19 +28,57 @@ cl = parallel::makeCluster(3)
 
 # options(stringsAsFactors = FALSE,"java.parameters" = c("-Xmx16G")) # give java enough memory for smiles parsing
 #
-dbs = c(#"lipidmaps", "phenolexplorer", "chebi", "dimedb",
-        # "t3db", "wikidata",
-        #"massbank", "respect",
-        # "drugbank", "foodb", "smpdb",
-        "bloodexposome")
+dbs = c("lipidmaps", "kegg","vmh","expoexplorer",
+        "phenolexplorer", "chebi", "dimedb",
+        "t3db", "wikidata","metacyc",
+        "massbank", "respect",
+         "drugbank", "foodb", "smpdb",
+        "bloodexposome",
+        "hmdb")
+
+parallel::clusterExport(cl, c("smiles.to.iatom",
+                              "countAdductRuleMatches",
+                              "checkAdductRule",
+                              "doAdduct",
+                              "iatom.to.smiles",
+                              "smiles.to.iatom",
+                              "iatom.to.formula",
+                              "iatom.to.charge",
+                              "adduct_rules",
+                              "adducts",
+                              "doIsotopes",
+                              "isotopes"))
+
+parallel::clusterEvalQ(cl = cl, expr = {
+  library(data.table)
+  library(enviPat)
+  library(pbapply)
+})
 for(db in dbs){
    print(db)
    try({
-     buildBaseDB(outfolder = outfolder,
-                 dbname = db,
-                 cl=0, silent=F)
+     # === INDEXING ===
+     #conn <- openBaseDB(outfolder, paste0(db,".db"))
+     #RSQLite::dbExecute(conn, "CREATE INDEX IF NOT EXISTS b_idx1 ON base(structure)")
+     #RSQLite::dbDisconnect(conn)
+     # === BUILD BASE ===
+     # buildBaseDB(outfolder = outfolder,
+     #             dbname = db,
+     #             cl=cl, silent=F)
+     # === BUILD EXTENDED ===
+     buildExtDB(outfolder,
+                base.dbname = db,
+                cl = cl,
+                blocksize = 600,
+                mzrange = c(60,600),
+                adduct_table = adducts,
+                adduct_rules = adduct_rules,
+                silent = F,
+                ext.dbname = "extended")
    })
  }
+
+devtools::install()
 #
 # #
 # require(parallel)

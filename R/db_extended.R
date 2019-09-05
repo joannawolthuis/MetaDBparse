@@ -187,6 +187,8 @@ buildExtDB <- function(outfolder,
   # A
   outfolder <- normalizePath(outfolder)
 
+  first.db <- !file.exists(full.db)
+
   print(paste("Will calculate adducts + isotopes for the", base.dbname, "database."))
   full.db <- file.path(outfolder, paste0(ext.dbname, ".db"))
   full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
@@ -214,7 +216,6 @@ buildExtDB <- function(outfolder,
   RSQLite::dbExecute(full.conn, gsubfn::fn$paste("PRAGMA auto_vacuum = 1;"))
 
   # B
-  first.db <- if(RSQLite::dbGetQuery(full.conn, "SELECT COUNT(*) FROM extended")[1,1] == 0) TRUE else FALSE
   base.db <- normalizePath(file.path(outfolder, paste0(base.dbname, ".db")))
   RSQLite::dbExecute(full.conn, gsubfn::fn$paste("ATTACH '$base.db' AS tmp"))
 
@@ -223,7 +224,8 @@ buildExtDB <- function(outfolder,
     RSQLite::dbExecute(full.conn, "CREATE INDEX e_idx1 on extended(struct_id)")
     RSQLite::dbExecute(full.conn, "CREATE INDEX e_idx2 on extended(fullmz)")
     RSQLite::dbExecute(full.conn, "PRAGMA journal_mode=WAL;")
-    }
+  }
+
   if(first.db | length(new_adducts) > 0){
     to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge
                                             FROM tmp.base")
@@ -233,13 +235,15 @@ buildExtDB <- function(outfolder,
                                             FROM tmp.base LEFT JOIN structures str
                                             ON base.structure = str.smiles
                                             WHERE str.smiles IS NULL")}
+
   if(nrow(to.do) == 0){
     print("all already done")
     RSQLite::dbDisconnect(full.conn)
     return(NULL)
   }
 
-  done.structures = RSQLite::dbGetQuery(full.conn, "SELECT MAX(struct_id) FROM structures")[,1]
+  done.structures <- if(first.db) 0 else RSQLite::dbGetQuery(full.conn, "SELECT MAX(struct_id) FROM structures")[,1]
+
   start.id = done.structures + 1
 
   # new will be written
@@ -277,19 +281,27 @@ buildExtDB <- function(outfolder,
     bad.structures = which(sapply(iatoms, is.null))
     good.structures = which(!sapply(iatoms, is.null))
 
+    structure.adducts.possible <- data.table::data.table()
+
     # = = = FOR THE GOOD STRUCTURES = = =
-    parsable.iats = iatoms[good.structures]
-    structure.reactive.groups = countAdductRuleMatches(parsable.iats,
-                                                       adduct_rules)
-    structure.adducts.possible = checkAdductRule(structure.reactive.groups,
-                                                 adduct_table)
+    if(length(good.structures)>0){
+      parsable.iats = iatoms[good.structures]
+      structure.reactive.groups = countAdductRuleMatches(parsable.iats,
+                                                         adduct_rules)
+      structure.adducts.possible = checkAdductRule(structure.reactive.groups,
+                                                   adduct_table)
+    }
 
     # now loop through adducts
     per.adduct.tables = lapply(adduct_table$Name, function(add){# make cl session_cl later
 
-      has.structure.can.adduct = block[good.structures[unlist(structure.adducts.possible[,..add])]]
-      no.structure = block[bad.structures]
+      has.structure.can.adduct <- data.table::data.table()
 
+      if(nrow(structure.adducts.possible)>0){
+        has.structure.can.adduct = block[good.structures[unlist(structure.adducts.possible[,..add])]]
+      }
+
+      no.structure = block[bad.structures]
       block.calc.adduct = rbind(has.structure.can.adduct, no.structure)
 
       if(nrow(block.calc.adduct) == 0) return(data.table::data.table())
@@ -318,7 +330,8 @@ buildExtDB <- function(outfolder,
                                   by = c("final", "final.charge"),
                                   allow.cartesian = T)
         adducted.plus.isotopes <- merge(adducted, formula_plus_iso,
-                                        by=c("baseformula", "charge"),
+                                        by=c("baseformula", "charge", "adducted",
+                                             "final.charge", "final", "structure"),
                                         allow.cartesian = T)
 
         # ==== MAKE FINAL TABLE ====

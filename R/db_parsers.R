@@ -810,7 +810,6 @@ build.KEGG <- function(outfolder){ # WORKS
   fns = unlist(kegg.mol.paths)
 
   rJava::.jcall("java/lang/System","V","gc")
-  gc()
 
   smiles.rows = pbapply::pblapply(fns, function(fn){
     smiles=NA
