@@ -187,10 +187,14 @@ buildExtDB <- function(outfolder,
   # A
   outfolder <- normalizePath(outfolder)
 
+
+  print(paste("Will calculate adducts + isotopes for the",
+              base.dbname,
+              "database."))
+
+  full.db <- file.path(outfolder, paste0(ext.dbname, ".db"))
   first.db <- !file.exists(full.db)
 
-  print(paste("Will calculate adducts + isotopes for the", base.dbname, "database."))
-  full.db <- file.path(outfolder, paste0(ext.dbname, ".db"))
   full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
   RSQLite::dbExecute(full.conn, gsubfn::fn$paste("PRAGMA foreign_keys = ON"))
   RSQLite::dbExecute(full.conn, "CREATE TABLE IF NOT EXISTS structures(
@@ -255,7 +259,8 @@ buildExtDB <- function(outfolder,
 
   blocks = split(mapper, ceiling(seq_along(1:nrow(mapper))/blocksize))
 
-  #blocks = split(1:nrow(mapper), ceiling(seq_along(1:nrow(mapper))/blocksize))
+  tmpfiles.ext = sapply(1:length(blocks), function(i) tempfile())
+  tmpfiles.struct = sapply(1:length(blocks), function(i) tempfile())
 
   RSQLite::dbDisconnect(full.conn)
 
@@ -265,10 +270,13 @@ buildExtDB <- function(outfolder,
   }
 
   # completely new compounds
-  per.adduct.tables = pbapply::pblapply(1:length(blocks), cl=cl, function(i, mzrange=mzrange, silent=silent){
+  per.adduct.tables = pbapply::pblapply(1:length(blocks), cl=cl, function(i, mzrange=mzrange, silent=silent, blocks=blocks,
+                                                                          adduct_table=adduct_table, adduct_rules=adduct_rules,
+                                                                          tmpfiles.ext=tmpfiles.ext, tmpfiles.struct=tmpfiles.struct,
+                                                                          mapper=mapper){
 
-    full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
-    RSQLite::dbExecute(full.conn, "PRAGMA busy_timeout=5000;")
+    #full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
+    #RSQLite::dbExecute(full.conn, "PRAGMA busy_timeout=5000;")
 
     # for each block
     block = blocks[[i]]
@@ -355,18 +363,46 @@ buildExtDB <- function(outfolder,
     if(nrow(to.write)>0){
       repeat{
         rv <- try({
-          RSQLite::dbAppendTable(full.conn,
-                                 "extended",
-                                 to.write)
-          RSQLite::dbAppendTable(full.conn,
-                                 "structures",
-                                 unique(blocks[[i]][,c("struct_id", "smiles")]))
+          extended = to.write
+          structs = unique(blocks[[i]][,c("struct_id", "smiles")])
+
+          data.table::fwrite(extended,
+                             file=tmpfiles.ext[i],
+                             append=F)
+          data.table::fwrite(structs,
+                             file = tmpfiles.struct[i],
+                             append=F)
+
+          # RSQLite::dbAppendTable(full.conn,
+          #                        "extended",
+          #                        )
+          # RSQLite::dbAppendTable(full.conn,
+          #                        "structures",
+          #                        )
+          # RSQLite::dbDisconnect(full.conn)
         },silent = silent)
         if(!is(rv, "try-error")){
           break
         }
       }
     }
-    RSQLite::dbDisconnect(full.conn)
-  },mzrange=mzrange, silent=silent)
+    #RSQLite::dbExecute(full.conn, "PRAGMA wal_checkpoint(TRUNCATE)")
+  },mzrange=mzrange, silent=silent, blocks=blocks,
+  adduct_table=adduct_table, adduct_rules=adduct_rules,
+  tmpfiles.ext=tmpfiles.ext, tmpfiles.struct=tmpfiles.struct,
+  mapper=mapper)
+  # = = = = = = WRITE TO DB = = = = = =
+  print("loading into database... please stand by - w- ")
+
+  pbapply::pbsapply(1:length(blocks), function(i){
+    full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
+    extended = tmpfiles.ext[i]
+    structures = tmpfiles.struct[i]
+    try({
+      RSQLite::dbWriteTable(full.conn, "extended", extended, append=T)
+      RSQLite::dbWriteTable(full.conn, "structures", structures, append=T)
+      RSQLite::dbDisconnect(full.conn)
+    })
+  })
+ unlink(c(tmpfiles.ext, tmpfiles.struct))
 }

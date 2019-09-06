@@ -28,13 +28,9 @@ cl = parallel::makeCluster(3)
 
 # options(stringsAsFactors = FALSE,"java.parameters" = c("-Xmx16G")) # give java enough memory for smiles parsing
 #
-dbs = c("lipidmaps", "kegg","vmh","expoexplorer",
-        "phenolexplorer", "chebi", "dimedb",
-        "t3db", "wikidata","metacyc",
-        "massbank", "respect",
-         "drugbank", "foodb", "smpdb",
-        "bloodexposome",
-        "hmdb")
+
+require(enviPat)
+data(isotopes)
 
 parallel::clusterExport(cl, c("smiles.to.iatom",
                               "countAdductRuleMatches",
@@ -54,13 +50,25 @@ parallel::clusterEvalQ(cl = cl, expr = {
   library(enviPat)
   library(pbapply)
 })
+
+dbs = c(#"lipidmaps", "kegg","vmh","expoexplorer",
+        #"phenolexplorer", "chebi", "dimedb",
+        #"t3db","metacyc",
+        #"massbank", "respect",
+        #"drugbank", "foodb",
+        #"smpdb",
+        #"bloodexposome",
+        "wikidata"
+        #,"hmdb"
+        )
+
 for(db in dbs){
    print(db)
    try({
      # === INDEXING ===
-     #conn <- openBaseDB(outfolder, paste0(db,".db"))
-     #RSQLite::dbExecute(conn, "CREATE INDEX IF NOT EXISTS b_idx1 ON base(structure)")
-     #RSQLite::dbDisconnect(conn)
+     # conn <- openBaseDB(outfolder, paste0(db,".db"))
+     # RSQLite::dbExecute(conn, "CREATE INDEX IF NOT EXISTS b_idx1 ON base(structure)")
+     # RSQLite::dbDisconnect(conn)
      # === BUILD BASE ===
      # buildBaseDB(outfolder = outfolder,
      #             dbname = db,
@@ -70,19 +78,18 @@ for(db in dbs){
                 base.dbname = db,
                 cl = cl,
                 blocksize = 600,
-                mzrange = c(60,600),
+                mzrange = c(60,800),
                 adduct_table = adducts,
                 adduct_rules = adduct_rules,
                 silent = F,
                 ext.dbname = "extended")
    })
  }
-
 devtools::install()
 #
 # #
 # require(parallel)
-# require(data.table)
+require(data.table)
 # require(enviPat)
 # data(isotopes)
 #
