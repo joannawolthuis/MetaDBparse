@@ -231,3 +231,16 @@ mysqliteWriteTable = function (con, name, value, row.names = TRUE, overwrite = F
   }
   success
 }
+
+is.empty <- function(item){
+  if(is.null(item)){
+      return(TRUE)
+    }else if(is.na(item)){
+      return(TRUE)
+    }else if(gsub(item, pattern = " ", replacement="") == ""){
+        return(TRUE)
+    }else{
+      return(FALSE)
+    }
+  }
+

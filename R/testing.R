@@ -70,9 +70,9 @@ for(db in dbs){
      # RSQLite::dbExecute(conn, "CREATE INDEX IF NOT EXISTS b_idx1 ON base(structure)")
      # RSQLite::dbDisconnect(conn)
      # === BUILD BASE ===
-     # buildBaseDB(outfolder = outfolder,
-     #             dbname = db,
-     #             cl=cl, silent=F)
+     buildBaseDB(outfolder = outfolder,
+                 dbname = db,
+                 cl=cl, silent=F)
      # === BUILD EXTENDED ===
      buildExtDB(outfolder,
                 base.dbname = db,

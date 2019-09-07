@@ -948,6 +948,8 @@ build.DRUGBANK <- function(outfolder){  # WORKS
 }
 
 build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking)
+  library(rapport)
+
   file.url = "https://www.lipidmaps.org/resources/downloads/LMSD/LMSD_20190711.sdf.zip"
 
   # ----
@@ -964,42 +966,62 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
 
   desc <- function(sdfset){
     mat <- NULL
-    try({
-      datablock = data.table::as.data.table(ChemmineR::datablock2ma(datablocklist=ChemmineR::datablock(sdfset)))
-
-      last_cn <<- colnames(datablock)
-
-      if(!("FORMULA" %in% last_cn)){
-        mat = as.matrix(data.table::data.table(
-          identifier=datablock$PUBCHEM_COMPOUND_CID,
-          compoundname = datablock$PUBCHEM_IUPAC_NAME,
-          baseformula = datablock$PUBCHEM_MOLECULAR_FORMULA,
-          structure = datablock$PUBCHEM_OPENEYE_CAN_SMILES,
-          description = paste0("Alternative names: ",
-                               apply( datablock[ , grep(colnames(datablock), pattern="NAME"),with=F ] , 1 , paste , collapse = "-" ))
-        ))
-      }else{
-        mat = as.matrix(data.table::data.table(
-          identifier = as.character(datablock$LM_ID),
-          compoundname = as.character(if("NAME" %in% colnames(datablock)) datablock$NAME else datablock$SYSTEMATIC_NAME),
-          baseformula = as.character(datablock$FORMULA),
-          structure = as.character(if("SMILES" %in% last_cn) datablock$SMILES else datablock$INCHI),
-          description = as.character(paste0("Also known as ", paste0(datablock$ABBREVIATION, " or ", datablock$SYSTEMATIC_NAME)))
-        ))
-      }
-    })
-    mat
+    #last_sdf <<- sdfset
+    db <- data.table::as.data.table(ChemmineR::datablock2ma(datablocklist=ChemmineR::datablock(sdfset)))
+    #last_db <<- db
+    mat = as.matrix(data.table::data.table(
+      identifier = as.character(db$LM_ID),
+      compoundname = sapply(1:nrow(db), function(i) if(!is.empty(db$NAME[i])) db$NAME[i] else db$SYSTEMATIC_NAME[i]),
+      baseformula = as.character(db$FORMULA),
+      structure = sapply(1:nrow(db), function(i) if(!is.empty(db$SMILES[i])) db$SMILES[i] else webchem::cs_convert(db$INCHI[i],
+                                                                                                                   from="inchi", to="smiles")),
+      description = sapply(1:nrow(db), function(i){
+        string=""
+        db$SYSTEMATIC_NAME
+        if(!is.empty(db$ABBREVIATION[i])) string <- paste0(string, "Often abbreviated as ", db$ABBREVIATION[i],".")
+        if(!is.empty(db$NAME[i])) string <- paste(string, "Systematic name:", db$SYSTEMATIC_NAME[i])
+        if(is.empty(string)) string <- "Unknown"
+        trimws(string)
+       })
+    ))
+  mat
   }
 
   sdfStream.joanna(input=sdf.path, output=file.path(base.loc, "lipidmaps_parsed.csv"),
-                       append=FALSE,
-                       fct=desc,
-                       silent = T)
+                   append=FALSE,
+                   fct=desc,
+                   silent = T)
 
   db.base <- data.table::fread(file.path(base.loc, "lipidmaps_parsed.csv"), fill = T, header=T)
 
   db.base$charge <- c(NA)
 
+  # - - - add classification - - -
+
+  library(rvest)
+
+  doc <- xml2::read_html("https://www.lipidmaps.org/data/classification/LM_classification_exp.php")
+  categories = doc %>%
+    rvest::html_nodes("div:nth-child(2)") %>%
+    rvest::html_text()
+
+  require(stringr)
+  categories = gsub(x=categories, pattern = "\n|\t", replacement="")
+  mainlist = categories[5]
+  filt_cats = str_match_all(mainlist, pattern = "(\\[.*?) \\[")[[1]][,2]
+  tbl.rows <- pbapply::pblapply(filt_cats, function(cat){
+    data.table::data.table(catcode = str_match(cat, pattern="\\[(.*?)\\]")[,2],
+                           catdesc = gsub(cat, pattern = "\\[.*\\]", replacement=""))
+  })
+  conv_tbl = data.table::rbindlist(tbl.rows)
+
+  db.base$description <- pbapply::pbsapply(1:nrow(db.base), function(i){
+    row = db.base[i,]
+    matching = stringi::stri_detect_fixed(row$identifier,conv_tbl$catcode,fixed=T)
+    paste0(row$description, ". ", "In class(es):", tolower(paste(conv_tbl$catdesc[matching], collapse=", ")))
+  })
+
+  # - - - - - - - - - - - - - - - -
   db.formatted <- db.base[,-1,with=F]
 
   db.formatted

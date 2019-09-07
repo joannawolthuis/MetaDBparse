@@ -12,4 +12,6 @@ LazyData: true
 Imports:
   data.table,
   enviPat,
-  stringr
+  stringr,
+  xml2,
+  rvest
