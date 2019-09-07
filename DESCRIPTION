@@ -14,4 +14,5 @@ Imports:
   enviPat,
   stringr,
   xml2,
-  rvest
+  rvest,
+  rpubchem

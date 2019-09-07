@@ -652,6 +652,18 @@ build.BLOODEXPOSOME <- function(outfolder){ # WORKS
 
   db.full <- openxlsx::read.xlsx(excel.file, sheet = 1, colNames=T, startRow = 3)
 
+  print("getting iupac names from missing compound names...")
+  new.names <- pbapply::pbsapply(db.full[which(sapply(db.full$Compound.Name, is.empty)),], function(cid){
+    try({
+      url <- sprintf("https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/%d/JSON",
+                     cid)
+      json = jsonlite::read_json(url)
+      json$Record$RecordTitle
+    })
+  })
+
+  db.full[which(sapply(db.full$Compound.Name, is.empty)),]$Compound.Name <- new.names
+
   db.formatted <- unique(data.table::data.table(compoundname = db.full$Compound.Name,
                                                 description = paste0("Found in ", db.full$BloodPaperCount, " papers related to blood exposome."),
                                                 baseformula = db.full$Molecular.Formula,
