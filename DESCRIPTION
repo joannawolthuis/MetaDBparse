@@ -15,4 +15,6 @@ Imports:
   stringr,
   xml2,
   rvest,
-  rpubchem
+  rpubchem,
+  rlist,
+  rapport

@@ -12,7 +12,7 @@ build.HMDB <- function(outfolder){ # WORKS
   base.loc <- file.path(outfolder, "hmdb_source")
   if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
   zip.file <- file.path(base.loc, "HMDB.zip")
-  utils::download.file(file.url, zip.file,mode = "w")
+  utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(zip.file, exdir = base.loc)
 
   input = file.path(base.loc,"hmdb_metabolites.xml")
@@ -114,7 +114,7 @@ build.CHEBI <- function(outfolder){ # WORKS
     woAssociations = FALSE
     chebi_download <- tempdir()
   utils::download.file("ftp://ftp.ebi.ac.uk/pub/databases/chebi/archive/",
-                       paste0(chebi_download, "releases.txt"), quiet = TRUE)
+                       paste0(chebi_download, "releases.txt"), quiet = TRUE, mode="wb")
   releases <- gsub("rel", "", read.table(paste0(chebi_download,
                                                 "releases.txt"), quote = "\"", comment.char = "")[,
                                                                                                   9])
@@ -130,26 +130,26 @@ build.CHEBI <- function(outfolder){ # WORKS
                 release, "/Flat_file_tab_delimited/")
   message("Downloading compounds ... ", appendLF = FALSE)
   utils::download.file(paste0(ftp, "compounds.tsv.gz"), paste0(chebi_download,
-                                                               "compounds.tsv"), quiet = TRUE)
+                                                               "compounds.tsv"), quiet = TRUE, mode="wb")
   compounds <- as.data.frame.array(read.delim2(paste0(chebi_download,
                                                       "compounds.tsv")))
   message("DONE", appendLF = TRUE)
   message("Downloading synonyms ... ", appendLF = FALSE)
   utils::download.file(paste0(ftp, "names.tsv.gz"), paste0(chebi_download,
-                                                           "names.tsv"), quiet = TRUE)
+                                                           "names.tsv"), quiet = TRUE, mode="wb")
   names <- suppressWarnings(as.data.frame.array(read.delim2(paste0(chebi_download,
                                                                    "names.tsv"))))
   message("DONE", appendLF = TRUE)
   message("Downloading formulas ... ", appendLF = FALSE)
   utils::download.file(paste0(ftp, "chemical_data.tsv"), paste0(chebi_download,
-                                                                "formulas.tsv"), quiet = TRUE)
+                                                                "formulas.tsv"), quiet = TRUE, mode="wb")
   formulas <- suppressWarnings(as.data.frame.array(read.delim2(paste0(chebi_download,
                                                                       "formulas.tsv"))))
 
   message("Downloading structures ... ", appendLF = FALSE)
 
   utils::download.file(paste0(ftp, "structures.csv.gz"), paste0(chebi_download,
-                                                                "structures.csv"), quiet = TRUE)
+                                                                "structures.csv"), quiet = TRUE, mode="wb")
 
   message("DONE", appendLF = TRUE)
 
@@ -483,7 +483,7 @@ build.RESPECT <- function(outfolder){ # WORKS
   base.loc <- file.path(outfolder, "respect_source")
   if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
   zip.file <- file.path(base.loc, "respect.zip")
-  utils::download.file(file.url, zip.file,mode = "w")
+  utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(normalizePath(zip.file), exdir = (base.loc))
 
   cpd_files <- list.files(base.loc,
@@ -527,7 +527,7 @@ build.MACONDA <- function(outfolder){ # NEEDS SPECIAL FUNCTIONALITY
 
   if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
   zip.file <- file.path(base.loc, "maconda.zip")
-  utils::download.file(file.url, zip.file,mode = "w",extra = "-k")
+  utils::download.file(file.url, zip.file,mode = "wb",extra = "-k")
   utils::unzip(normalizePath(zip.file),files = "MaConDa__v1_0__extensive.csv",exdir = normalizePath(base.loc))
 
   base.table <- data.table::fread(file = file.path(base.loc, "MaConDa__v1_0__extensive.csv"))
@@ -569,7 +569,7 @@ build.T3DB <- function(outfolder){ # WORKS
   base.loc <- file.path(outfolder, "t3db_source")
   if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
   zip.file <- file.path(base.loc, "T3DB.zip")
-  utils::download.file(file.url, zip.file,mode = "w")
+  utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
   db.formatted <- data.table::fread(file.path(base.loc, "toxins.csv"), fill=T)
 
@@ -589,7 +589,7 @@ build.HSDB <- function(outfolder){ # NEEDS WORK
   base.loc <- file.path(outfolder, "hsdb_source")
   if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
   zip.file <- file.path(base.loc, "HSDB.zip")
-  utils::download.file(file.url, zip.file,mode = "w")
+  utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
 
   library(XML)
@@ -648,7 +648,7 @@ build.BLOODEXPOSOME <- function(outfolder){ # WORKS
   base.loc <- file.path(outfolder, "bloodexposome_source")
   if(!dir.exists(base.loc)) dir.create(base.loc)
   excel.file <- file.path(base.loc, "exposome.xlsx")
-  utils::download.file(file.url, excel.file)
+  utils::download.file(file.url, excel.file, mode="wb")
 
   db.full <- openxlsx::read.xlsx(excel.file, sheet = 1, colNames=T, startRow = 3)
 
@@ -681,7 +681,7 @@ build.EXPOSOMEEXPLORER <- function(outfolder){ # WORKS
 
   if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
   zip.file <- file.path(base.loc, "expoexpo_comp.zip")
-  utils::download.file(file.url, zip.file,mode = "w")
+  utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
 
   base.table <- data.table::fread(file = file.path(base.loc, "biomarkers.csv"))
@@ -700,7 +700,7 @@ build.EXPOSOMEEXPLORER <- function(outfolder){ # WORKS
   file.url <- "http://exposome-explorer.iarc.fr/system/downloads/current/correlation_values.csv.zip"
 
   zip.file <- file.path(base.loc, "expoexpo_corr.zip")
-  utils::download.file(file.url, zip.file,mode = "w")
+  utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
 
   corr.table <- data.table::fread(file = file.path(base.loc, "correlation_values.csv"))
@@ -740,7 +740,7 @@ build.SMPDB <- function(outfolder){ # OK I THINK
   base.loc <- file.path(outfolder, "smpdb_source")
   if(!dir.exists(base.loc)) dir.create(base.loc)
   zip.file <- file.path(base.loc, "SMPDB.zip")
-  utils::download.file(file.url, zip.file)
+  utils::download.file(file.url, zip.file, mode="wb")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
   # -------------------------------
 
@@ -966,9 +966,11 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
 
   # ----
   base.loc <- file.path(outfolder, "lipidmaps_source")
+  if(!dir.exists(base.loc)) dir.create(base.loc)
+
   zip.file <- file.path(base.loc, "lipidmaps.zip")
-  utils::download.file(file.url, zip.file)
-  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+  utils::download.file(file.url, zip.file, mode="wb")
+  zip::unzip(zipfile = normalizePath(zip.file), exdir = normalizePath(base.loc))
   # -------------------------------
 
   sdf.path <- list.files(base.loc,
@@ -1134,7 +1136,7 @@ build.DIMEDB <- function(outfolder){ # WORKS
   if(!dir.exists(base.loc)) dir.create(base.loc)
   pbapply::pbsapply(file.urls, function(url){
     zip.file <- file.path(base.loc, basename(url))
-    utils::download.file(url, zip.file)
+    utils::download.file(url, zip.file, mode="wb")
     utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
   })
   atom <- data.table::fread(file.path(base.loc,"dimedb_pc_info.tsv"))
@@ -1249,7 +1251,7 @@ build.PHENOLEXPLORER <- function(outfolder){ # WORKS
 
   for(url in file.urls){
     zip.file <- file.path(base.loc, basename(url))
-    utils::download.file(url, destfile = zip.file)
+    utils::download.file(url, destfile = zip.file, mode="wb")
     utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
   }
 
@@ -1305,7 +1307,7 @@ build.MASSBANK <- function(outfolder){ # WORKS
   base.loc <- file.path(outfolder, "massbank_source")
   if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
   zip.file <- file.path(base.loc, "massbank.zip")
-  utils::download.file(file.url, zip.file,mode = "w", method='libcurl')
+  utils::download.file(file.url, zip.file,mode = "wb", method='libcurl')
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
   cpd_files <- list.files(base.loc,
                           pattern = ".txt$",

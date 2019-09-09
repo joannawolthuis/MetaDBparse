@@ -20,11 +20,11 @@
 #
 #outfolder <- "~/MetaboShiny/databases/"
 
-db="expoexplorer"
+db="chebi"
 #
 
 
-cl = parallel::makeCluster(3)
+cl = parallel::makeCluster(7)
 
 # options(stringsAsFactors = FALSE,"java.parameters" = c("-Xmx16G")) # give java enough memory for smiles parsing
 #
@@ -51,17 +51,17 @@ parallel::clusterEvalQ(cl = cl, expr = {
   library(pbapply)
 })
 
-dbs = c(#"lipidmaps", "kegg","vmh","expoexplorer",
-        #"phenolexplorer", "chebi", "dimedb",
-        #"t3db","metacyc",
-        #"massbank", "respect",
-        #"drugbank", "foodb",
-        #"smpdb",
-        #"bloodexposome",
-        "wikidata"
-        #,"hmdb"
+dbs = c("lipidmaps", "kegg","vmh","expoexplorer",
+        "phenolexplorer", "chebi", "dimedb",
+        "t3db","metacyc",
+        "massbank", "respect",
+        "drugbank", "foodb",
+        "smpdb",
+        "bloodexposome",
+        "wikidata","hmdb"
         )
 
+outfolder = normalizePath("~/MetaboShiny/databases")
 for(db in dbs){
    print(db)
    try({
@@ -74,15 +74,15 @@ for(db in dbs){
                  dbname = db,
                  cl=cl, silent=F)
      # === BUILD EXTENDED ===
-     buildExtDB(outfolder,
-                base.dbname = db,
-                cl = cl,
-                blocksize = 600,
-                mzrange = c(60,800),
-                adduct_table = adducts,
-                adduct_rules = adduct_rules,
-                silent = F,
-                ext.dbname = "extended")
+     # buildExtDB(outfolder,
+     #            base.dbname = db,
+     #            cl = cl,
+     #            blocksize = 600,
+     #            mzrange = c(60,800),
+     #            adduct_table = adducts,
+     #            adduct_rules = adduct_rules,
+     #            silent = F,
+     #            ext.dbname = "extended")
    })
  }
 devtools::install()
