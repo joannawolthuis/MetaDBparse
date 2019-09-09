@@ -59,12 +59,12 @@ build.HMDB <- function(outfolder){ # WORKS
     )
     x <- currNode[['predicted_properties']]
     properties <- currNode[['predicted_properties']]
-    db.formatted[idx, "charge"] <<- stringr::str_match(xmlValue(properties),
+    db.formatted[idx, "charge"] <<- stringr::str_match(XML::xmlValue(properties),
                                               pattern = "formal_charge([+|\\-]\\d*|\\d*)")[,2]
   }
 
   XML::xmlEventParse(input, branches =
-                  list(metabolite = metabolite))
+                       list(metabolite = metabolite), replaceEntities=T)
 
   # - - - - - - - - - - - -
   db.formatted
@@ -113,16 +113,16 @@ build.CHEBI <- function(outfolder){ # WORKS
     release = "latest"
     woAssociations = FALSE
     chebi_download <- tempdir()
-  utils::download.file("ftp://ftp.ebi.ac.uk/pub/databases/chebi/archive/",
-                       paste0(chebi_download, "releases.txt"), quiet = TRUE, mode="wb")
-  releases <- gsub("rel", "", read.table(paste0(chebi_download,
-                                                "releases.txt"), quote = "\"", comment.char = "")[,
-                                                                                                  9])
+  url = "ftp://ftp.ebi.ac.uk/pub/databases/chebi/archive/"
+  filenames = RCurl::getURL(url, ftp.use.epsv = FALSE, dirlistonly = TRUE)
+
+  releases <- strsplit(filenames, split="\r\n")[[1]]
+  releases <- as.numeric(gsub(x = releases, pattern = "rel", replacement = ""))
   message("Validating ChEBI release number ... ", appendLF = FALSE)
+
   if (release == "latest") {
     release <- max(releases)
-  }
-  else {
+  } else {
     release <- releases[match(release, releases)]
   }
   message("OK")
@@ -839,7 +839,7 @@ build.KEGG <- function(outfolder){ # WORKS
 
   db.merged <- merge(db.formatted, smitable, by = "identifier")
 
-  db.formatted <- data.table(compoundname = db.merged$compoundname,
+  db.formatted <- data.table::data.table(compoundname = db.merged$compoundname,
                              description = db.merged$description,
                              baseformula = db.merged$baseformula,
                              identifier = db.merged$identifier,

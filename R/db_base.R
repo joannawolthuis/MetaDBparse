@@ -132,9 +132,9 @@ buildBaseDB <- function(outfolder, dbname,
                     smpdb = build.SMPDB(outfolder),
                     supernatural = build.SUPERNATURAL(outfolder))
 
-
   db.formatted <- data.table::as.data.table(db.formatted)
-  print(nrow(db.formatted))
+
+  options(java.home="C:\\Program Files\\Java\\jre1.8.0_221/")
 
   blocks = split(1:nrow(db.formatted), ceiling(seq_along(1:nrow(db.formatted))/1000))
 
@@ -157,7 +157,7 @@ buildBaseDB <- function(outfolder, dbname,
     iats = smiles.to.iatom(db.form.block$structure,
                            silent=silent)
 
-    valid.struct <- unlist(lapply(iats, function(x) !is.null(x)))
+  valid.struct <- unlist(lapply(iats, function(x) !is.null(x)))
 
     require(enviPat)
 

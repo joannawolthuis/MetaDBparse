@@ -51,7 +51,8 @@ parallel::clusterEvalQ(cl = cl, expr = {
   library(pbapply)
 })
 
-dbs = c("lipidmaps", "kegg","vmh","expoexplorer",
+dbs = c("lipidmaps", "kegg",
+        "vmh","expoexplorer",
         "phenolexplorer", "chebi", "dimedb",
         "t3db","metacyc",
         "massbank", "respect",

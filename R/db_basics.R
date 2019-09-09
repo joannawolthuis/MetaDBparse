@@ -23,7 +23,7 @@ openBaseDB <- function(outfolder, dbname){
 
 removeDB <- function(outfolder, dbname){
   db <- file.path(normalizePath(outfolder), paste0(dbname))
-  if(file.exists(db)) file.remove(db)
+  if(file.exists(db)) unlink(db)
 }
 
 writeDB <- function(conn, table, tblname){
