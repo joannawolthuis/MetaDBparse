@@ -7,15 +7,15 @@
 
 # should return data table!
 build.HMDB <- function(outfolder){ # WORKS
+
   file.url <- "http://www.hmdb.ca/system/downloads/current/hmdb_metabolites.zip"
-  # ----
   base.loc <- file.path(outfolder, "hmdb_source")
   if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
   zip.file <- file.path(base.loc, "HMDB.zip")
   utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(zip.file, exdir = base.loc)
 
-  input = file.path(base.loc,"hmdb_metabolites.xml")
+  input = file.path(base.loc, "hmdb_metabolites.xml")
 
   library(XML)
   library(RCurl)
@@ -23,7 +23,9 @@ build.HMDB <- function(outfolder){ # WORKS
   theurl <- getURL("http://www.hmdb.ca/statistics",.opts = list(ssl.verifypeer = FALSE) )
   tables <- readHTMLTable(theurl)
   stats = data.table::rbindlist(tables)
-  n = as.numeric(as.character(gsub(x = stats[Description == "Total Number of Metabolites"]$Count, pattern = ",", replacement="")))
+  n = as.numeric(as.character(gsub(x = stats[Description == "Total Number of Metabolites"]$Count,
+                                   pattern = ",",
+                                   replacement="")))
 
   db.formatted <- data.frame(
     compoundname = rep(NA, n),
@@ -31,42 +33,108 @@ build.HMDB <- function(outfolder){ # WORKS
     identifier = rep(NA, n),
     structure = rep(NA, n),
     charge = rep(NA, n),
-    description = rep(NA, n)
+    description = rep("", n)
   )
 
   pb <- pbapply::startpb(min = 0, max = n)
 
-  idx <<- 0
-
-  metabolite = function(currNode){
-
-    if(idx %% 1000 == 0){
-      pbapply::setpb(pb, idx)
-    }
-
-    idx <<- idx + 1
-
-    currNode <<- currNode
-
-    db.formatted[idx, "compoundname"] <<- XML::xmlValue(currNode[['name']])
-    db.formatted[idx, "identifier"] <<- XML::xmlValue(currNode[['accession']])
-    db.formatted[idx, "baseformula"] <<- XML::xmlValue(currNode[['chemical_formula']])
-    db.formatted[idx, "structure"] <<- XML::xmlValue(currNode[['smiles']])
-    db.formatted[idx, "description"] <<- paste("HMDB:",
-                                               XML::xmlValue(currNode[['cs_description']]),
-                                               "CHEMSPIDER:",
-                                               XML::xmlValue(currNode[['description']])
-    )
-    x <- currNode[['predicted_properties']]
-    properties <- currNode[['predicted_properties']]
-    db.formatted[idx, "charge"] <<- stringr::str_match(XML::xmlValue(properties),
-                                              pattern = "formal_charge([+|\\-]\\d*|\\d*)")[,2]
+  # FOR WINDOWS
+  sysinf <- Sys.info()
+  if (!is.null(sysinf)){
+    os <- sysinf['sysname']
+    if (os == 'Darwin')
+      os <- "osx"
+  } else { ## mystery machine
+    os <- .Platform$OS.type
+    if (grepl("^darwin", R.version$os))
+      os <- "osx"
+    if (grepl("linux-gnu", R.version$os))
+      os <- "linux"
   }
 
-  XML::xmlEventParse(input, branches =
-                       list(metabolite = metabolite), replaceEntities=T)
+  if(tolower(os) == "windows"){
+    m = 1 # which metabolite are we on
+    acc = "primary"
+    nm = "primary"
+    desc = "primary"
+    con = base::file(input, "r")
+    while (TRUE) {
 
-  # - - - - - - - - - - - -
+      line = readLines(con, n = 1,skipNul = T)
+
+      if (length(line) == 0){
+        break
+      }
+
+      if(line == "</metabolite>"){
+        m = m+1
+        pbapply::setpb(pb, m)
+        acc = "primary"
+        nm = "primary"
+        desc = "primary"
+      }
+
+      tag = stringr::str_match(line, pattern = "<(.*?)>")[,2]
+
+      switch(tag,
+             accession = {
+               if(acc == "primary"){
+                 db.formatted[m,]$identifier <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+                 acc <- "secondary"
+               }
+             },
+             name = {
+               if(nm == "primary"){
+                 db.formatted[m,]$compoundname <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+                 nm = "secondary"
+               }
+             },
+             smiles = {
+               db.formatted[m,]$structure <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+             },
+             description = {
+               if(desc == "primary"){
+                 db.formatted[m,]$description <- paste0(db.formatted[m,]$description, " HMDB: ", trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
+                 desc = "secondary"
+               }
+             },
+             cs_description = {
+               db.formatted[m,]$description <- paste0(db.formatted[m,]$description, "From ChemSpider: ", trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
+             },
+             chemical_formula = {
+               db.formatted[m,]$baseformula <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+             })
+    }
+    close(con)
+  }else{
+    metabolite = function(currNode){
+
+      if(idx %% 1000 == 0){
+        pbapply::setpb(pb, idx)
+      }
+
+      idx <<- idx + 1
+
+      currNode <<- currNode
+
+      db.formatted[idx, "compoundname"] <<- XML::xmlValue(currNode[['name']])
+      db.formatted[idx, "identifier"] <<- XML::xmlValue(currNode[['accession']])
+      db.formatted[idx, "baseformula"] <<- XML::xmlValue(currNode[['chemical_formula']])
+      db.formatted[idx, "structure"] <<- XML::xmlValue(currNode[['smiles']])
+      db.formatted[idx, "description"] <<- paste("HMDB:",
+                                                 XML::xmlValue(currNode[['cs_description']]),
+                                                 "CHEMSPIDER:",
+                                                 XML::xmlValue(currNode[['description']])
+      )
+      x <- currNode[['predicted_properties']]
+      properties <- currNode[['predicted_properties']]
+      db.formatted[idx, "charge"] <<- stringr::str_match(XML::xmlValue(properties),
+                                                         pattern = "formal_charge([+|\\-]\\d*|\\d*)")[,2]
+    }
+
+    XML::xmlEventParse(input, branches =
+                         list(metabolite = metabolite), replaceEntities=T)
+  }
   db.formatted
 }
 
