@@ -20,10 +20,7 @@
 #
 #outfolder <- "~/MetaboShiny/databases/"
 
-db="chebi"
-#
-
-
+db="hmdb"
 cl = parallel::makeCluster(7)
 
 # options(stringsAsFactors = FALSE,"java.parameters" = c("-Xmx16G")) # give java enough memory for smiles parsing
@@ -75,15 +72,15 @@ for(db in dbs){
                  dbname = db,
                  cl=cl, silent=F)
      # === BUILD EXTENDED ===
-     # buildExtDB(outfolder,
-     #            base.dbname = db,
-     #            cl = cl,
-     #            blocksize = 600,
-     #            mzrange = c(60,800),
-     #            adduct_table = adducts,
-     #            adduct_rules = adduct_rules,
-     #            silent = F,
-     #            ext.dbname = "extended")
+     buildExtDB(outfolder,
+                base.dbname = db,
+                cl = cl,
+                blocksize = 600,
+                mzrange = c(60,800),
+                adduct_table = adducts,
+                adduct_rules = adduct_rules,
+                silent = F,
+                ext.dbname = "extended")
    })
  }
 devtools::install()
@@ -94,8 +91,8 @@ require(data.table)
 # require(enviPat)
 # data(isotopes)
 #
-# adduct_rules <- fread("~/Google Drive/MetaboShiny/backend/adducts/adduct_rule_smarts.csv")
-# adducts <- fread("~/Google Drive/MetaboShiny/backend/adducts/adduct_rule_table.csv")
+adduct_rules <- data.table::fread("/Users/ninte/Repos/MetaboShiny/backend/adducts/adduct_rule_smarts.csv")
+adducts <- data.table::fread("/Users/ninte/Repos/MetaboShiny/backend/adducts/adduct_rule_table.csv")
 #
 # usethis::use_data(adduct_rules, overwrite=T)
 # usethis::use_data(adducts, overwrite=T)

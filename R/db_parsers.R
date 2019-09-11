@@ -8,6 +8,8 @@
 # should return data table!
 build.HMDB <- function(outfolder){ # WORKS
 
+  options(stringsAsFactors = F)
+
   file.url <- "http://www.hmdb.ca/system/downloads/current/hmdb_metabolites.zip"
   base.loc <- file.path(outfolder, "hmdb_source")
   if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
@@ -721,10 +723,11 @@ build.BLOODEXPOSOME <- function(outfolder){ # WORKS
   db.full <- openxlsx::read.xlsx(excel.file, sheet = 1, colNames=T, startRow = 3)
 
   print("getting iupac names from missing compound names...")
-  new.names <- pbapply::pbsapply(db.full[which(sapply(db.full$Compound.Name, is.empty)),], function(cid){
+  new.names <- pbapply::pbsapply(db.full[which(sapply(db.full$Compound.Name, is.empty)),]$PubChem.CID, function(cid){
     try({
       url <- sprintf("https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/%d/JSON",
-                     cid)
+                     as.numeric(cid))
+      Sys.sleep(0.1)
       json = jsonlite::read_json(url)
       json$Record$RecordTitle
     })
