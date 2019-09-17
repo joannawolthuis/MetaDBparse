@@ -13,8 +13,15 @@ Imports:
   data.table,
   enviPat,
   stringr,
+  stringi,
+  webchem,
   xml2,
   rvest,
   rpubchem,
   rlist,
-  rapport
+  rvest,
+  rapport,
+  SPARQL,
+  XML
+Remotes:
+  bioc::ChemmineR
