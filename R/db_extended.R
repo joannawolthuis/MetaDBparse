@@ -27,7 +27,8 @@ countAdductRuleMatches <- function(iatoms, adduct_rules){
   cbind(structure=smiles, res)
 }
 
-checkAdductRule <- function(adduct_rule_scores, adduct_table){
+checkAdductRule <- function(adduct_rule_scores,
+                            adduct_table){
 
   adduct.qualify.cols = lapply(1:nrow(adduct_table), function(i){
     row <- adduct_table[i,]
@@ -136,9 +137,6 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
 }
 
 doIsotopes <- function(formula, charge){
-  #require(enviPat)
-  #data(isotopes)
-  # - - - - - -
   isotables <- enviPat::isopattern(
     isotopes,
     formula,

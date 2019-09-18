@@ -19,11 +19,8 @@ build.HMDB <- function(outfolder){ # WORKS
 
   input = file.path(base.loc, "hmdb_metabolites.xml")
 
-  library(XML)
-  library(RCurl)
-  library(rlist)
-  theurl <- getURL("http://www.hmdb.ca/statistics",.opts = list(ssl.verifypeer = FALSE) )
-  tables <- readHTMLTable(theurl)
+  theurl <- RCurl::getURL("http://www.hmdb.ca/statistics",.opts = list(ssl.verifypeer = FALSE) )
+  tables <- XML::readHTMLTable(theurl)
   stats = data.table::rbindlist(tables)
   n = as.numeric(as.character(gsub(x = stats[Description == "Total Number of Metabolites"]$Count,
                                    pattern = ",",
@@ -96,12 +93,16 @@ build.HMDB <- function(outfolder){ # WORKS
              },
              description = {
                if(desc == "primary"){
-                 db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description, " HMDB: ", trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
+                 db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description,
+                                                          " HMDB: ",
+                                                          trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
                  desc = "secondary"
                }
              },
              cs_description = {
-               db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description, "From ChemSpider: ", trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
+               db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description,
+                                                        "From ChemSpider: ",
+                                                        trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
              },
              chemical_formula = {
                db.formatted[idx,]$baseformula <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
@@ -134,8 +135,9 @@ build.HMDB <- function(outfolder){ # WORKS
       idx <<- idx + 1
     }
 
-    XML::xmlEventParse(input, branches =
-                         list(metabolite = metabolite), replaceEntities=T)
+    XML::xmlEventParse(input,
+                       branches = list(metabolite = metabolite),
+                       replaceEntities=T)
   }
   db.formatted
 }
@@ -500,7 +502,6 @@ build.WIKIDATA <- function(outfolder){ # WORKS
 # RE-ENABLE AFTER TALKING TO EGON
 # build.WIKIPATHWAYS <- function(outfolder){
 #   chebi.loc <- file.path(outfolder, "chebi.db")
-#   require(SPARQL)
 #   # ---------------------------------------------------
 #   chebi <- SPARQL::SPARQL(url="http://sparql.wikipathways.org/",
 #                           query='prefix wp:      <http://vocabularies.wikipathways.org/wp#>
@@ -662,10 +663,6 @@ build.HSDB <- function(outfolder){ # NEEDS WORK
   utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
 
-  library(XML)
-  library(RCurl)
-  library(rlist)
-
   input = list.files(base.loc, pattern = "\\.xml",full.names = T)
 
   theurl <- getURL("https://toxnet.nlm.nih.gov/help/hsdbcasrn.html",.opts = list(ssl.verifypeer = FALSE) )
@@ -701,7 +698,6 @@ build.HSDB <- function(outfolder){ # NEEDS WORK
 
   identifier = xmlValue(parsed[[1]]$children$hsdb[[i]]['CASRegistryNumber']$CASRegistryNumber)
 
-  require(webchem)
   cas_ids <- xmlApply(parsed[[1]]$children$hsdb, function(x) xmlValue(x['CASRegistryNumber'][[1]]))
 
   smiles = pbapply::pbsapply(cas_ids, function(id) webchem::cir_query(id, representation = "smiles", resolver = NULL,
@@ -1031,7 +1027,6 @@ build.DRUGBANK <- function(outfolder){  # WORKS
 }
 
 build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking)
-  library(rapport)
 
   file.url = "https://www.lipidmaps.org/resources/downloads/LMSD/LMSD_20190711.sdf.zip"
 
@@ -1072,7 +1067,8 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
   mat
   }
 
-  sdfStream.joanna(input=sdf.path, output=file.path(base.loc, "lipidmaps_parsed.csv"),
+  sdfStream.joanna(input=sdf.path, output=file.path(base.loc,
+                                                    "lipidmaps_parsed.csv"),
                    append=FALSE,
                    fct=desc,
                    silent = T)
@@ -1083,19 +1079,16 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
 
   # - - - add classification - - -
 
-  library(rvest)
-
   doc <- xml2::read_html("https://www.lipidmaps.org/data/classification/LM_classification_exp.php")
   categories = doc %>%
     rvest::html_nodes("div:nth-child(2)") %>%
     rvest::html_text()
 
-  require(stringr)
   categories = gsub(x=categories, pattern = "\n|\t", replacement="")
   mainlist = categories[5]
-  filt_cats = str_match_all(mainlist, pattern = "(\\[.*?) \\[")[[1]][,2]
+  filt_cats = stringr::str_match_all(mainlist, pattern = "(\\[.*?) \\[")[[1]][,2]
   tbl.rows <- pbapply::pblapply(filt_cats, function(cat){
-    data.table::data.table(catcode = str_match(cat, pattern="\\[(.*?)\\]")[,2],
+    data.table::data.table(catcode = stringr::str_match(cat, pattern="\\[(.*?)\\]")[,2],
                            catdesc = gsub(cat, pattern = "\\[.*\\]", replacement=""))
   })
   conv_tbl = data.table::rbindlist(tbl.rows)
@@ -1113,17 +1106,12 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
 }
 
 build.METABOLIGHTS <- function(outfolder){
-  require(webchem)
-  require(rcdk)
-  require(curl)
 
   all_ids <- read.table("ftp://ftp.ebi.ac.uk/pub/databases/metabolights/eb-eye/unichem.tsv", sep="\t")
   colnames(all_ids) <- c("identifier", "inchi", "inchikey")
 
   metabs <- all_ids$identifier
 
-  # require(RCurl)
-  #
   uris <- pbapply::pblapply(metabs, FUN=function(id){
     met_info = NA
     url <- paste0("https://www.ebi.ac.uk/metabolights/webservice/beta/compound/", id)
@@ -1432,9 +1420,6 @@ build.SUPERNATURAL <- function(outfolder){ # NEEDS WORK, REALLY SLOW TOO INFEASI
 
   # http://bioinf-applied.charite.de/supernatural_new/src/download_mols.php?sn_id=SN00270303,SN00332107,SN00371241,SN00399119,SN00429427,SN00332221,SN00228244,SN00355833,SN00295142,SN00295267,SN00228769,SN00268639,SN00288836,SN00372987,SN00297293
 
-  library(XML)
-  library(RCurl)
-  library(rlist)
   theurl <- getURL("http://bioinf-applied.charite.de/supernatural_new/",.opts = list(ssl.verifypeer = FALSE) )
   tables <- readHTMLTable(theurl)
   stats = data.table::rbindlist(tables)

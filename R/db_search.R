@@ -125,7 +125,7 @@ searchFormula <- function(formula, outfolder, base.dbname){
   return(merged.results)
 }
 
-searchRev <- function(structure, ext.dbname="extended"){
+searchRev <- function(structure, ext.dbname="extended", outfolder){
   conn <- RSQLite::dbConnect(RSQLite::SQLite(), file.path(outfolder,
                                                           paste0(ext.dbname,".db"))) # change this to proper var later
   result = RSQLite::dbSendStatement(conn,

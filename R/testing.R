@@ -20,79 +20,79 @@
 #
 #outfolder <- "~/MetaboShiny/databases/"
 
-db="hmdb"
-cl = parallel::makeCluster(7)
+#db="hmdb"
+#cl = parallel::makeCluster(7)
 
 # options(stringsAsFactors = FALSE,"java.parameters" = c("-Xmx16G")) # give java enough memory for smiles parsing
 #
 
-require(enviPat)
-data(isotopes)
+# require(enviPat)
+# data(isotopes)
+#
+# parallel::clusterExport(cl, c("smiles.to.iatom",
+#                               "countAdductRuleMatches",
+#                               "checkAdductRule",
+#                               "doAdduct",
+#                               "iatom.to.smiles",
+#                               "smiles.to.iatom",
+#                               "iatom.to.formula",
+#                               "iatom.to.charge",
+#                               "adduct_rules",
+#                               "adducts",
+#                               "doIsotopes",
+#                               "isotopes"))
+#
+# parallel::clusterEvalQ(cl = cl, expr = {
+#   library(data.table)
+#   library(enviPat)
+#   library(pbapply)
+# })
+#
+# dbs = c("lipidmaps", "kegg",
+#         "vmh","expoexplorer",
+#         "phenolexplorer", "chebi", "dimedb",
+#         "t3db","metacyc",
+#         "massbank", "respect",
+#         "drugbank", "foodb",
+#         "smpdb",
+#         "bloodexposome",
+#         "wikidata","hmdb"
+#         )
 
-parallel::clusterExport(cl, c("smiles.to.iatom",
-                              "countAdductRuleMatches",
-                              "checkAdductRule",
-                              "doAdduct",
-                              "iatom.to.smiles",
-                              "smiles.to.iatom",
-                              "iatom.to.formula",
-                              "iatom.to.charge",
-                              "adduct_rules",
-                              "adducts",
-                              "doIsotopes",
-                              "isotopes"))
-
-parallel::clusterEvalQ(cl = cl, expr = {
-  library(data.table)
-  library(enviPat)
-  library(pbapply)
-})
-
-dbs = c("lipidmaps", "kegg",
-        "vmh","expoexplorer",
-        "phenolexplorer", "chebi", "dimedb",
-        "t3db","metacyc",
-        "massbank", "respect",
-        "drugbank", "foodb",
-        "smpdb",
-        "bloodexposome",
-        "wikidata","hmdb"
-        )
-
-outfolder = normalizePath("~/MetaboShiny/databases")
-for(db in dbs){
-   print(db)
-   try({
+# outfolder = normalizePath("~/MetaboShiny/databases")
+# for(db in dbs){
+#    print(db)
+   #try({
      # === INDEXING ===
      # conn <- openBaseDB(outfolder, paste0(db,".db"))
      # RSQLite::dbExecute(conn, "CREATE INDEX IF NOT EXISTS b_idx1 ON base(structure)")
      # RSQLite::dbDisconnect(conn)
      # === BUILD BASE ===
-     buildBaseDB(outfolder = outfolder,
-                 dbname = db,
-                 cl=cl, silent=F)
+     # buildBaseDB(outfolder = outfolder,
+     #             dbname = db,
+     #             cl=cl, silent=F)
      # === BUILD EXTENDED ===
-     buildExtDB(outfolder,
-                base.dbname = db,
-                cl = cl,
-                blocksize = 600,
-                mzrange = c(60,800),
-                adduct_table = adducts,
-                adduct_rules = adduct_rules,
-                silent = F,
-                ext.dbname = "extended")
-   })
- }
-devtools::install()
+#      buildExtDB(outfolder,
+#                 base.dbname = db,
+#                 cl = cl,
+#                 blocksize = 600,
+#                 mzrange = c(60,800),
+#                 adduct_table = adducts,
+#                 adduct_rules = adduct_rules,
+#                 silent = F,
+#                 ext.dbname = "extended")
+#    })
+#  }
+# devtools::install()
 #
 # #
 # require(parallel)
-require(data.table)
+#require(data.table)
 # require(enviPat)
 # data(isotopes)
 #
-adduct_rules <- data.table::fread("/Users/ninte/Repos/MetaboShiny/backend/adducts/adduct_rule_smarts.csv")
-adducts <- data.table::fread("/Users/ninte/Repos/MetaboShiny/backend/adducts/adduct_rule_table.csv")
+#adduct_rules <- data.table::fread("/Users/ninte/Repos/MetaboShiny/backend/adducts/adduct_rule_smarts.csv")
+#adducts <- data.table::fread("/Users/ninte/Repos/MetaboShiny/backend/adducts/adduct_rule_table.csv")
 #
 # usethis::use_data(adduct_rules, overwrite=T)
 # usethis::use_data(adducts, overwrite=T)

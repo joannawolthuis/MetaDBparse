@@ -1,7 +1,4 @@
 smiles.to.iatom <- function(smiles, silent=T, cl=0){
-
-  require(rcdk)
-
   iatoms <- sapply(smiles, function(x, silent){
     mol=NULL
     try({
@@ -41,8 +38,6 @@ iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=T){
     cat("Defaulting to 'Canonical'.")
   }
 
-  require(rcdk)
-
   new.smiles <- sapply(iatoms, function(mol, silent){
     smi = ""
     try({
@@ -61,8 +56,6 @@ iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=T){
 
 iatom.to.charge <- function(iatoms, silent=T){
 
-  require(rcdk)
-
   new.charges <- sapply(iatoms, function(mol, silent){
     ch=0
     try({
@@ -80,8 +73,6 @@ iatom.to.charge <- function(iatoms, silent=T){
 }
 
 iatom.to.formula <- function(iatoms, silent=T){
-
-  require(rcdk)
 
   new.formulas <- sapply(iatoms, function(mol,silent){
     form = NULL
@@ -103,9 +94,6 @@ iatom.to.formula <- function(iatoms, silent=T){
 
 buildBaseDB <- function(outfolder, dbname,
                         smitype = "Canonical", silent=T, cl=0){
-
-  require(enviPat)
-  data(isotopes)
 
   removeDB(outfolder, paste0(dbname,".db"))
   conn <- openBaseDB(outfolder, paste0(dbname,".db"))
@@ -158,8 +146,6 @@ buildBaseDB <- function(outfolder, dbname,
                            silent=silent)
 
   valid.struct <- unlist(lapply(iats, function(x) !is.null(x)))
-
-    require(enviPat)
 
     new.smiles = iatom.to.smiles(iats[valid.struct], smitype = "Canonical",silent=silent)
 
