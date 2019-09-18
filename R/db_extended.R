@@ -202,7 +202,7 @@ buildExtDB <- function(outfolder,
   if(RSQLite::dbExistsTable(full.conn, "extended")){
     new_adducts <- setdiff(adduct_table$Name,
                            RSQLite::dbGetQuery(full.conn,
-                                               "SELECT DISTINCT adduct FROM extended")[,1])
+                                               "SELECT DISTINCT Name FROM adducts")[,1])
   }else{
     new_adducts <- adduct_table$Name
   }
@@ -236,7 +236,8 @@ buildExtDB <- function(outfolder,
     to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge
                                             FROM tmp.base LEFT JOIN structures str
                                             ON base.structure = str.smiles
-                                            WHERE str.smiles IS NULL")}
+                                            WHERE str.smiles IS NULL")
+    }
   if(nrow(to.do) == 0){
     print("all already done")
     RSQLite::dbDisconnect(full.conn)

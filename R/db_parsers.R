@@ -182,13 +182,13 @@ build.METACYC <- function(outfolder){ # WORKS
 build.CHEBI <- function(outfolder){ # WORKS
 
   db.full <- {
-    release = "latest"
-    woAssociations = FALSE
-    chebi_download <- tempdir()
+  release = "latest"
+  woAssociations = FALSE
+  chebi_download <- tempdir()
   url = "ftp://ftp.ebi.ac.uk/pub/databases/chebi/archive/"
   filenames = RCurl::getURL(url, ftp.use.epsv = FALSE, dirlistonly = TRUE)
 
-  releases <- strsplit(filenames, split="\r\n")[[1]]
+  releases <- strsplit(filenames, split="\n")[[1]]
   releases <- as.numeric(gsub(x = releases, pattern = "rel", replacement = ""))
   message("Validating ChEBI release number ... ", appendLF = FALSE)
 
