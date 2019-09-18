@@ -14,7 +14,7 @@ build.HMDB <- function(outfolder){ # WORKS
   base.loc <- file.path(outfolder, "hmdb_source")
   if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
   zip.file <- file.path(base.loc, "HMDB.zip")
-  utils::download.file(file.url, zip.file,mode = "wb")
+  utils::download.file(file.url, zip.file,mode = "wb",cacheOK = T)
   utils::unzip(zip.file, exdir = base.loc)
 
   input = file.path(base.loc, "hmdb_metabolites.xml")
@@ -38,7 +38,8 @@ build.HMDB <- function(outfolder){ # WORKS
     description = rep("", n)
   )
 
-  pb <- pbapply::startpb(min = 0, max = n)
+  idx = 1 # which metabolite are we on
+  pb <- pbapply::startpb(min = idx, max = n)
 
   # FOR WINDOWS
   sysinf <- Sys.info()
@@ -55,7 +56,6 @@ build.HMDB <- function(outfolder){ # WORKS
   }
 
   if(tolower(os) == "windows"){
-    m = 1 # which metabolite are we on
     acc = "primary"
     nm = "primary"
     desc = "primary"
@@ -70,7 +70,7 @@ build.HMDB <- function(outfolder){ # WORKS
 
       if(line == "</metabolite>"){
         m = m+1
-        pbapply::setpb(pb, m)
+        pbapply::setpb(pb, idx)
         acc = "primary"
         nm = "primary"
         desc = "primary"
@@ -81,30 +81,30 @@ build.HMDB <- function(outfolder){ # WORKS
       switch(tag,
              accession = {
                if(acc == "primary"){
-                 db.formatted[m,]$identifier <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+                 db.formatted[idx,]$identifier <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
                  acc <- "secondary"
                }
              },
              name = {
                if(nm == "primary"){
-                 db.formatted[m,]$compoundname <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+                 db.formatted[idx,]$compoundname <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
                  nm = "secondary"
                }
              },
              smiles = {
-               db.formatted[m,]$structure <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+               db.formatted[idx,]$structure <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
              },
              description = {
                if(desc == "primary"){
-                 db.formatted[m,]$description <- paste0(db.formatted[m,]$description, " HMDB: ", trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
+                 db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description, " HMDB: ", trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
                  desc = "secondary"
                }
              },
              cs_description = {
-               db.formatted[m,]$description <- paste0(db.formatted[m,]$description, "From ChemSpider: ", trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
+               db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description, "From ChemSpider: ", trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
              },
              chemical_formula = {
-               db.formatted[m,]$baseformula <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+               db.formatted[idx,]$baseformula <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
              })
     }
     close(con)
@@ -114,8 +114,6 @@ build.HMDB <- function(outfolder){ # WORKS
       if(idx %% 1000 == 0){
         pbapply::setpb(pb, idx)
       }
-
-      idx <<- idx + 1
 
       currNode <<- currNode
 
@@ -132,6 +130,8 @@ build.HMDB <- function(outfolder){ # WORKS
       properties <- currNode[['predicted_properties']]
       db.formatted[idx, "charge"] <<- stringr::str_match(XML::xmlValue(properties),
                                                          pattern = "formal_charge([+|\\-]\\d*|\\d*)")[,2]
+
+      idx <<- idx + 1
     }
 
     XML::xmlEventParse(input, branches =
