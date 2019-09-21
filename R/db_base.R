@@ -122,7 +122,7 @@ buildBaseDB <- function(outfolder, dbname,
 
   db.formatted <- data.table::as.data.table(db.formatted)
 
-  options(java.home="C:\\Program Files\\Java\\jre1.8.0_221/")
+  #options(java.home="C:\\Program Files\\Java\\jre1.8.0_221/")
 
   blocks = split(1:nrow(db.formatted), ceiling(seq_along(1:nrow(db.formatted))/1000))
 

@@ -202,7 +202,9 @@ build.CHEBI <- function(outfolder){ # WORKS
                 release, "/Flat_file_tab_delimited/")
   message("Downloading compounds ... ", appendLF = FALSE)
   utils::download.file(paste0(ftp, "compounds.tsv.gz"), paste0(chebi_download,
-                                                               "compounds.tsv"), quiet = TRUE, mode="wb")
+                                                               "compounds.tsv"),
+                       quiet = TRUE,
+                       mode="wb")
   compounds <- as.data.frame.array(read.delim2(paste0(chebi_download,
                                                       "compounds.tsv")))
   message("DONE", appendLF = TRUE)
@@ -886,9 +888,7 @@ build.KEGG <- function(outfolder){ # WORKS
     fps
   })
 
-  fns = unlist(kegg.mol.paths)
-
-  rJava::.jcall("java/lang/System","V","gc")
+  fns = list.files(base.loc,full.names = T)
 
   smiles.rows = pbapply::pblapply(fns, function(fn){
     smiles=NA
@@ -1107,80 +1107,86 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
 
 build.METABOLIGHTS <- function(outfolder){
 
-  all_ids <- read.table("ftp://ftp.ebi.ac.uk/pub/databases/metabolights/eb-eye/unichem.tsv", sep="\t")
-  colnames(all_ids) <- c("identifier", "inchi", "inchikey")
+  file.url = "ftp://ftp.ebi.ac.uk/pub/databases/metabolights/eb-eye/eb-eye_metabolights_complete.xml"
 
-  metabs <- all_ids$identifier
+  # ----
+  base.loc <- file.path(outfolder, "metabolights_source")
+  if(!dir.exists(base.loc)) dir.create(base.loc)
 
-  uris <- pbapply::pblapply(metabs, FUN=function(id){
-    met_info = NA
-    url <- paste0("https://www.ebi.ac.uk/metabolights/webservice/beta/compound/", id)
-  })
-  #
-  # all_info <- jsonlite::read_json("~/Downloads/mapping.json")
-  # View(all_info$studyMapping$MTBLS59)
-  # View(all_info$compoundMapping$`CSID 16569894`)
-  #
-  # for(item in all_info$compoundMapping){
-  #   for(info in item){
-  #     print(info$study)
-  #   }
-  # }
-  #
-  # metab_rows <- pbapply::pblapply(all_info$compoundMapping, cl = F, FUN=function(cpd){
-  #   met_info <- cpd[[1]]$mafEntry
-  #   data.table::data.table(compoundname = met_info$metaboliteIdentification,
-  #              description = if(!is.null(met_info$description)) met_info$description else "unknown",
-  #              baseformula = met_info$chemicalFormula,
-  #              identifier = if(!is.null(met_info$identifier)) met_info$identifier else "unknown",
-  #              structure = met_info$smiles,
-  #              charge = met_info$charge)
-  #
-  # })
-  #metab_tbl <- rbindlist(metab_rows)
+  xml.file <- file.path(base.loc, "metabolights.xml")
+  utils::download.file(file.url, xml.file, mode="wb")
 
+  # ----
 
-  db_rows <- pbapply::pblapply(metabs[!is.na(metabs)],FUN=function(met_info){
-    formula <- NA
-    charge <- NA
-    try({
-      formula <- met_info$formula
-      charge = met_info$charge
-    })
-    smi <- toupper(gsub(" ", "", met_info$smiles))
-    # - - - - - - - - - - - - - - --
-    if(is.na(formula) | is.na(charge)){
-      # inchi or smiles
-      worked = FALSE
-      try({
-        smi <- met_info$smiles
-        iatom <- rcdk::parse.smiles(smi)[[1]]
-        charge = rcdk::get.total.charge(iatom)
-        formula = rcdk::get.mol2formula(iatom, charge = charge)@string
-        worked = TRUE
-      })
-      if(!worked){
-        smi <- toupper(webchem::cs_inchi_smiles(inchi = met_info$inchi,verbose = TRUE))
-        iatom <- rcdk::parse.smiles(smi)[[1]]
-        charge <- rcdk::get.total.charge(iatom)
-        formula <- rcdk::get.mol2formula(iatom, charge = charge)@string
+  mtbls = XML::xmlToList(file.path(base.loc, "metabolights.xml"))
+
+  compendium = pbapply::pblapply(1:length(mtbls$entries), function(i){
+
+    study = mtbls$entries[[i]]
+
+    cpd.ids <- unlist(sapply(study$cross_references, function(ref){
+      if(ref[2] == "MetaboLights"){
+        return(ref[1])
+      }else{
+        return(NULL)
       }
+    }))
+
+    # cpd.names <- unlist(sapply(study$additional_fields, function(field){
+    #   if(".attrs" %in% names(field)){
+    #     if(field[[".attrs"]] == "metabolite_name"){
+    #       return(field[['text']])
+    #     }
+    #   }else{NULL}
+    # }))
+    #    if(length(cpd.ids) != length(cpd.names)) cpd.names <- cpd.names[1:length(cpd.ids)]
+
+    if(length(cpd.ids)>0){
+      data.table::data.table(identifier = cpd.ids,
+                             study = c(paste0("(",study$.attrs,"): ", study$name)))
+    }else{
+      data.table::data.table()
     }
-    met_dt <- data.table::data.table(compoundname = met_info$name,
-                         description = if(!is.null(met_info$definition)) met_info$definition else "Unknown",
-                         baseformula = formula,
-                         identifier = met_info$id,
-                         structure = smi,
-                         charge = charge)
-    # -------
-    list(metabs=met_dt, pathway=met_info$pathways)
   })
 
-  db_rows_a <- lapply(db_rows, function(x) x$metabs)
-  db.formatted <- data.table::rbindlist(db_rows_a[!is.na(db_rows_a)])
+  overview = data.table::rbindlist(compendium)
 
+  ids = unique(overview$identifier)
+
+  db.rows <- pbapply::pblapply(ids, cl=cl, FUN=function(id){
+    url <- paste0("https://www.ebi.ac.uk/metabolights/webservice/beta/compound/", id)
+    res = data.table::data.table()
+    try({
+      info = jsonlite::read_json(url)
+
+      res = data.table::data.table(compoundname = info$name,
+                             description = info$definition,
+                             baseformula = info$formula,
+                             identifier =  id,
+                             charge = info$charge,
+                             structure = info$smiles
+      )
+    })
+    res
+    })
+
+  db.rows.final <- pbapply::pblapply(db.rows, function(row){
+    id = row$identifier
+    if(is.null(id)){
+      return(data.table::data.table())
+    }else{
+      studies = overview[identifier == id, description]
+      study.summary = paste0(unlist(studies), collapse=" ")
+      row$description <- paste0(row$description, " Mentioned in the following studies --> ", study.summary)
+      return(row)
+    }
+  })
+
+  db.formatted <- data.table::rbindlist(db.rows.final,
+                                        use.names = T)
   db.formatted
-}
+
+  }
 
 build.DIMEDB <- function(outfolder){ # WORKS
   files = c(#"structures.zip",
