@@ -592,7 +592,7 @@ build.RESPECT <- function(outfolder){ # WORKS
   db.formatted
 }
 
-build.MACONDA <- function(outfolder){ # NEEDS SPECIAL FUNCTIONALITY
+build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
 
   file.url = "https://www.maconda.bham.ac.uk/downloads/MaConDa__v1_0__csv.zip"
 
@@ -600,7 +600,9 @@ build.MACONDA <- function(outfolder){ # NEEDS SPECIAL FUNCTIONALITY
 
   if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
   zip.file <- file.path(base.loc, "maconda.zip")
-  utils::download.file(file.url, zip.file,mode = "wb",extra = "-k")
+
+  utils::download.file(file.url, zip.file,mode = "wb",extra = "-k",method = "curl")
+
   utils::unzip(normalizePath(zip.file),files = "MaConDa__v1_0__extensive.csv",exdir = normalizePath(base.loc))
 
   base.table <- data.table::fread(file = file.path(base.loc, "MaConDa__v1_0__extensive.csv"))
@@ -631,8 +633,106 @@ build.MACONDA <- function(outfolder){ # NEEDS SPECIAL FUNCTIONALITY
                                     structure=c(NA))
 
   db.base$structure[has.inchi] <- smiles
-  # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  return(db.base)
+
+  db.final <- cleanDB(db.base, cl=0, silent=F, blocksize=400)
+
+  #write to base db
+  writeDB(conn, db.final, "base")
+  RSQLite::dbExecute(conn, "CREATE INDEX b_idx1 ON base(structure)")
+  DBI::dbDisconnect(conn)
+
+  # WRITE TO EXTENDED DB TOO
+  full.db <- file.path(outfolder, "extended.db")
+  first.db <- !file.exists(full.db)
+
+  full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
+  RSQLite::dbExecute(full.conn, gsubfn::fn$paste("PRAGMA foreign_keys = ON"))
+  RSQLite::dbExecute(full.conn, "CREATE TABLE IF NOT EXISTS structures(
+                                 struct_id INT PRIMARY KEY,
+                                 smiles TEXT,
+                                 UNIQUE(struct_id, smiles))")
+
+  RSQLite::dbExecute(full.conn, strwrap("CREATE TABLE IF NOT EXISTS extended(
+                                         struct_id INT,
+                                         fullmz decimal(30,13),
+                                         adduct text,
+                                         isoprevalence float)", width=10000, simplify=TRUE))
+  RSQLite::dbExecute(full.conn, gsubfn::fn$paste("PRAGMA auto_vacuum = 1;"))
+
+  # B
+  base.db <- normalizePath(file.path(outfolder, paste0(base.dbname, ".db")))
+  RSQLite::dbExecute(full.conn, gsubfn::fn$paste("ATTACH '$base.db' AS tmp"))
+
+  if(first.db){
+    RSQLite::dbExecute(full.conn, "CREATE INDEX st_idx1 ON structures(smiles)")
+    RSQLite::dbExecute(full.conn, "CREATE INDEX e_idx1 on extended(struct_id)")
+    RSQLite::dbExecute(full.conn, "CREATE INDEX e_idx2 on extended(fullmz)")
+    RSQLite::dbExecute(full.conn, "PRAGMA journal_mode=WAL;")
+  }
+
+  done.structures <- if(first.db) 0 else RSQLite::dbGetQuery(full.conn, "SELECT MAX(struct_id) FROM structures")[,1]
+
+  start.id = done.structures + 1
+
+  structs = unique(db.final[,c(structure)])
+  # new will be written
+  mapper = data.table::data.table(struct_id = seq(start.id, start.id + length(structs) - 1, 1),
+                                  smiles = structs)
+
+  # - - - - - -
+  base.table$structure <- db.final$structure[match(base.table$id, table = db.final$identifier)]
+
+  adduct.unknown <- which(base.table$ion_form == "")
+  base.table$exact_adduct_mass[adduct.unknown] <- base.table$mz[adduct.unknown]
+
+  meta.table <- data.table::data.table(fullmz = base.table$exact_adduct_mass,
+                                     adduct = base.table$ion_form,
+                                     isoprevalence = c(100),
+                                     structure = base.table$structure)
+
+  adducts_maconda = unique(base.table[,c("ion_form","ion_mode")])
+  adducts_maconda = adducts_maconda[adducts_maconda$ion_form != ""]
+  adducts_maconda$ion_mode <- sapply(adducts_maconda$ion_mode, function(mode) switch(mode, POS="positive", NEG="negative"))
+
+  adduct_table_maconda <- data.table::data.table(
+    Name = adducts_maconda$ion_form,
+    Ion_mode = adducts_maconda$ion_mode,
+    Charge = c(NA),
+    xM = c(NA),
+    AddAt = c(NA),
+    RemAt = c(NA),
+    AddEx = c(NA),
+    RemEx = c(NA),
+    Nelec = c(NA),
+    Rule = c(NA),
+    Info = c("MACONDA ONLY")
+  )
+
+  # custom adduct table???
+  if(!first.db){
+    new_adducts <- setdiff(adduct_table_maconda$Name,
+                           RSQLite::dbGetQuery(full.conn,
+                                               "SELECT DISTINCT Name FROM adducts")[,1])
+    RSQLite::dbWriteTable(full.conn, "adducts", adduct_table_maconda[Name %in% new_adducts], append=T)
+  }else{
+    RSQLite::dbWriteTable(full.conn, "adducts", adduct_table_maconda, overwrite=T)
+  }
+
+  # map SMILES to smile_id
+  ids <- mapper$struct_id[match(meta.table$structure,
+                                mapper$smiles)]
+  meta.table$struct_id <- ids
+
+  # === RETURN ===
+
+  maconda.extended = unique(meta.table[,-"structure"])
+
+  # map SMILES to smile_id
+
+  RSQLite::dbWriteTable(full.conn, "extended", maconda.extended, append=T)
+  RSQLite::dbWriteTable(full.conn, "structures", mapper, append=T)
+
+  RSQLite::dbDisconnect(full.conn)
 }
 
 build.T3DB <- function(outfolder){ # WORKS

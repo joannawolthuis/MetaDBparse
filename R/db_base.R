@@ -90,41 +90,8 @@ iatom.to.formula <- function(iatoms, silent=T){
   return(new.formulas)
 }
 
-# BIG BOI
-
-buildBaseDB <- function(outfolder, dbname,
-                        smitype = "Canonical", silent=T, cl=0){
-
-  removeDB(outfolder, paste0(dbname,".db"))
-  conn <- openBaseDB(outfolder, paste0(dbname,".db"))
-  db.formatted <- switch(dbname,
-                    chebi = build.CHEBI(outfolder),
-                    maconda = build.MACONDA(outfolder),
-                    kegg = build.KEGG(outfolder),
-                    bloodexposome = build.BLOODEXPOSOME(outfolder),
-                    dimedb = build.DIMEDB(outfolder),
-                    expoexplorer = build.EXPOSOMEEXPLORER(outfolder),
-                    foodb = build.FOODB(outfolder),
-                    drugbank = build.DRUGBANK(outfolder),
-                    lipidmaps = build.LIPIDMAPS(outfolder),
-                    massbank = build.MASSBANK(outfolder),
-                    metabolights = build.METABOLIGHTS(outfolder),
-                    metacyc = build.METACYC(outfolder),
-                    phenolexplorer = build.PHENOLEXPLORER(outfolder),
-                    respect = build.RESPECT(outfolder),
-                    wikidata = build.WIKIDATA(outfolder),
-                    wikipathways = build.WIKIPATHWAYS(outfolder),
-                    t3db = build.T3DB(outfolder),
-                    vmh = build.VMH(outfolder),
-                    hmdb = build.HMDB(outfolder),
-                    smpdb = build.SMPDB(outfolder),
-                    supernatural = build.SUPERNATURAL(outfolder))
-
-  db.formatted <- data.table::as.data.table(db.formatted)
-
-  #options(java.home="C:\\Program Files\\Java\\jre1.8.0_221/")
-
-  blocks = split(1:nrow(db.formatted), ceiling(seq_along(1:nrow(db.formatted))/1000))
+cleanDB <- function(db.formatted, cl, silent, blocksize){
+  blocks = split(1:nrow(db.formatted), ceiling(seq_along(1:nrow(db.formatted))/blocksize))
 
   if(is.list(cl)){
     parallel::clusterExport(cl, varlist = c("db.formatted",
@@ -145,7 +112,7 @@ buildBaseDB <- function(outfolder, dbname,
     iats = smiles.to.iatom(db.form.block$structure,
                            silent=silent)
 
-  valid.struct <- unlist(lapply(iats, function(x) !is.null(x)))
+    valid.struct <- unlist(lapply(iats, function(x) !is.null(x)))
 
     new.smiles = iatom.to.smiles(iats[valid.struct], smitype = "Canonical",silent=silent)
 
@@ -203,7 +170,46 @@ buildBaseDB <- function(outfolder, dbname,
     return(db.removed.invalid)
   })
 
-  db.final <- data.table::rbindlist(db.fixed.rows)
+  return(data.table::rbindlist(db.fixed.rows))
+}
+
+
+# BIG BOI
+
+buildBaseDB <- function(outfolder, dbname,
+                        smitype = "Canonical", silent=T, cl=0){
+
+  removeDB(outfolder, paste0(dbname,".db"))
+  conn <- openBaseDB(outfolder, paste0(dbname,".db"))
+  db.formatted <- switch(dbname,
+                    chebi = build.CHEBI(outfolder),
+                    maconda = build.MACONDA(outfolder, conn),
+                    kegg = build.KEGG(outfolder),
+                    bloodexposome = build.BLOODEXPOSOME(outfolder),
+                    dimedb = build.DIMEDB(outfolder),
+                    expoexplorer = build.EXPOSOMEEXPLORER(outfolder),
+                    foodb = build.FOODB(outfolder),
+                    drugbank = build.DRUGBANK(outfolder),
+                    lipidmaps = build.LIPIDMAPS(outfolder),
+                    massbank = build.MASSBANK(outfolder),
+                    metabolights = build.METABOLIGHTS(outfolder),
+                    metacyc = build.METACYC(outfolder),
+                    phenolexplorer = build.PHENOLEXPLORER(outfolder),
+                    respect = build.RESPECT(outfolder),
+                    wikidata = build.WIKIDATA(outfolder),
+                    wikipathways = build.WIKIPATHWAYS(outfolder),
+                    t3db = build.T3DB(outfolder),
+                    vmh = build.VMH(outfolder),
+                    hmdb = build.HMDB(outfolder),
+                    smpdb = build.SMPDB(outfolder),
+                    supernatural = build.SUPERNATURAL(outfolder))
+
+  db.formatted <- data.table::as.data.table(db.formatted)
+
+  #options(java.home="C:\\Program Files\\Java\\jre1.8.0_221/") # windows...
+
+  db.final <- cleanDB(db.formatted, cl=cl, silent=silent, blocksize=400)
+
   # - - - - - - - - - - - - - - - - - -
   writeDB(conn, db.final, "base")
   RSQLite::dbExecute(conn, "CREATE INDEX b_idx1 ON base(structure)")
