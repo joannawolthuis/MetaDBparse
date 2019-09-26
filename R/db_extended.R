@@ -1,3 +1,29 @@
+removeFailedStructures <- function(outfolder,
+                                   ext.dbname = "extended"){
+  outfolder <- normalizePath(outfolder)
+  print(paste("Will remove failed isotope calculations, this may take a while. Removing structures from structure list that didn't make it into isotope calculation."))
+  full.db <- file.path(outfolder, paste0(ext.dbname, ".db"))
+  first.db <- !file.exists(full.db)
+  if(first.db){
+    print("Can't do this on a new db! :-(")
+    return(NULL)
+  }else{
+    full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
+    RSQLite::dbExecute(full.conn,
+                       "CREATE INDEX IF NOT EXISTS ext_id ON extended(struct_id)")
+    RSQLite::dbExecute(full.conn,
+                       "DELETE FROM structures
+                        WHERE struct_id IN(SELECT structures.struct_id
+                                           FROM structures
+                                           LEFT JOIN extended
+                                           ON structures.struct_id=extended.struct_id
+                                           WHERE extended.struct_id IS NULL)"
+    )
+    #"DELETE FROM cache WHERE id IN(SELECT cache.id FROM cache LEFT JOIN main ON cache.id=main.id WHERE main.id IS NULL)"
+    RSQLite::dbDisconnect(full.conn)
+  }
+}
+
 # calculate 'rules' for all compounds (requires iatom-ization)
 countAdductRuleMatches <- function(iatoms, adduct_rules){
   smiles = iatom.to.smiles(iatoms)
@@ -63,6 +89,10 @@ checkAdductRule <- function(adduct_rule_scores,
 
 doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
   # query_adduct = "[M+H]1+"
+  # formula<<-formula
+  # structure<<-structure
+  # charge<<-charge
+
   row = adduct_table[Name == query_adduct,]
   name <- row$Name
   ion_mode <- row$Ion_mode
@@ -91,7 +121,7 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
                                                        deduct = deduct_before)))
     if(length(can.deduct) == 0) return(data.table::data.table())
     deductibles <- unique_formulas$adducted[can.deduct]
-    unique_formulas$adducted[can.deduct] <- enviPat::subform(unique_formulas$adducted[can.deduct],
+    unique_formulas$adducted[can.deduct] <- enviPat::subform(deductibles,
                                                              deduct_before)
     unique_formulas <- unique_formulas[can.deduct]
   }
@@ -228,7 +258,9 @@ buildExtDB <- function(outfolder,
     RSQLite::dbExecute(full.conn, "PRAGMA journal_mode=WAL;")
   }
 
-  if(first.db | length(new_adducts) > 0){
+  # get the new formulas
+  # TODO: check if this works for completely new dbs!!
+  if(first.db){
     to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge
                                             FROM tmp.base")
     to.do$struct_id <- c(NA)
@@ -237,7 +269,19 @@ buildExtDB <- function(outfolder,
                                             FROM tmp.base LEFT JOIN structures str
                                             ON base.structure = str.smiles
                                             WHERE str.smiles IS NULL")
+
+    # if none, check for new adducts
+    if(nrow(to.do) == 0){
+      if(length(new_adducts)>0){
+        to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge
+                                            FROM tmp.base")
+        to.do$struct_id <- c(NA)
+        # and adjust adduct list
+        adduct_table <- data.table::as.data.table(adduct_table)[Name %in% new_adducts,]
+      }
     }
+  }
+
   if(nrow(to.do) == 0){
     print("all already done")
     RSQLite::dbDisconnect(full.conn)
@@ -264,9 +308,6 @@ buildExtDB <- function(outfolder,
   RSQLite::dbDisconnect(full.conn)
 
   # - - - - L O O P  T H I S - - - - -
-  if(length(new_adducts) > 0){
-    adduct_table <- data.table::as.data.table(adduct_table)[Name %in% new_adducts,]
-  }
 
   # completely new compounds
   per.adduct.tables = pbapply::pblapply(1:length(blocks), cl=cl, function(i, mzrange=mzrange, silent=silent, blocks=blocks,
@@ -390,18 +431,17 @@ buildExtDB <- function(outfolder,
   adduct_table=adduct_table, adduct_rules=adduct_rules,
   tmpfiles.ext=tmpfiles.ext, tmpfiles.struct=tmpfiles.struct,
   mapper=mapper)
+
   # = = = = = = WRITE TO DB = = = = = =
   print("loading into database... please stand by - w- ")
 
   pbapply::pbsapply(1:length(blocks), function(i){
     full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
-    extended = tmpfiles.ext[i]
-    structures = tmpfiles.struct[i]
-    try({
-      RSQLite::dbWriteTable(full.conn, "extended", extended, append=T)
-      RSQLite::dbWriteTable(full.conn, "structures", structures, append=T)
-      RSQLite::dbDisconnect(full.conn)
-    })
+    extended = data.table::fread(tmpfiles.ext[i])
+    structures = data.table::fread(tmpfiles.struct[i])
+    RSQLite::dbWriteTable(full.conn, "extended", extended, append=T)
+    RSQLite::dbWriteTable(full.conn, "structures", structures, append=T)
+    RSQLite::dbDisconnect(full.conn)
   })
  unlink(c(tmpfiles.ext, tmpfiles.struct))
 }

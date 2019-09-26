@@ -91,8 +91,8 @@
 # require(enviPat)
 # data(isotopes)
 #
-#adduct_rules <- data.table::fread("/Users/ninte/Repos/MetaboShiny/backend/adducts/adduct_rule_smarts.csv")
-#adducts <- data.table::fread("/Users/ninte/Repos/MetaboShiny/backend/adducts/adduct_rule_table.csv")
+adduct_rules <- data.table::fread("/Users/ninte/Repos/MetaboShiny/backend/adducts/adduct_rule_smarts.csv")
+adducts <- data.table::fread("/Users/ninte/Repos/MetaboShiny/backend/adducts/adduct_rule_table.csv")
 #
 # usethis::use_data(adduct_rules, overwrite=T)
 # usethis::use_data(adducts, overwrite=T)
@@ -168,3 +168,55 @@
 #   RSQLite::dbExecute(conn,"CREATE INDEX IF NOT EXISTS b_idx1 ON base(structure);")
 #   RSQLite::dbDisconnect(conn)
 # }
+
+# internal standards
+fn = "~/Documents/internal_umc_database_orig.txt"
+internal_standards = data.table::fread(fn)
+db.formatted <- data.table::data.table(
+   compoundname = as.character(internal_standards$CompoundName),
+   baseformula = as.character(internal_standards$Composition),
+   identifier = as.character(paste0("umcu", 1:nrow(internal_standards))),
+   structure = c(NA),
+   charge = c(0),
+   description = c("Internal database of UMCU")
+)
+
+db.formatted <- db.formatted[grepl(compoundname, pattern = "\\(IS\\)") & !grepl(compoundname, pattern = "Dimeric")]
+db.formatted$baseformula <- as.character(gsub(db.formatted$baseformula, pattern = "\\((\\d+)(\\w+)\\)", replacement="[\\1]\\2"))
+db.formatted$baseformula <- gsub("D", "[2]H", db.formatted$baseformula)
+
+#data.table::fwrite(db.formatted, "internal_standards.csv")
+# manually add smiles
+#db.formatted <- data.table::fread("~/Documents/internal_standards_withstruct.csv")
+
+dbname="umc_internal"
+removeDB(outfolder, paste0(dbname,".db"))
+conn <- openBaseDB(outfolder, paste0(dbname,".db"))
+
+# NEEDS STRUCTURES
+db.final <- cleanDB(db.formatted,cl=0,silent=F,blocksize=50)
+db.final$structure <- as.character(db.final$structure)
+db.final$charge <- as.numeric(db.final$charge)
+
+writeDB(conn, db.final, "base")
+RSQLite::dbExecute(conn, "CREATE INDEX b_idx1 ON base(structure)")
+DBI::dbDisconnect(conn)
+
+# - - - WHICH ADDUCTS NEED DEUTERATED VARIANTS (ONLY DEDUCTION...) - - -
+
+dedH <- grepl(adducts$RemAt, pattern = "H\\d") | grepl(adducts$RemEx, pattern = "H\\d")
+extra_adducts <- adducts[dedH,]
+
+adducts_deut <- data.table::fread("adducts_deut.csv")
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+buildExtDB(outfolder,
+           base.dbname = dbname,
+           cl = 0,#session_cl,
+           blocksize = 20,
+           mzrange = c(60,600),
+           adduct_table = adducts_deut,
+           adduct_rules = adduct_rules,
+           silent = F,
+           ext.dbname = "extended")
+

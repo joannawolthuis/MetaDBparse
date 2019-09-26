@@ -44,7 +44,8 @@ searchMZ <- function(mzs, ionmodes, outfolder,
 
   # query
   RSQLite::dbExecute(conn, 'DROP TABLE IF EXISTS unfiltered')
-  RSQLite::dbExecute(conn, "CREATE TABLE unfiltered AS
+
+  query = "CREATE TABLE unfiltered AS
                             SELECT DISTINCT
                             cpd.adduct as adduct,
                             cpd.isoprevalence as isoprevalence,
@@ -53,13 +54,16 @@ searchMZ <- function(mzs, ionmodes, outfolder,
                             (1e6*ABS(mz.mzmed - cpd.fullmz)/cpd.fullmz) AS dppm
                             FROM mzvals mz
                             JOIN mzranges rng ON rng.ID = mz.ID
-                            JOIN extended cpd INDEXED BY e_idx2
+                            JOIN extended cpd indexed by e_idx2
                             ON cpd.fullmz BETWEEN rng.mzmin AND rng.mzmax
                             JOIN adducts
                             ON cpd.adduct = adducts.Name
                             AND mz.foundinmode = adducts.Ion_Mode
                             JOIN structures struc
-                            ON cpd.struct_id = struc.struct_id")
+                            ON cpd.struct_id = struc.struct_id"
+
+  RSQLite::dbExecute(conn, query)
+
   table.per.db <- lapply(base.dbname, function(db){
     dbpath = file.path(outfolder, paste0(db, ".db"))
     try({
@@ -97,7 +101,7 @@ searchMZ <- function(mzs, ionmodes, outfolder,
   DBI::dbDisconnect(conn)
 
   return(merged.results)
-  }
+}
 
 searchFormula <- function(formula, outfolder, base.dbname){
   table.per.db <- lapply(base.dbname, function(db){

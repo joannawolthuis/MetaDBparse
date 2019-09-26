@@ -660,7 +660,7 @@ build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
   RSQLite::dbExecute(full.conn, gsubfn::fn$paste("PRAGMA auto_vacuum = 1;"))
 
   # B
-  base.db <- normalizePath(file.path(outfolder, paste0(base.dbname, ".db")))
+  base.db <- normalizePath(file.path(outfolder, "maconda.db"))
   RSQLite::dbExecute(full.conn, gsubfn::fn$paste("ATTACH '$base.db' AS tmp"))
 
   if(first.db){
@@ -669,26 +669,6 @@ build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
     RSQLite::dbExecute(full.conn, "CREATE INDEX e_idx2 on extended(fullmz)")
     RSQLite::dbExecute(full.conn, "PRAGMA journal_mode=WAL;")
   }
-
-  done.structures <- if(first.db) 0 else RSQLite::dbGetQuery(full.conn, "SELECT MAX(struct_id) FROM structures")[,1]
-
-  start.id = done.structures + 1
-
-  structs = unique(db.final[,c(structure)])
-  # new will be written
-  mapper = data.table::data.table(struct_id = seq(start.id, start.id + length(structs) - 1, 1),
-                                  smiles = structs)
-
-  # - - - - - -
-  base.table$structure <- db.final$structure[match(base.table$id, table = db.final$identifier)]
-
-  adduct.unknown <- which(base.table$ion_form == "")
-  base.table$exact_adduct_mass[adduct.unknown] <- base.table$mz[adduct.unknown]
-
-  meta.table <- data.table::data.table(fullmz = base.table$exact_adduct_mass,
-                                     adduct = base.table$ion_form,
-                                     isoprevalence = c(100),
-                                     structure = base.table$structure)
 
   adducts_maconda = unique(base.table[,c("ion_form","ion_mode")])
   adducts_maconda = adducts_maconda[adducts_maconda$ion_form != ""]
@@ -713,10 +693,48 @@ build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
     new_adducts <- setdiff(adduct_table_maconda$Name,
                            RSQLite::dbGetQuery(full.conn,
                                                "SELECT DISTINCT Name FROM adducts")[,1])
+
+    if(length(new_adducts)==0){
+      print("maconda is already in here!")
+      return(NA)
+    }
     RSQLite::dbWriteTable(full.conn, "adducts", adduct_table_maconda[Name %in% new_adducts], append=T)
   }else{
     RSQLite::dbWriteTable(full.conn, "adducts", adduct_table_maconda, overwrite=T)
   }
+
+  if(first.db | length(new_adducts) > 0){
+    to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge
+                                            FROM tmp.base")
+    to.do$struct_id <- c(NA)
+  }else{
+    to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge
+                                            FROM tmp.base LEFT JOIN structures str
+                                            ON base.structure = str.smiles
+                                            WHERE str.smiles IS NULL")
+  }
+  if(nrow(to.do) == 0){
+    print("all already done")
+  }
+
+  done.structures <- if(first.db) 0 else RSQLite::dbGetQuery(full.conn, "SELECT MAX(struct_id) FROM structures")[,1]
+  start.id = done.structures + 1
+  structs = unique(db.final[,c(structure)])
+  # new will be written
+
+  mapper = data.table::data.table(struct_id = seq(start.id, start.id + nrow(to.do) - 1, 1),
+                                  smiles = to.do$structure)
+  # - - - - - -
+  base.table$structure <- db.final$structure[match(base.table$id, table = db.final$identifier)]
+
+  adduct.unknown <- which(base.table$ion_form == "")
+  base.table$exact_adduct_mass[adduct.unknown] <- base.table$mz[adduct.unknown]
+  base.table$ion_form[adduct.unknown] <- sapply(base.table$ion_mode[adduct.unknown], function(ion_mode) switch(ion_mode, POS=c("[M?]+?"), NEG=c("[M?]-?")))
+
+  meta.table <- data.table::data.table(fullmz = base.table$exact_adduct_mass,
+                                     adduct = base.table$ion_form,
+                                     isoprevalence = c(100),
+                                     structure = base.table$structure)
 
   # map SMILES to smile_id
   ids <- mapper$struct_id[match(meta.table$structure,
