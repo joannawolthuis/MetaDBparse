@@ -172,36 +172,39 @@ cleanDB <- function(db.formatted, cl, silent, blocksize){
   return(data.table::rbindlist(db.fixed.rows))
 }
 
-
 # BIG BOI
 
-buildBaseDB <- function(outfolder, dbname,
+buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
                         smitype = "Canonical", silent=T, cl=0){
 
   removeDB(outfolder, paste0(dbname,".db"))
   conn <- openBaseDB(outfolder, paste0(dbname,".db"))
-  db.formatted <- switch(dbname,
-                    chebi = build.CHEBI(outfolder),
-                    maconda = build.MACONDA(outfolder, conn),
-                    kegg = build.KEGG(outfolder),
-                    bloodexposome = build.BLOODEXPOSOME(outfolder),
-                    dimedb = build.DIMEDB(outfolder),
-                    expoexplorer = build.EXPOSOMEEXPLORER(outfolder),
-                    foodb = build.FOODB(outfolder),
-                    drugbank = build.DRUGBANK(outfolder),
-                    lipidmaps = build.LIPIDMAPS(outfolder),
-                    massbank = build.MASSBANK(outfolder),
-                    metabolights = build.METABOLIGHTS(outfolder),
-                    metacyc = build.METACYC(outfolder),
-                    phenolexplorer = build.PHENOLEXPLORER(outfolder),
-                    respect = build.RESPECT(outfolder),
-                    wikidata = build.WIKIDATA(outfolder),
-                    wikipathways = build.WIKIPATHWAYS(outfolder),
-                    t3db = build.T3DB(outfolder),
-                    vmh = build.VMH(outfolder),
-                    hmdb = build.HMDB(outfolder),
-                    smpdb = build.SMPDB(outfolder),
-                    supernatural = build.SUPERNATURAL(outfolder))
+  if(is.null(custom_csv_path)){
+    db.formatted <- switch(dbname,
+                           chebi = build.CHEBI(outfolder),
+                           maconda = build.MACONDA(outfolder, conn),
+                           kegg = build.KEGG(outfolder),
+                           bloodexposome = build.BLOODEXPOSOME(outfolder),
+                           dimedb = build.DIMEDB(outfolder),
+                           expoexplorer = build.EXPOSOMEEXPLORER(outfolder),
+                           foodb = build.FOODB(outfolder),
+                           drugbank = build.DRUGBANK(outfolder),
+                           lipidmaps = build.LIPIDMAPS(outfolder),
+                           massbank = build.MASSBANK(outfolder),
+                           metabolights = build.METABOLIGHTS(outfolder),
+                           metacyc = build.METACYC(outfolder),
+                           phenolexplorer = build.PHENOLEXPLORER(outfolder),
+                           respect = build.RESPECT(outfolder),
+                           wikidata = build.WIKIDATA(outfolder),
+                           wikipathways = build.WIKIPATHWAYS(outfolder),
+                           t3db = build.T3DB(outfolder),
+                           vmh = build.VMH(outfolder),
+                           hmdb = build.HMDB(outfolder),
+                           smpdb = build.SMPDB(outfolder),
+                           supernatural = build.SUPERNATURAL(outfolder))
+  }else{
+    db.formatted <- data.table::fread(custom_csv_path, header=T)
+  }
 
   if(dbname == "maconda") return(NA)
 

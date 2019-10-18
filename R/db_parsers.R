@@ -864,7 +864,7 @@ build.BLOODEXPOSOME <- function(outfolder){ # WORKS
 build.EXPOSOMEEXPLORER <- function(outfolder){ # WORKS
   file.url <- "http://exposome-explorer.iarc.fr/system/downloads/current/biomarkers.csv.zip"
 
-  base.loc <- file.path(outfolder, "exex_source")
+  base.loc <- file.path(outfolder, "expoexplorer_source")
 
   if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
   zip.file <- file.path(base.loc, "expoexpo_comp.zip")
