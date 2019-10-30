@@ -211,7 +211,8 @@ buildExtDB <- function(outfolder,
                        mzrange = c(60,600),
                        adduct_table = adducts,
                        adduct_rules = adduct_rules,
-                       silent = silent){
+                       silent = silent,
+                       use.rules = TRUE){
   # A
   outfolder <- normalizePath(outfolder)
 
@@ -242,6 +243,8 @@ buildExtDB <- function(outfolder,
 
   RSQLite::dbExecute(full.conn, strwrap("CREATE TABLE IF NOT EXISTS extended(
                                          struct_id INT,
+                                         fullformula text,
+                                         finalcharge text,
                                          fullmz decimal(30,13),
                                          adduct text,
                                          isoprevalence float)", width=10000, simplify=TRUE))
@@ -296,8 +299,12 @@ buildExtDB <- function(outfolder,
   mapper = data.table::data.table(struct_id = seq(start.id, start.id + nrow(to.do) - 1, 1),
                                   smiles = to.do$structure,
                                   baseformula = to.do$baseformula,
-                                  charge = to.do$charge)
+                                  charge = as.numeric(to.do$charge))
+  mapper[is.na(charge)]$charge <- c(0)
 
+  print(head(mapper))
+
+  Sys.sleep(3)
   print(paste("Parsing", nrow(mapper), "new compounds..."))
 
   blocks = split(mapper, ceiling(seq_along(1:nrow(mapper))/blocksize))
@@ -313,7 +320,7 @@ buildExtDB <- function(outfolder,
   per.adduct.tables = pbapply::pblapply(1:length(blocks), cl=cl, function(i, mzrange=mzrange, silent=silent, blocks=blocks,
                                                                           adduct_table=adduct_table, adduct_rules=adduct_rules,
                                                                           tmpfiles.ext=tmpfiles.ext, tmpfiles.struct=tmpfiles.struct,
-                                                                          mapper=mapper){
+                                                                          mapper=mapper, use.rules = use.rules){
 
     #full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
     #RSQLite::dbExecute(full.conn, "PRAGMA busy_timeout=5000;")
@@ -321,12 +328,17 @@ buildExtDB <- function(outfolder,
     # for each block
     block = blocks[[i]]
 
-    # convert to iatom
-    iatoms <- smiles.to.iatom(block$smiles, silent=silent)
-
-    # check which are invalid structures
-    bad.structures = which(sapply(iatoms, is.null))
-    good.structures = which(!sapply(iatoms, is.null))
+    if(use.rules){
+      # convert to iatom
+      iatoms <- smiles.to.iatom(block$smiles, silent=silent)
+      # check which are invalid structures
+      bad.structures = which(sapply(iatoms, is.null))
+      good.structures = which(!sapply(iatoms, is.null))
+    }else{
+      iatoms <- c()
+      bad.structures = 1:length(iatoms)
+      good.structures = c()
+    }
 
     structure.adducts.possible <- data.table::data.table()
 
@@ -334,7 +346,7 @@ buildExtDB <- function(outfolder,
     if(length(good.structures)>0){
       parsable.iats = iatoms[good.structures]
       structure.reactive.groups = countAdductRuleMatches(parsable.iats,
-                                                         adduct_rules)
+                                                           adduct_rules)
       structure.adducts.possible = checkAdductRule(structure.reactive.groups,
                                                    adduct_table)
     }
@@ -344,12 +356,15 @@ buildExtDB <- function(outfolder,
 
       has.structure.can.adduct <- data.table::data.table()
 
-      if(nrow(structure.adducts.possible)>0){
-        has.structure.can.adduct = block[good.structures[unlist(structure.adducts.possible[,..add])]]
+      if(use.rules){
+        if(nrow(structure.adducts.possible)>0){
+          has.structure.can.adduct = block[good.structures[unlist(structure.adducts.possible[,..add])]]
+        }
+        no.structure = block[bad.structures]
+        block.calc.adduct = rbind(has.structure.can.adduct, no.structure)
+      }else{
+        block.calc.adduct = block
       }
-
-      no.structure = block[bad.structures]
-      block.calc.adduct = rbind(has.structure.can.adduct, no.structure)
 
       if(nrow(block.calc.adduct) == 0) return(data.table::data.table())
 
@@ -382,8 +397,9 @@ buildExtDB <- function(outfolder,
                                         allow.cartesian = T)
 
         # ==== MAKE FINAL TABLE ====
-
         meta.table <- data.table::data.table(fullmz = adducted.plus.isotopes$fullmz,
+                                             fullformula = adducted.plus.isotopes$final,
+                                             finalcharge = adducted.plus.isotopes$final.charge,
                                              adduct = c(add),
                                              isoprevalence = adducted.plus.isotopes$isoprevalence,
                                              structure = adducted.plus.isotopes$structure)
@@ -412,14 +428,6 @@ buildExtDB <- function(outfolder,
           data.table::fwrite(structs,
                              file = tmpfiles.struct[i],
                              append=F)
-
-          # RSQLite::dbAppendTable(full.conn,
-          #                        "extended",
-          #                        )
-          # RSQLite::dbAppendTable(full.conn,
-          #                        "structures",
-          #                        )
-          # RSQLite::dbDisconnect(full.conn)
         },silent = silent)
         if(!is(rv, "try-error")){
           break
@@ -430,17 +438,19 @@ buildExtDB <- function(outfolder,
   },mzrange=mzrange, silent=silent, blocks=blocks,
   adduct_table=adduct_table, adduct_rules=adduct_rules,
   tmpfiles.ext=tmpfiles.ext, tmpfiles.struct=tmpfiles.struct,
-  mapper=mapper)
+  mapper=mapper, use.rules = use.rules)
 
   # = = = = = = WRITE TO DB = = = = = =
   print("loading into database... please stand by - w- ")
 
   pbapply::pbsapply(1:length(blocks), function(i){
     full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
+    try({
     extended = data.table::fread(tmpfiles.ext[i])
     structures = data.table::fread(tmpfiles.struct[i])
     RSQLite::dbWriteTable(full.conn, "extended", extended, append=T)
     RSQLite::dbWriteTable(full.conn, "structures", structures, append=T)
+    })
     RSQLite::dbDisconnect(full.conn)
   })
  unlink(c(tmpfiles.ext, tmpfiles.struct))

@@ -49,6 +49,8 @@ searchMZ <- function(mzs, ionmodes, outfolder,
                             SELECT DISTINCT
                             cpd.adduct as adduct,
                             cpd.isoprevalence as isoprevalence,
+                            cpd.fullformula,
+                            cpd.finalcharge,
                             struc.smiles as structure,
                             mz.mzmed as query_mz,
                             (1e6*ABS(mz.mzmed - cpd.fullmz)/cpd.fullmz) AS dppm
@@ -76,6 +78,8 @@ searchMZ <- function(mzs, ionmodes, outfolder,
                                              b.baseformula,
                                              u.adduct,
                                              u.isoprevalence as perciso,
+                                             u.fullformula,
+                                             u.finalcharge,
                                              u.dppm,
                                              b.identifier,
                                              b.description,
@@ -133,7 +137,7 @@ searchRev <- function(structure, ext.dbname="extended", outfolder){
   conn <- RSQLite::dbConnect(RSQLite::SQLite(), file.path(outfolder,
                                                           paste0(ext.dbname,".db"))) # change this to proper var later
   result = RSQLite::dbSendStatement(conn,
-                                    "SELECT DISTINCT fullmz, adduct, isoprevalence
+                                    "SELECT DISTINCT fullmz, fullformula, finalcharge, adduct, isoprevalence
                                     FROM extended ext
                                     JOIN structures struct
                                     ON ext.struct_id = struct.struct_id

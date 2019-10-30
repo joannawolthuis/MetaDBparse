@@ -574,7 +574,7 @@ build.RESPECT <- function(outfolder){ # WORKS
         description = split.lines$RECORD_TITLE,
         baseformula = split.lines$`CH$FORMULA`,
         identifier = split.lines$ACCESSION,
-        charge = c(NA),
+        charge = c(0),
         structure = split.lines$`CH$SMILES`
       )
       if(row$structure == "N/A") row$structure <- split.lines$`CH$INCHI`
@@ -1196,7 +1196,7 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
   db.base$charge <- c(NA)
 
   # - - - add classification - - -
-
+  require(rvest)
   doc <- xml2::read_html("https://www.lipidmaps.org/data/classification/LM_classification_exp.php")
   categories = doc %>%
     rvest::html_nodes("div:nth-child(2)") %>%
