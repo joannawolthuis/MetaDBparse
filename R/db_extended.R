@@ -92,6 +92,10 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
   name <- row$Name
   ion_mode <- row$Ion_mode
 
+  checked = enviPat::check_chemform(isotopes,chemforms = formula)
+  if(checked$warning) return(data.table::data.table())
+  formula = checked$new_formula
+
   unique_formulas <- unique(data.table::data.table(
     structure = structure,
     baseformula = formula,
