@@ -1565,3 +1565,22 @@ build.SUPERNATURAL <- function(outfolder){ # NEEDS WORK, REALLY SLOW TOO INFEASI
   # this might be too big... mail the ppl if they want to upload the whole thing..
 
 }
+
+# build.DSSTOX <- function(outfolder){
+#     file.url <- "ftp://newftp.epa.gov/COMPTOX/Sustainable_Chemistry_Data/Chemistry_Dashboard/2019/April/DSSToxMS-Ready.xlsx"
+#
+#     base.loc <- file.path(outfolder, "dsstox_source")
+#
+#     if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
+#     save.file <- file.path(base.loc, "dsstox.xlsx")
+#     utils::download.file(file.url, save.file,mode = "wb")
+#
+#     xlsx = openxlsx::read.xlsx("~/Downloads/DSSToxMS-Ready.xlsx")
+#
+#     db.formatted <- data.table::data.table(compoundname = xlsx$Preferred_Name,
+#                                            description = c(""),
+#                                            baseformula = xlsx$Formula,
+#                                            identifier= xlsx$DSSTox_Compound_ID,
+#                                            charge= c(0),
+#                                            structure= xlsx$SMILES)
+# }

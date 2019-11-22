@@ -88,11 +88,6 @@ checkAdductRule <- function(adduct_rule_scores,
 }
 
 doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
-  # query_adduct = "[M+H]1+"
-  # formula<<-formula
-  # structure<<-structure
-  # charge<<-charge
-
   row = adduct_table[Name == query_adduct,]
   name <- row$Name
   ion_mode <- row$Ion_mode
@@ -216,7 +211,6 @@ buildExtDB <- function(outfolder,
   # A
   outfolder <- normalizePath(outfolder)
 
-
   print(paste("Will calculate adducts + isotopes for the",
               base.dbname,
               "database."))
@@ -238,8 +232,11 @@ buildExtDB <- function(outfolder,
     new_adducts <- adduct_table$Name
   }
 
-  RSQLite::dbExecute(full.conn, "DROP TABLE IF EXISTS adducts")
-  RSQLite::dbWriteTable(full.conn, "adducts", adduct_table)
+  if(length(new_adducts)==0){
+    return(NULL)
+  }else{
+    print(paste0("New adducts:", new_adducts, collapse=", "))
+  }
 
   RSQLite::dbExecute(full.conn, strwrap("CREATE TABLE IF NOT EXISTS extended(
                                          struct_id INT,
@@ -267,6 +264,7 @@ buildExtDB <- function(outfolder,
     to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge
                                             FROM tmp.base")
     to.do$struct_id <- c(NA)
+    adduct_only = F
   }else{
     to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge
                                             FROM tmp.base LEFT JOIN structures str
@@ -274,14 +272,13 @@ buildExtDB <- function(outfolder,
                                             WHERE str.smiles IS NULL")
 
     # if none, check for new adducts
-    if(nrow(to.do) == 0){
-      if(length(new_adducts)>0){
-        to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge
-                                            FROM tmp.base")
-        to.do$struct_id <- c(NA)
-        # and adjust adduct list
-        adduct_table <- data.table::as.data.table(adduct_table)[Name %in% new_adducts,]
-      }
+    if(length(new_adducts) > 0){
+      adduct_only = if(nrow(to.do )== 0) T else F
+      to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge
+                                              FROM tmp.base")
+      to.do$struct_id <- c(NA)
+      # and adjust adduct list
+      adduct_table <- data.table::as.data.table(adduct_table)[Name %in% new_adducts,]
     }
   }
 
@@ -302,9 +299,6 @@ buildExtDB <- function(outfolder,
                                   charge = as.numeric(to.do$charge))
   mapper[is.na(charge)]$charge <- c(0)
 
-  print(head(mapper))
-
-  Sys.sleep(3)
   print(paste("Parsing", nrow(mapper), "new compounds..."))
 
   blocks = split(mapper, ceiling(seq_along(1:nrow(mapper))/blocksize))
@@ -449,9 +443,16 @@ buildExtDB <- function(outfolder,
     extended = data.table::fread(tmpfiles.ext[i])
     structures = data.table::fread(tmpfiles.struct[i])
     RSQLite::dbWriteTable(full.conn, "extended", extended, append=T)
-    RSQLite::dbWriteTable(full.conn, "structures", structures, append=T)
+    if(!adduct_only){
+      RSQLite::dbWriteTable(full.conn, "structures", structures, append=T)
+    }
     })
     RSQLite::dbDisconnect(full.conn)
   })
+
+  full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
+  RSQLite::dbWriteTable(full.conn, "adducts", as.data.frame(adduct_table), overwrite=T)
+  RSQLite::dbDisconnect(full.conn)
+
  unlink(c(tmpfiles.ext, tmpfiles.struct))
 }

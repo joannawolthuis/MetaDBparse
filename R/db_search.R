@@ -64,6 +64,8 @@ searchMZ <- function(mzs, ionmodes, outfolder,
                             JOIN structures struc
                             ON cpd.struct_id = struc.struct_id"
 
+  print(query)
+
   RSQLite::dbExecute(conn, query)
 
   table.per.db <- lapply(base.dbname, function(db){
@@ -72,22 +74,27 @@ searchMZ <- function(mzs, ionmodes, outfolder,
       DBI::dbExecute(conn, gsubfn::fn$paste("DETACH base"))
     },silent=T)
     query = gsubfn::fn$paste("ATTACH '$dbpath' AS base")
+    print(query)
     RSQLite::dbExecute(conn, query)
-    results <- DBI::dbGetQuery(conn, strwrap("SELECT
-                                             b.compoundname as name,
-                                             b.baseformula,
-                                             u.adduct,
-                                             u.isoprevalence as perciso,
-                                             u.fullformula,
-                                             u.finalcharge,
-                                             u.dppm,
-                                             b.identifier,
-                                             b.description,
-                                             u.structure,
-                                             u.query_mz
-                                             FROM unfiltered u
-                                             JOIN base.base b
-                                             ON u.structure = b.structure",width=10000, simplify=TRUE))
+
+    query = strwrap("SELECT
+                  b.compoundname as name,
+                  b.baseformula,
+                  u.adduct,
+                  u.isoprevalence as perciso,
+                  u.fullformula,
+                  u.finalcharge,
+                  u.dppm,
+                  b.identifier,
+                  b.description,
+                  u.structure,
+                  u.query_mz
+                  FROM unfiltered u
+                  JOIN base.base b
+                  ON u.structure = b.structure",width=10000, simplify=TRUE)
+
+    print(query)
+    results <- DBI::dbGetQuery(conn, query)
     if(nrow(results)>0){
       results$perciso <- round(results$perciso, 2)
       results$dppm <- signif(results$dppm, 2)
@@ -112,18 +119,18 @@ searchFormula <- function(formula, outfolder, base.dbname){
     conn <- RSQLite::dbConnect(RSQLite::SQLite(), file.path(outfolder, paste0(db,".db"))) # change this to proper var later
 
     RSQLite::dbExecute(conn, "CREATE TEMP TABLE formulas(formula text,
-                       charge TEXT)")
+                                                charge TEXT)")
     RSQLite::dbWriteTable(conn, data.table::data.table(formula = formula,
                                                        charge = charge))
     res = RSQLite::dbGetQuery(conn, "SELECT DISTINCT compoundname as name,
-                              baseformula as formula,
-                              identifier,
-                              description,
-                              structure
-                              FROM base
-                              JOIN formulas
-                              ON base.baseformula = formulas.baseformula
-                              AND base.basecharge = formulas.charge")
+                                                     baseformula as formula,
+                                                     identifier,
+                                                     description,
+                                                     structure
+                                                     FROM base
+                                                     JOIN formulas
+                                                     ON base.baseformula = formulas.baseformula
+                                                     AND base.basecharge = formulas.charge")
 
     res
   })
@@ -149,3 +156,86 @@ searchRev <- function(structure, ext.dbname="extended", outfolder){
   # - - -
   res
 }
+
+searchCMMR <- function (cmm_url = "http://ceumass.eps.uspceu.es/mediator/api/v3/batch",
+                        metabolites_type = "all-except-peptides", databases = "[\"all-except-mine\"]",
+                        masses_mode = "mz", ion_mode = "positive", adducts = switch(ion_mode,
+                                                                                    positive = "[\"M+H\", \"M+2H\", \"M+Na\", \"M+K\", \"M+NH4\", \"M+H-H2O\"]",
+                                                                                    negative = "[\"M-H\", \"M+Cl\", \"M+FA-H\", \"M-H-H2O\"]"),
+                        tolerance = 10, tolerance_mode = "ppm", unique_mz)
+  {
+  body <- cmmr::create_batch_body(metabolites_type, databases, masses_mode,
+                            ion_mode, adducts, tolerance, tolerance_mode, unique_mz)
+  if (cmm_url == "http://ceumass.eps.uspceu.es/mediator/api/v3/batch") {
+    cat("Using the CEU Mass Mediator server API.\n")
+  }
+  else {
+    cat("Using the local/3rd party server API.\n")
+    cat(paste0(cmm_url, "\n"))
+  }
+  r <- httr::POST(url = cmm_url, body = body, httr::content_type("application/json"))
+  if (r$status_code == 200) {
+    cat(paste0("Status: ", r$status_code, ", Success!\n"))
+    cat(paste0("Date: ", r$date, "\n"))
+    json_file <- RJSONIO::fromJSON(httr::content(r, "text",
+                                                 encoding = "UTF-8"))$results
+    print(json_file)
+    if (length(json_file) == 0) {
+      cat("No compounds found in the database search.\n")
+      return("No compounds found in the database search.")
+    }
+    pb <- progress::progress_bar$new(format = "  Parsing database search results [:bar] :percent in :elapsed",
+                                     total = length(json_file) - 1, clear = FALSE, width = 100)
+    df <- data.table::rbindlist(json_file,fill=T)
+    return(df)
+  }
+  else {
+    cat(paste0("Status: ", r$status_code, ", Fail to connect the API service!\n"))
+    cat(paste0("Date: ", r$date, "\n"))
+  }
+}
+
+searchMZonline <- function(mz=178.1219,
+                           mode="positive",
+                           adducts,
+                           ppm=2,
+                           which_db = "cmmr"){
+  switch(which_db,
+         cmmr={
+           library(cmmr)
+           results <- searchCMMR('http://ceumass.eps.uspceu.es/mediator/api/v3/batch',
+                                 masses_mode = 'mz',
+                                 ion_mode = 'positive',
+                                 tolerance = ppm,
+                                 tolerance_mode = 'ppm',
+                                 unique_mz = mz)
+            if(typeof(results) == "character"){
+              data.table()
+            }else{
+              base.table = data.table::data.table(name = results$name,
+                           baseformula = results$formula,
+                           adduct = results$adduct,
+                           `%iso` = c(100),
+                           fullformula = c(NA),
+                           finalcharge = c(NA),
+                           dppm = results$error_ppm,
+                           identifier = results$identifier,
+                           description = c(""),
+                           structure = results$inChiKey,
+                           query_mz = results$EM)
+              has.inchi <- which(!is.na(base.table$structure))
+              if(length(has.inchi) >0){
+                inchis <- base.table$structure[has.inchi]
+                inchi = pbapply::pbsapply(inchis, webchem::cs_inchikey_inchi)
+                smiles = pbapply::pbsapply(inchi, webchem::cs_inchi_smiles)
+                base.table$structure[has.inchi] <- smiles
+                base.table$structure[!has.inchi] <- c("")
+              }else{
+                base.table$structure <- c("")
+              }
+
+              return(base.table)
+            }
+         })
+}
+

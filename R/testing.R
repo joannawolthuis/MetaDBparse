@@ -130,7 +130,7 @@ usethis::use_data(adducts, overwrite=T)
   dbname = "hmdb"
   buildExtDB(outfolder,
              base.dbname = dbname,
-             cl = session_cl,
+             cl = 0,#session_cl,
              blocksize = 200,
              mzrange = c(60,600),
              adduct_table = adducts,
@@ -249,4 +249,30 @@ buildExtDB(outfolder,
            adduct_rules = adduct_rules,
            silent = F,
            ext.dbname = "extended")
+
+# - - - - -
+
+formulas = getPredicted(mz = mz, ppm = 5)
+results = searchFormulaWeb(formulas$baseformula,
+                           search = c("chemspider"))
+check.smi = TRUE
+if(check.smi){
+  mols = smiles.to.iatom(results_withsmi$structure)
+  new.smi = iatom.to.smiles(mols)
+  results_withsmi$structure <- new.smi
+}
+if(check.rules){
+  rulematch = countAdductRuleMatches(mols, adduct_rules)
+  structure.adducts.possible = checkAdductRule(rulematch,
+                                               adduct_table)
+  keep <- sapply(1:nrow(results_withsmi), function(i){
+    adduct = results_withsmi[i, "adduct"][[1]]
+    if(!is.na(adduct)){
+      structure.adducts.possible[i, ..adduct][[1]]
+    }
+  })
+  results_withsmi <- results_withsmi[keep,]
+}
+results_final <- rbind(results_nosmi,
+                       results_withsmi)
 
