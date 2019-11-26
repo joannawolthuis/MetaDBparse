@@ -257,6 +257,41 @@ searchFormulaWeb <- function(formulas,
     formulas <- unique(gsub(formulas, pattern = "\\[2\\]H", replacement = "D"))
     list_per_website <- lapply(search, function(db){
       switch(db,
+             knapsack = {
+               options(stringsAsFactors = F)
+               rows = pbapply::pblapply(formulas, function(formula){
+                 url = gsubfn::fn$paste("http://www.knapsackfamily.com/knapsack_jsp/result.jsp?sname=formula&word=$formula")
+                 description = "No hits for this predicted formula."
+                 rows = data.table::data.table(name = formula,
+                                               baseformula = formula,
+                                               structure = NA,
+                                               description = description)
+                 res = XML::readHTMLTable(url,header = T,)[[1]]
+                 res.firstrow = colnames(res)
+                 colnames(res) <- c("c_id", "cas_id", "metabolite", "formula", "mw", "organism")
+                 res <- data.table::as.data.table(rbind(res.firstrow, res))
+                 res.aggr = unique(res[, .(identifier = c_id, compoundname = metabolite, baseformula = formula,
+                                    description = paste0("Found in organisms: ", paste0(organism, collapse = ", "))),by=c_id])
+                 res.aggr = res.aggr[,-"c_id"]
+                 uniques = unique(res.aggr$c_id)
+
+                 if(detailed){
+                   rows.detailed = pbapply::pblapply(uniques[!is.na(uniques)], function(id){
+                     url = gsubfn::fn$paste("http://www.knapsackfamily.com/knapsack_jsp/information.jsp?word=$id")
+                     tbl = XML::readHTMLTable(url,header = T,)[[1]]
+                     flipped = t(tbl)
+                     colnames(flipped) <- flipped[1,]
+                     flipped = as.data.frame(flipped[-1,])
+                     data.table::data.table(identifier = id,
+                                            structure = flipped$SMILES[1])
+                   })
+                   res = merge(res.aggr, data.table::rbindlist(rows.detailed), by="identifier")
+                 }else{
+                   res = res.aggr
+                 }
+                 })
+               data.table::rbindlist(rows)
+             },
              pubchem = {
                print("Searching PubChem...")
                rows = pbapply::pblapply(formulas, function(formula){
