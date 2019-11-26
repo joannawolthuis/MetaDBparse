@@ -1542,45 +1542,245 @@ build.SUPERNATURAL <- function(outfolder){ # NEEDS WORK, REALLY SLOW TOO INFEASI
   base.loc <- file.path(outfolder, "supernatural_source")
   if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
 
+  library(XML)
+  library(RCurl)
+  library(rlist)
+  # get total
+  # pages have 15 each, how many pages?
+  # sys.sleep somewhere...
+  # get max compounds
+  # start progress bar
   # http://bioinf-applied.charite.de/supernatural_new/src/download_mols.php?sn_id=SN00270303,SN00332107,SN00371241,SN00399119,SN00429427,SN00332221,SN00228244,SN00355833,SN00295142,SN00295267,SN00228769,SN00268639,SN00288836,SN00372987,SN00297293
-
-  theurl <- getURL("http://bioinf-applied.charite.de/supernatural_new/",.opts = list(ssl.verifypeer = FALSE) )
-  tables <- readHTMLTable(theurl)
-  stats = data.table::rbindlist(tables)
-  n = as.numeric(
-    gsub(stringr::str_match(theurl, pattern="contains (.*) natural compounds")[,2], pattern = ",", replacement = '')
-  )
-
-  # http://bioinf-applied.charite.de/supernatural_new/src/download_mol.php?sn_id=SN00000001
-  base.url = "http://bioinf-applied.charite.de/supernatural_new/src/download_mol.php?sn_id="
-  id.nr = stringr::str_pad(i, 8, pad = "0")
-  id.str = paste0("SN", id.nr)
-  file.url = paste0(base.url, id.str)
-
-  all.ids = paste0("SN", stringr::str_pad(1:n, 8, pad = "0"))
-
-  # break into blocks
-
-
+  theurl = "http://bioinf-applied.charite.de/supernatural_new/index.php?site=compound_search&start=0&supplier=all&molwt1=40&molwt2=2000&classification=all"
   # this might be too big... mail the ppl if they want to upload the whole thing..
+  html = readLines(theurl)
+  count = stringr::str_extract(html, "count_compounds=(\\d+)")
+  total = as.numeric(gsub(count[!is.na(count)], pattern = ".*=", replacement = ""))
 
+  pages = total/15
+  cl = parallel::makeCluster(3, "FORK")
+  rows = pbapply::pblapply(0:ceiling(pages), cl=0, function(i){
+    theurl = gsubfn::fn$paste("http://bioinf-applied.charite.de/supernatural_new/index.php?site=compound_search&start=$i&supplier=all&molwt1=40&molwt2=2000&classification=all")
+    print(theurl)
+    html = readLines(theurl)
+    identifiers = stringr::str_extract(html, "SN(\\d+)")
+    identifiers = unique(identifiers[!is.na(identifiers)])
+    smi_rows = grep(html, pattern = "SMILES") + 1
+    smiles = stringr::str_match(html[smi_rows], 'value="(.*)"\\/>')[,2]
+    identifiers = unique(identifiers[!is.na(identifiers)])
+    tables <- readHTMLTable(theurl)
+    tables <- list.clean(tables, fun = is.null, recursive = FALSE)
+    rows = lapply(tables, function(tbl){
+      if("Name" %in% tbl$V1){
+        tbl = data.table::as.data.table(tbl)
+        data.table::data.table(
+          compoundname = tbl[V1 == "Name",V2],
+          description = paste0("Toxicity class: ", tbl[V1 == "Tox-class",V2]),
+          baseformula = tbl[V1 == "Formula",V2],
+          identifier = "???",
+          charge = tbl[V1 == "Charge",V2],
+          structure = ""
+        )
+      }else{
+        data.table::data.table()
+      }
+  })
+    db.frag = data.table::rbindlist(rows)
+    db.frag$identifier = identifiers
+    db.frag$structure = smiles
+    print(db.frag)
+    Sys.sleep(0.5)
+    db.frag
+  })
+  data.table::rbindlist(rows)
+
+  # - - - - -
+  db.frag
 }
 
-# build.DSSTOX <- function(outfolder){
-#     file.url <- "ftp://newftp.epa.gov/COMPTOX/Sustainable_Chemistry_Data/Chemistry_Dashboard/2019/April/DSSToxMS-Ready.xlsx"
-#
-#     base.loc <- file.path(outfolder, "dsstox_source")
-#
-#     if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
-#     save.file <- file.path(base.loc, "dsstox.xlsx")
-#     utils::download.file(file.url, save.file,mode = "wb")
-#
-#     xlsx = openxlsx::read.xlsx("~/Downloads/DSSToxMS-Ready.xlsx")
-#
-#     db.formatted <- data.table::data.table(compoundname = xlsx$Preferred_Name,
-#                                            description = c(""),
-#                                            baseformula = xlsx$Formula,
-#                                            identifier= xlsx$DSSTox_Compound_ID,
-#                                            charge= c(0),
-#                                            structure= xlsx$SMILES)
-# }
+build.BMDB <- function(outfolder){
+  file.url = "http://www.cowmetdb.ca/public/downloads/current/metabocards.gz"
+  base.loc <- file.path(outfolder, "bmdb_source")
+  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
+  gz.file <- file.path(base.loc, "bmdb.gz")
+  utils::download.file(file.url, gz.file,mode = "wb", cacheOK = T)
+  zz = gzfile(gz.file,'rt')
+  dat = readLines(zz)
+  dat.pasted = paste0(dat, collapse = ";")
+  n = sum(grepl("END_METABOCARD",dat))
+  split = stringr::str_split(dat.pasted, pattern = "END_METABOCARD")[[1]]
+  db.rows = pbapply::pblapply(split, function(l){
+    data.table::data.table(identifier = stringr::str_extract(string = l,
+                                                             pattern = "BMDB\\d+"),
+                           compoundname = stringr::str_match(string = l,
+                                                             pattern = "name:;(.*?);;")[,2],
+                           baseformula = stringr::str_match(string = l,
+                                                            pattern = "chemical_formula:;(.*?);;")[,2],
+                           description = paste0(stringr::str_match(string = l,
+                                                                   pattern = "description:;(.*?);")[,2],
+                                                " Found in ",
+                                                tolower(stringr::str_match(string = l,
+                                                                           pattern = "biofluid_location:;(.*?);")[,2]),
+                                                "."),
+                           structure = stringr::str_match(string = l,
+                                                          pattern = "smiles_canonical:;(.*?);;")[,2]
+    )
+  })
+  db.formatted = data.table::rbindlist(db.rows)
+  db.formatted
+}
+
+build.RMDB <- function(outfolder){
+  file.url = "http://www.rumendb.ca/public/downloads/current/metabocards.gz"
+  base.loc <- file.path(outfolder, "rmdb_source")
+  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
+  gz.file <- file.path(base.loc, "rmdb.gz")
+  utils::download.file(file.url, gz.file,mode = "wb", cacheOK = T)
+  zz = gzfile(gz.file,'rt')
+  dat = readLines(zz)
+  dat.pasted = paste0(dat, collapse = ";")
+  n = sum(grepl("#BEGIN_METABOCARD",dat))
+  split = stringr::str_split(dat.pasted, pattern = "END_METABOCARD")[[1]]
+  db.rows = pbapply::pblapply(split, function(l){
+    data.table::data.table(identifier = stringr::str_extract(string = l,
+                                             pattern = "RMDB\\d+"),
+                           compoundname = stringr::str_match(string = l,
+                                                             pattern = "name:;(.*?);;")[,2],
+                           baseformula = stringr::str_match(string = l,
+                                                            pattern = "chemical_formula:;(.*?);;")[,2],
+                           description = paste0(stringr::str_match(string = l,
+                                                             pattern = "description:;(.*?);")[,2],
+                                                " Found in ",
+                                                tolower(stringr::str_match(string = l,
+                                                                   pattern = "biofluid_location:;(.*?);")[,2]),
+                                                "."),
+                           structure = stringr::str_match(string = l,
+                                                          pattern = "smiles_canonical:;(.*?);;")[,2]
+                           )
+  })
+  db.formatted = data.table::rbindlist(db.rows)
+}
+
+build.ECMDB <- function(outfolder){
+  file.url = "http://ecmdb.ca/download/ecmdb.json.zip"
+  base.loc <- file.path(outfolder, "ecmdb_source")
+  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
+  zip.file <- file.path(base.loc, "ecmdb.zip")
+  utils::download.file(file.url, zip.file,mode = "wb", cacheOK = T)
+  utils::unzip(zip.file, exdir = base.loc)
+  json = file.path(base.loc, "ecmdb.json")
+  json.rows = RJSONIO::fromJSON(json)
+  db.base = data.table::rbindlist(json.rows)
+  db.formatted = data.table::data.table(
+    compoundname = db.base$name,
+    description = db.base$description,
+    baseformula = db.base$moldb_formula,
+    identifier = db.base$met_id,
+    charge = db.base$moldb_formal_charge,
+    structure = db.base$moldb_smiles
+  )
+  db.formatted
+}
+
+build.YMDB <- function(outfolder){
+  file.url = "http://www.ymdb.ca/system/downloads/current/ymdb.json.zip"
+  base.loc <- file.path(outfolder, "ymdb_source")
+  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
+  zip.file <- file.path(base.loc, "ymdb.zip")
+  utils::download.file(file.url, zip.file,mode = "wb", cacheOK = T)
+  utils::unzip(zip.file, exdir = base.loc)
+  json = file.path(base.loc, "ymdb.json")
+  line = readLines(json)[[1]]
+  #stringr::str_match_all(line, "ymdb_id")
+  fixed_lines = gsub(line, pattern = "\\]\\}\\{", replacement = "]},{")
+  jsonParsed = jsonlite::fromJSON(fixed_lines)
+  db.partial =
+    data.table::data.table(
+      compoundname = jsonParsed$name,
+      description = paste0(jsonParsed$description, " Synonyms: ", paste0(jsonParsed$synonyms[[1]], collapse = ",")),
+      baseformula = "",
+      identifier = jsonParsed$ymdb_id,
+      charge = jsonParsed$physiological_charge,
+      structure = ""
+    )
+  require(ChemmineR)
+  sdf.url = "http://www.ymdb.ca/system/downloads/current/ymdb.sdf.zip"
+  zip.file <- file.path(base.loc, "ymdb_sdf.zip")
+  utils::download.file(sdf.url, zip.file,mode = "wb",cacheOK = T)
+  utils::unzip(zip.file, exdir = base.loc)
+
+  sdf.path <- list.files(base.loc,
+                         pattern = "sdf$",
+                         full.names = T,
+                         recursive = T)
+
+  desc <- function(sdfset){
+    mat <- NULL
+    db <- data.table::as.data.table(ChemmineR::datablock2ma(datablocklist=ChemmineR::datablock(sdfset)))
+    info = data.table::data.table(identifier = db$DATABASE_ID,
+                           compoundname = db$GENERIC_NAME,
+                           structure = db$SMILES,
+                           baseformula = db$JCHEM_FORMULA,
+                           description = paste0("Synonyms: ", db$SYNONYMS))
+    info
+  }
+
+  out.csv = file.path(base.loc,
+                      "ymdb_parsed.csv")
+  if(file.exists(out.csv)){
+    file.remove(out.csv)
+  }
+
+  sdfStream.joanna(input=sdf.path, output=out.csv,
+                   append=FALSE,
+                   fct=desc,
+                   silent = T)
+
+  db.struct <- data.table::fread(file.path(base.loc, "ymdb_parsed.csv"), fill = T, header=T)
+  db.merged <- merge(db.partial, db.struct, by = "identifier", all.y = T)
+  db.rows <- pbapply::pblapply(1:nrow(db.merged), function(i){
+    row = db.merged[i,]
+    data.table::data.table(identifier = row$identifier,
+                           compoundname = row$compoundname.y,
+                           structure = row$structure.y,
+                           baseformula = row$baseformula.y,
+                           description = if(is.na(row$description.x)) row$description.y else row$description.x)
+  })
+  db.formatted = data.table::rbindlist(db.rows)
+  db.formatted
+}
+
+build.NANPDB <- function(outfolder){
+  file.url = "http://african-compounds.org/nanpdb/downloads/smiles/"
+  base.loc <- file.path(outfolder, "nanpdb_source")
+  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
+  smi.file <- file.path(base.loc, "nanpdb.smi")
+  utils::download.file(file.url, smi.file, mode = "wb", cacheOK = T)
+  db.base = data.table::fread(smi.file, sep = "\t")
+  db.formatted = db.base[, .(structure = V1, compoundname = V3)]
+  db.formatted$description = c("Found in North Africa. For more info,check the NANPDB website.")
+  db.formatted
+}
+
+build.STOFF <- function(outfolder){
+  file.url = "http://www.lfu.bayern.de/stoffident/stoffident-static-content/html/download/SI_Content.zip"
+  base.loc <- file.path(outfolder, "stoff_source")
+  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
+  zip.file <- file.path(base.loc, "stoff.zip")
+  utils::download.file(file.url, zip.file, mode = "wb", cacheOK = T)
+  # - - - - - - - - - - - - - - - - - - - - - - - - -
+  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+  excel.file = file.path(base.loc, "SI_Content.xls")
+  xlsx.file = gsub(excel.file, pattern = "xls", replacement = "xlsx")
+  file.copy(excel.file, xlsx.file)
+  db.base = data.table::as.data.table(readxl::read_excel(xlsx.file,sheet = 1))
+  db.base.aggr = db.base[ , .(compoundname = unique(Name),
+                              baseformula = unique(Formula),
+                              structure = unique(SMILES),
+                              description = paste0("Synonyms: ", paste(`Additional Names`, collapse=","))), by = Index]
+
+  db.formatted = db.base.aggr[!is.na(compoundname)]
+  colnames(db.formatted)[1] <- "identifier"
+  db.formatted
+}
+

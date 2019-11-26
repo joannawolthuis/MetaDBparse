@@ -386,7 +386,7 @@ pubChemInfo <- function(ids, maxn=30){
 
   chunk.row.list <- lapply(split.ids, function(idgroup){
 
-    url_struct = paste0("https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/",
+    url_struct = paste0("https://pubchem.ncbi.outnlm.nih.gov/rest/pug/compound/cid/",
                         paste0(idgroup, collapse=","),
                         "/property/MolecularFormula,CanonicalSMILES,Charge/JSON")
 

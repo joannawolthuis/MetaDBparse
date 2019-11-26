@@ -18,7 +18,7 @@
 #
 # outfolder = "/Users/jwolthuis/MetaDBparse/dbtest/"
 #
-#outfolder <- "~/MetaboShiny/databases/"
+outfolder <- "~/MetaboShiny/databases/"
 
 #db="hmdb"
 
