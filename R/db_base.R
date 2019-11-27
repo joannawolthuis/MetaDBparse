@@ -129,7 +129,7 @@ cleanDB <- function(db.formatted, cl, silent, blocksize){
     formulas = as.character(db.redone.struct$baseformula)
     null.or.na <- which(is.null(formulas) | is.na(formulas) | formulas == "NULL")
 
-    if(length(null.or.na)>0){
+    if(length(null.or.na) > 0){
       db.removed.invalid <- db.removed.invalid[-null.or.na,]
       valid.struct = valid.struct[-null.or.na]
     }
@@ -196,19 +196,29 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
                            phenolexplorer = build.PHENOLEXPLORER(outfolder),
                            respect = build.RESPECT(outfolder),
                            wikidata = build.WIKIDATA(outfolder),
-                           wikipathways = build.WIKIPATHWAYS(outfolder),
+                           #wikipathways = build.WIKIPATHWAYS(outfolder),
                            t3db = build.T3DB(outfolder),
                            vmh = build.VMH(outfolder),
                            hmdb = build.HMDB(outfolder),
                            smpdb = build.SMPDB(outfolder),
-                           supernatural = build.SUPERNATURAL(outfolder))
+                           supernatural = build.SUPERNATURAL(outfolder),
+                           lmdb = build.LMDB(outfolder),
+                           ymdb = build.YMDB(outfolder),
+                           ecmdb = build.ECMDB(outfolder),
+                           bmdb = build.BMDB(outfolder),
+                           rmdb = build.RMDB(outfolder),
+                           stoff = build.STOFF(outfolder),
+                           nanpdb = build.NANPDB(outfolder))
   }else{
     db.formatted <- data.table::fread(custom_csv_path, header=T)
   }
 
+  print(head(db.formatted))
+  Sys.sleep(5)
   if(dbname == "maconda") return(NA)
 
   db.formatted <- data.table::as.data.table(db.formatted)
+  db.formatted <- data.frame(lapply(db.formatted, as.character), stringsAsFactors=FALSE)
 
   #options(java.home="C:\\Program Files\\Java\\jre1.8.0_221/") # windows...
 

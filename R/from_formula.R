@@ -257,6 +257,61 @@ searchFormulaWeb <- function(formulas,
     formulas <- unique(gsub(formulas, pattern = "\\[2\\]H", replacement = "D"))
     list_per_website <- lapply(search, function(db){
       switch(db,
+             supernatural2 = {
+               rows = pbapply::pblapply(formulas, function(formula){
+                 # get molecular weight appoximately
+                 molwt = enviPat::check_chemform(isotopes, formulas)$monoisotopic_mass
+                 # go .5da below and above
+                 mzmin = molwt - 0.00001
+                 mzmax = molwt + 0.00001
+                 # generate url
+                 theurl = gsubfn::fn$paste("http://bioinf-applied.charite.de/supernatural_new/index.php?site=compound_search&start=0&supplier=all&molwt1=$mzmin&molwt2=$mzmax&classification=all")
+                 # fetch hits in range
+                 html = readLines(theurl)
+                 count = stringr::str_extract(html, "count_compounds=(\\d+)")
+                 total = as.numeric(gsub(count[!is.na(count)], pattern = ".*=", replacement = ""))
+                 pages = total/15
+                 rows = pbapply::pblapply(0:ceiling(pages), cl=0, function(i){
+                   db.frag = data.table::data.table()
+                   try({
+                     theurl = gsub(theurl, pattern = "start=(\\d)", replacement = paste0("start=", i))
+                     html = readLines(theurl)
+                     # which formulas match?
+                     formulas = stringr::str_extract(html, "(\\d+)")
+                     identifiers = stringr::str_extract(html, "SN(\\d+)")
+                     identifiers = unique(identifiers[!is.na(identifiers)])
+                     smi_rows = grep(html, pattern = "SMILES") + 1
+                     smiles = stringr::str_match(html[smi_rows], 'value="(.*)"\\/>')[,2]
+                     identifiers = unique(identifiers[!is.na(identifiers)])
+                     tables <- XML::readHTMLTable(theurl)
+                     tables <- rlist::list.clean(tables, fun = is.null, recursive = FALSE)
+                     rows = lapply(tables, function(tbl){
+                       if("Name" %in% tbl$V1){
+                         tbl = data.table::as.data.table(tbl)
+                         data.table::data.table(
+                           compoundname = gsub(tbl[V1 == "Name",V2], pattern = "ÃŽÂ.-", replacement = ""),
+                           description = paste0("Toxicity class: ", tbl[V1 == "Tox-class",V2]),
+                           baseformula = tbl[V1 == "Formula",V2],
+                           identifier = "???",
+                           charge = tbl[V1 == "Charge",V2],
+                           structure = ""
+                         )
+                       }else{
+                         data.table::data.table()
+                       }
+                     })
+                     db.frag = data.table::rbindlist(rows)
+                     db.frag$identifier = identifiers
+                     db.frag$structure = smiles
+                     keep = which(enviPat::check_chemform(isotopes, db.frag$baseformula)$new_formula == formula)
+                     db.frag[keep,]
+                   })
+                   db.frag
+                 })
+                 data.table::rbindlist(rows, fill=T)
+               })
+               data.table::rbindlist(rows, fill=T)
+             },
              knapsack = {
                options(stringsAsFactors = F)
                rows = pbapply::pblapply(formulas, function(formula){

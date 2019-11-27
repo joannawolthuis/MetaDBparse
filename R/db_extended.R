@@ -223,18 +223,30 @@ buildExtDB <- function(outfolder,
   first.db <- !file.exists(full.db)
 
   full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
+
+
   RSQLite::dbExecute(full.conn, gsubfn::fn$paste("PRAGMA foreign_keys = ON"))
   RSQLite::dbExecute(full.conn, "CREATE TABLE IF NOT EXISTS structures(
                                  struct_id INT PRIMARY KEY,
                                  smiles TEXT,
                                  UNIQUE(struct_id, smiles))")
+  # TODO: extra table with structure -> adduct combinations already done
+  # IF STRUCTURES ALREADY IN db:
+  # on start, check if new adduct for these structures
+  # ELSE:
+  # do all adducts with the new compounds as usual
+
   if(RSQLite::dbExistsTable(full.conn, "extended")){
     new_adducts <- setdiff(adduct_table$Name,
                            RSQLite::dbGetQuery(full.conn,
-                                               "SELECT DISTINCT Name FROM adducts")[,1])
+                                               "SELECT DISTINCT adduct FROM done")[,1])
   }else{
     new_adducts <- adduct_table$Name
   }
+
+  # old structures that need to be redone
+
+  # new structures that need everything done
 
   if(length(new_adducts)==0){
     return(NULL)
@@ -278,7 +290,8 @@ buildExtDB <- function(outfolder,
     # if none, check for new adducts
     if(length(new_adducts) > 0){
       adduct_only = if(nrow(to.do )== 0) T else F
-      to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge
+      to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula,
+                                                              structure, charge
                                               FROM tmp.base")
       to.do$struct_id <- c(NA)
       # and adjust adduct list

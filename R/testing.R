@@ -62,21 +62,22 @@ dbs = c("lipidmaps", "kegg",
 
 outfolder = normalizePath("~/MetaboShiny/databases")
 
+dbs = c("ymdb", "ecmdb", "stoff", "rmdb", "bmdb", "nanpdb")
 for(db in dbs){
    print(db)
    try({
       #=== INDEXING ===
-      # conn <- openBaseDB(outfolder, paste0(db,".db"))
-      # RSQLite::dbExecute(conn, "CREATE INDEX IF NOT EXISTS b_idx1 ON base(structure)")
-      # RSQLite::dbDisconnect(conn)
-      #=== BUILD BASE ===
-      # buildBaseDB(outfolder = outfolder,
-      #             dbname = db,
-      #             cl=0, silent=F)
+      conn <- openBaseDB(outfolder, paste0(db,".db"))
+      RSQLite::dbExecute(conn, "CREATE INDEX IF NOT EXISTS b_idx1 ON base(structure)")
+      RSQLite::dbDisconnect(conn)
+      # #=== BUILD BASE ===
+      buildBaseDB(outfolder = outfolder,
+                  dbname = db,
+                  cl=0, silent=F)
       #=== BUILD EXTENDED ===
       buildExtDB(outfolder,
                  base.dbname = db,
-                 cl = cl,
+                 cl = session_cl,
                  blocksize = 600,
                  mzrange = c(60,800),
                  adduct_table = adducts,
@@ -86,6 +87,7 @@ for(db in dbs){
                  use.rules = TRUE)
    })
 }
+
 # devtools::install()
 #
 # #
@@ -94,11 +96,13 @@ require(data.table)
 require(enviPat)
 data(isotopes)
 
-adduct_rules <- data.table::fread("/Users/jwolthuis/MetaDBparse/inst/csvs/adduct_rules_deut.csv")
-adducts <- data.table::fread("/Users/jwolthuis/MetaDBparse/inst/csvs/adducts_fixed_oct2019.csv")
+adduct_rules <- data.table::fread("/Users/jwolthuis/MetaDBparse/inst/files/adduct_rules_deut.csv")
+adducts <- data.table::fread("/Users/jwolthuis/MetaDBparse/inst/files/adducts_fixed_oct2019.csv")
 #
 usethis::use_data(adduct_rules, overwrite=T)
 usethis::use_data(adducts, overwrite=T)
+usethis::use_data(lmdb, overwrite=T)
+
 #
 # {
 #   try({
@@ -120,7 +124,8 @@ usethis::use_data(adducts, overwrite=T)
                                         "doIsotopes",
                                         "isotopes"))
 #
-  parallel::clusterEvalQ(cl = session_cl, expr = {
+
+    parallel::clusterEvalQ(cl = session_cl, expr = {
     library(data.table)
     library(enviPat)
     library(pbapply)
