@@ -22,14 +22,18 @@ getFormula <- function(mz, add_name, adducts, ppm, elements = c("C","H","N","O",
                                     elements = Rdisop::initializeElements(names = total.ele),
                                     z = row$Charge
   )
-  predicted
+  ppms = abs((predicted$exactmass - as.numeric(mz)) / (1e-6 * as.numeric(mz)))
+  data.table::data.table(
+    fullformula = predicted$formula,
+    dppm = ppms
+  )
 }
 
-filterFormula = function(predicted, rules){
+filterFormula = function(formulas, rules){
   require(enviPat)
   data(isotopes)
 
-  corrected = enviPat::check_chemform(isotopes = isotopes, chemforms = predicted$formula)
+  corrected = enviPat::check_chemform(isotopes = isotopes, chemforms = formulas)
 
   deconstructed = data.table::data.table(
     nrC = as.numeric(stringr::str_match(corrected$new_formula, pattern = "C(\\d*)")[,2]),
@@ -119,7 +123,7 @@ filterFormula = function(predicted, rules){
     for(rule in rules){
       passes.checks <- passes.checks & deconstructed[[rule]]
     }
-    keep.candidates <- predicted$formula[passes.checks]
+    keep.candidates <- formulas[passes.checks]
   }
   keep.candidates
 }
@@ -199,12 +203,15 @@ getPredicted <- function(mz,
                            add_name = add_name,
                            adducts = adducts,
                            elements = elements)
-    if(is.null(predicted)) return(data.table::data.table())
-    keep.candidates = filterFormula(predicted, rules = rules)
+    if(nrow(predicted) == 0) return(data.table::data.table())
+    keep.candidates = filterFormula(predicted$fullformula, rules = rules)
     if(length(keep.candidates) == 0) return(data.table::data.table())
 
-    res = lapply(keep.candidates, function(formula, row){
+    iter.rows = predicted[fullformula %in% keep.candidates,]
 
+    res = lapply(1:nrow(iter.rows), function(i, row){
+
+        formula = iter.rows[i,]$fullformula
         checked <- enviPat::check_chemform(isotopes, formula)
         new_formula <- checked[1,]$new_formula
         # check which adducts are possible
@@ -219,13 +226,15 @@ getPredicted <- function(mz,
                                  name = new_formula,
                                  baseformula = theor_orig_formula,
                                  fullformula = new_formula,
+                                 basecharge = c(0),
                                  finalcharge = c(adducts[Name == add_name]$Charge),
                                  adduct = row$Name,
                                  `%iso` = 100,
-                                 structure = NA,
-                                 identifier = "???",
+                                 identifier = new_formula,
+                                 structure = paste0("[", new_formula, "]0"),
                                  description = "Predicted possible formula for this m/z value.",
-                                 source = "magicball")
+                                 source = "magicball",
+                                 dppm = iter.rows[i,]$dppm)
         }
       }, row = row)
 
@@ -242,14 +251,14 @@ getPredicted <- function(mz,
 
     unique(tbl)
   })
-  total_tbl <- data.table::rbindlist(per_adduct_results[sapply(per_adduct_results, function(x)nrow(x)>0)], fill=T)
+  total_tbl <- data.table::rbindlist(per_adduct_results[sapply(per_adduct_results, function(x)nrow(x) > 0)], fill=T)
   total_tbl
 }
 
 searchFormulaWeb <- function(formulas,
-                             search=c("PubChem", "ChemSpider"),
-                             apikey="sp1pysTkYyC0wSETdkWjEeEK8eiXXFuG",
-                             detailed=F){
+                             search = c("PubChem", "ChemSpider"),
+                             apikey = "sp1pysTkYyC0wSETdkWjEeEK8eiXXFuG",
+                             detailed = F){
   if(length(search)>0){
     i = 0
     count = length(formulas)
@@ -258,61 +267,71 @@ searchFormulaWeb <- function(formulas,
     list_per_website <- lapply(search, function(db){
       switch(db,
              supernatural2 = {
+               print("Searching SUPER NATURAL II...")
                rows = pbapply::pblapply(formulas, function(formula){
+                 rows = data.table::data.table(name = formula,
+                                               baseformula = formula,
+                                               structure = NA,
+                                               description = "No hits for this predicted formula.")
                  # get molecular weight appoximately
-                 molwt = enviPat::check_chemform(isotopes, formulas)$monoisotopic_mass
+                 molwt = enviPat::check_chemform(isotopes, formula)$monoisotopic_mass
                  # go .5da below and above
-                 mzmin = molwt - 0.00001
-                 mzmax = molwt + 0.00001
+                 mzmin = molwt - 0.0001
+                 mzmax = molwt + 0.0001
                  # generate url
                  theurl = gsubfn::fn$paste("http://bioinf-applied.charite.de/supernatural_new/index.php?site=compound_search&start=0&supplier=all&molwt1=$mzmin&molwt2=$mzmax&classification=all")
                  # fetch hits in range
                  html = readLines(theurl)
                  count = stringr::str_extract(html, "count_compounds=(\\d+)")
                  total = as.numeric(gsub(count[!is.na(count)], pattern = ".*=", replacement = ""))
-                 pages = total/15
-                 rows = pbapply::pblapply(0:ceiling(pages), cl=0, function(i){
-                   db.frag = data.table::data.table()
-                   try({
-                     theurl = gsub(theurl, pattern = "start=(\\d)", replacement = paste0("start=", i))
-                     html = readLines(theurl)
-                     # which formulas match?
-                     formulas = stringr::str_extract(html, "(\\d+)")
-                     identifiers = stringr::str_extract(html, "SN(\\d+)")
-                     identifiers = unique(identifiers[!is.na(identifiers)])
-                     smi_rows = grep(html, pattern = "SMILES") + 1
-                     smiles = stringr::str_match(html[smi_rows], 'value="(.*)"\\/>')[,2]
-                     identifiers = unique(identifiers[!is.na(identifiers)])
-                     tables <- XML::readHTMLTable(theurl)
-                     tables <- rlist::list.clean(tables, fun = is.null, recursive = FALSE)
-                     rows = lapply(tables, function(tbl){
-                       if("Name" %in% tbl$V1){
-                         tbl = data.table::as.data.table(tbl)
-                         data.table::data.table(
-                           compoundname = gsub(tbl[V1 == "Name",V2], pattern = "ÃŽÂ.-", replacement = ""),
-                           description = paste0("Toxicity class: ", tbl[V1 == "Tox-class",V2]),
-                           baseformula = tbl[V1 == "Formula",V2],
-                           identifier = "???",
-                           charge = tbl[V1 == "Charge",V2],
-                           structure = ""
-                         )
-                       }else{
-                         data.table::data.table()
-                       }
+                 if(length(total) > 0){
+                   pages = total / 15
+                   rows = lapply(0:ceiling(pages), function(i){
+                     db.frag = data.table::data.table()
+                     try({
+                       theurl = gsub(theurl, pattern = "start=(\\d)", replacement = paste0("start=", i))
+                       html = readLines(theurl)
+                       # which formulas match?
+                       formulas = stringr::str_extract(html, "(\\d+)")
+                       identifiers = stringr::str_extract(html, "SN(\\d+)")
+                       identifiers = unique(identifiers[!is.na(identifiers)])
+                       smi_rows = grep(html, pattern = "SMILES") + 1
+                       smiles = stringr::str_match(html[smi_rows], 'value="(.*)"\\/>')[,2]
+                       identifiers = unique(identifiers[!is.na(identifiers)])
+                       tables <- XML::readHTMLTable(theurl)
+                       tables <- rlist::list.clean(tables, fun = is.null, recursive = FALSE)
+                       rows = lapply(tables, function(tbl){
+                         if("Name" %in% tbl$V1){
+                           tbl = data.table::as.data.table(tbl)
+                           data.table::data.table(
+                             compoundname = gsub(tbl[V1 == "Name",V2], pattern = "ÃŽÂ.-", replacement = ""),
+                             description = paste0("Toxicity class: ", tbl[V1 == "Tox-class",V2]),
+                             baseformula = tbl[V1 == "Formula",V2],
+                             identifier = "???",
+                             charge = tbl[V1 == "Charge",V2],
+                             structure = "",
+                             source = "supernatural2"
+                           )
+                         }else{
+                           data.table::data.table()
+                         }
+                       })
+                       db.frag = data.table::rbindlist(rows)
+                       db.frag$identifier = identifiers
+                       db.frag$structure = smiles
+                       keep = which(enviPat::check_chemform(isotopes, db.frag$baseformula)$new_formula == formula)
+                       db.frag[keep,]
                      })
-                     db.frag = data.table::rbindlist(rows)
-                     db.frag$identifier = identifiers
-                     db.frag$structure = smiles
-                     keep = which(enviPat::check_chemform(isotopes, db.frag$baseformula)$new_formula == formula)
-                     db.frag[keep,]
+                     db.frag
                    })
-                   db.frag
-                 })
-                 data.table::rbindlist(rows, fill=T)
+                   rows = data.table::rbindlist(rows, fill=T)
+                 }
+                 rows
                })
                data.table::rbindlist(rows, fill=T)
              },
              knapsack = {
+               print("Searching knapsack...")
                options(stringsAsFactors = F)
                rows = pbapply::pblapply(formulas, function(formula){
                  url = gsubfn::fn$paste("http://www.knapsackfamily.com/knapsack_jsp/result.jsp?sname=formula&word=$formula")
@@ -323,29 +342,34 @@ searchFormulaWeb <- function(formulas,
                                                description = description)
                  res = XML::readHTMLTable(url,header = T,)[[1]]
                  res.firstrow = colnames(res)
-                 colnames(res) <- c("c_id", "cas_id", "metabolite", "formula", "mw", "organism")
-                 res <- data.table::as.data.table(rbind(res.firstrow, res))
-                 res.aggr = unique(res[, .(identifier = c_id, compoundname = metabolite, baseformula = formula,
-                                    description = paste0("Found in organisms: ", paste0(organism, collapse = ", "))),by=c_id])
-                 res.aggr = res.aggr[,-"c_id"]
-                 uniques = unique(res.aggr$c_id)
+                 if(!is.null(res.firstrow)){
+                   colnames(res) <- c("c_id", "cas_id", "metabolite",
+                                      "formula", "mw", "organism")
+                   res <- data.table::as.data.table(rbind(res.firstrow, res))
+                   res.aggr = unique(res[, .(identifier = c_id, compoundname = metabolite, baseformula = formula, source = "knapsack",
+                                             description = paste0("Found in organisms: ", paste0(organism, collapse = ", "))),by=c_id])
+                   res.aggr = res.aggr[,-"c_id"]
+                   uniques = unique(res.aggr$c_id)
 
-                 if(detailed){
-                   rows.detailed = pbapply::pblapply(uniques[!is.na(uniques)], function(id){
-                     url = gsubfn::fn$paste("http://www.knapsackfamily.com/knapsack_jsp/information.jsp?word=$id")
-                     tbl = XML::readHTMLTable(url,header = T,)[[1]]
-                     flipped = t(tbl)
-                     colnames(flipped) <- flipped[1,]
-                     flipped = as.data.frame(flipped[-1,])
-                     data.table::data.table(identifier = id,
-                                            structure = flipped$SMILES[1])
-                   })
-                   res = merge(res.aggr, data.table::rbindlist(rows.detailed), by="identifier")
+                   if(detailed){
+                     rows.detailed = pbapply::pblapply(uniques[!is.na(uniques)], function(id){
+                       url = gsubfn::fn$paste("http://www.knapsackfamily.com/knapsack_jsp/information.jsp?word=$id")
+                       tbl = XML::readHTMLTable(url,header = T,)[[1]]
+                       flipped = t(tbl)
+                       colnames(flipped) <- flipped[1,]
+                       flipped = as.data.frame(flipped[-1,])
+                       data.table::data.table(identifier = id,
+                                              structure = flipped$SMILES[1])
+                     })
+                     res = merge(res.aggr, data.table::rbindlist(rows.detailed), by="identifier")
+                   }else{
+                     res = res.aggr
+                   }
                  }else{
-                   res = res.aggr
+                   rows
                  }
                  })
-               data.table::rbindlist(rows)
+               data.table::rbindlist(rows, fill=T)
              },
              pubchem = {
                print("Searching PubChem...")
@@ -355,7 +379,8 @@ searchFormulaWeb <- function(formulas,
                  rows = data.table::data.table(name = formula,
                                                baseformula = formula,
                                                structure = NA,
-                                               description = description)
+                                               description = description,
+                                               source = "pubchem")
 
                  try({
                    pc_res <- jsonlite::read_json(url,simplifyVector = T)
@@ -372,61 +397,63 @@ searchFormulaWeb <- function(formulas,
              },
              chemspider = {
                print("Searching ChemSpider...")
-
                cs_url = "https://api.rsc.org/compounds/v1/filter/formula/batch"
-               formjson <- paste0('"', paste0(formulas, collapse='","'), '"')
+               formblocks = split(formulas, ceiling(seq_along(formulas)/100))
 
-               post_body = gsubfn::fn$paste('{
-                                              "formulas": [
-                                                  $formjson
-                                              ],
-                                              "orderBy": "",
-                                              "orderDirection": ""
-                                          }')
-               r <- httr::POST(url = cs_url,
-                               httr::add_headers('apikey' = apikey),
-                               body = post_body,
-                               httr::content_type("application/json"), encode="raw")
-               qid <- RJSONIO::fromJSON(httr::content(r, "text", encoding = "UTF-8"))
-               done_url = gsubfn::fn$paste("https://api.rsc.org/compounds/v1/filter/formula/batch/$qid/status")
-               res_url = gsubfn::fn$paste("https://api.rsc.org/compounds/v1/filter/formula/batch/$qid/results")
-               done_r = httr::GET(done_url,httr::add_headers('apikey' = apikey))
-               if(done_r$status_code == 200){
-                 res_r = httr::GET(res_url,httr::add_headers('apikey' = apikey))
-                 results = RJSONIO::fromJSON(httr::content(res_r, "text", encoding = "UTF-8"))
-                 res_rows <- lapply(results[[1]], function(l){
-                   if(length(l$results) == 0){
-                     description = "No hits for this predicted formula."
-                     data.table::data.table(name = l$formula,
-                                            baseformula = l$formula,
-                                            structure = NA,
-                                            description = description)
-                   }else{
-                     pastedIds = paste0(l$results, collapse = ", ")
-                     description <- paste0("ChemSpider found these IDs: ",
-                                           pastedIds)
-                     if(detailed){
-                       res = chemspiderInfo(ids,
-                                      apikey=apikey)
-                       res$baseformula <- c(l$formula)
-                       res
-                     }else{
+               rows = pbapply::pblapply(formblocks, function(formgroup){
+                 formjson <- paste0('"', paste0(formgroup, collapse='","'), '"')
+
+                 post_body = gsubfn::fn$paste('{"formulas": [$formjson]}')
+                 r <- httr::POST(url = cs_url,
+                                 httr::add_headers('apikey' = apikey),
+                                 body = post_body,
+                                 httr::content_type("application/json"), encode="raw")
+                 qid <- RJSONIO::fromJSON(httr::content(r, "text", encoding = "UTF-8"))
+                 done_url = gsubfn::fn$paste("https://api.rsc.org/compounds/v1/filter/formula/batch/$qid/status")
+                 res_url = gsubfn::fn$paste("https://api.rsc.org/compounds/v1/filter/formula/batch/$qid/results")
+                 done_r = httr::GET(done_url,httr::add_headers('apikey' = apikey))
+                 if(done_r$status_code == 200){
+                   res_r = httr::GET(res_url,httr::add_headers('apikey' = apikey))
+                   results = RJSONIO::fromJSON(httr::content(res_r, "text", encoding = "UTF-8"))
+                   res_rows <- lapply(results[[1]], function(l){
+                     if(length(l$results) == 0){
+                       description = "No hits for this predicted formula."
                        data.table::data.table(name = l$formula,
                                               baseformula = l$formula,
                                               structure = NA,
-                                              `%iso` = c(100),
-                                              description = description)
+                                              description = description,
+                                              source = "chemspider")
+                     }else{
+                       pastedIds = paste0(l$results, collapse = ", ")
+                       description <- paste0("ChemSpider found these IDs: ",
+                                             pastedIds)
+                       if(detailed){
+                         res = chemspiderInfo(l$results,
+                                              apikey=apikey)
+                         res$baseformula <- c(l$formula)
+                         res
+                       }else{
+                         data.table::data.table(name = l$formula,
+                                                baseformula = l$formula,
+                                                structure = NA,
+                                                `%iso` = c(100),
+                                                description = description,
+                                                source = "chemspider")
+                       }
                      }
-                   }
-                 })
-                data.table::rbindlist(res_rows,fill=T)
-               }
+                   })
+                   data.table::rbindlist(res_rows,fill=T)
+                 }
+               })
+               data.table::rbindlist(rows, fill=T)
              })
     })
     fin = data.table::rbindlist(list_per_website,fill=T)
-    fin$identifier <- as.character(fin$identifier)
-    fin$structure <- sapply(fin$structure, function(smi) if(is.na(smi)) "" else smi)
-    fin
+    if(nrow(fin) > 0){
+      fin$identifier <- as.character(fin$identifier)
+      fin$structure <- sapply(fin$structure, function(smi) if(is.na(smi)) "" else smi)
+    }
+     unique(fin)
   }else{
     print("Please select at least one database to search in!")
     data.table::data.table()
@@ -459,8 +486,8 @@ chemspiderInfo <- function(ids,
     data.table::data.table(name = json_table$commonName,
                            structure = json_table$smiles,
                            identifier = json_table$id,
-                           source = c("chemspider"),
                            `%iso` = c(100),
+                           source = "chemspider",
                            description = paste0("ChemSpider(", json_table$id, "). ",
                                                 "Referenced ", json_table$referenceCount, " times. ",
                                                 "Mentioned in PubMed ", json_table$pubMedCount, " times. ",

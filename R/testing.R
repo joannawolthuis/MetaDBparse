@@ -12,7 +12,7 @@
 #
 #   Install Package:           'Cmd + Shift + B'
 #   Check Package:             'Cmd + Shift + E'
-#   Test Package:              'Cmd + Shift + T'
+#   Test Package:             'Cmd + Shift + T'
 
 # options(stringsAsFactors = FALSE,"java.parameters" = c("-Xmx16g")) # give java enough memory for smiles parsing
 #
@@ -64,7 +64,6 @@ outfolder = normalizePath("~/MetaboShiny/databases")
 
 dbs = c("ymdb", "ecmdb", "stoff", "rmdb", "bmdb", "nanpdb")
 for(db in dbs){
-   print(db)
    try({
       #=== INDEXING ===
       conn <- openBaseDB(outfolder, paste0(db,".db"))

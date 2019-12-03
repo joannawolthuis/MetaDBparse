@@ -1538,66 +1538,6 @@ build.MASSBANK <- function(outfolder){ # WORKS
   db.formatted
 }
 
-build.SUPERNATURAL <- function(outfolder){ # NEEDS WORK, REALLY SLOW TOO INFEASIBLE
-  base.loc <- file.path(outfolder, "supernatural_source")
-  if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
-
-  library(XML)
-  library(RCurl)
-  library(rlist)
-  # get total
-  # pages have 15 each, how many pages?
-  # sys.sleep somewhere...
-  # get max compounds
-  # start progress bar
-  # http://bioinf-applied.charite.de/supernatural_new/src/download_mols.php?sn_id=SN00270303,SN00332107,SN00371241,SN00399119,SN00429427,SN00332221,SN00228244,SN00355833,SN00295142,SN00295267,SN00228769,SN00268639,SN00288836,SN00372987,SN00297293
-  theurl = "http://bioinf-applied.charite.de/supernatural_new/index.php?site=compound_search&start=0&supplier=all&molwt1=40&molwt2=2000&classification=all"
-  # this might be too big... mail the ppl if they want to upload the whole thing..
-  html = readLines(theurl)
-  count = stringr::str_extract(html, "count_compounds=(\\d+)")
-  total = as.numeric(gsub(count[!is.na(count)], pattern = ".*=", replacement = ""))
-
-  pages = total/15
-  cl = parallel::makeCluster(3, "FORK")
-  rows = pbapply::pblapply(0:ceiling(pages), cl=0, function(i){
-    theurl = gsubfn::fn$paste("http://bioinf-applied.charite.de/supernatural_new/index.php?site=compound_search&start=$i&supplier=all&molwt1=40&molwt2=2000&classification=all")
-    print(theurl)
-    html = readLines(theurl)
-    identifiers = stringr::str_extract(html, "SN(\\d+)")
-    identifiers = unique(identifiers[!is.na(identifiers)])
-    smi_rows = grep(html, pattern = "SMILES") + 1
-    smiles = stringr::str_match(html[smi_rows], 'value="(.*)"\\/>')[,2]
-    identifiers = unique(identifiers[!is.na(identifiers)])
-    tables <- readHTMLTable(theurl)
-    tables <- list.clean(tables, fun = is.null, recursive = FALSE)
-    rows = lapply(tables, function(tbl){
-      if("Name" %in% tbl$V1){
-        tbl = data.table::as.data.table(tbl)
-        data.table::data.table(
-          compoundname = tbl[V1 == "Name",V2],
-          description = paste0("Toxicity class: ", tbl[V1 == "Tox-class",V2]),
-          baseformula = tbl[V1 == "Formula",V2],
-          identifier = "???",
-          charge = tbl[V1 == "Charge",V2],
-          structure = ""
-        )
-      }else{
-        data.table::data.table()
-      }
-    })
-    db.frag = data.table::rbindlist(rows)
-    db.frag$identifier = identifiers
-    db.frag$structure = smiles
-    print(db.frag)
-    Sys.sleep(0.5)
-    db.frag
-  })
-  data.table::rbindlist(rows)
-
-  # - - - - -
-  db.frag
-}
-
 build.BMDB <- function(outfolder){
   file.url = "http://www.cowmetdb.ca/public/downloads/current/metabocards.gz"
   base.loc <- file.path(outfolder, "bmdb_source")
@@ -1733,6 +1673,12 @@ build.LMDB <- function(outfolder){
   #                   description = description,
   #                   charge = c(0))]
   data(lmdb)
+  # descs = data.table::fread("~/Downloads/lmdb_descriptions.csv", header=T)
+  # descs <- data.table::data.table(identifier = c(colnames(descs)[1], descs[,1][[1]]),
+  #                                  description = c(colnames(descs)[2], descs[,2][[1]]))
+  # db.a = db.formatted[ , -c("description")]
+  # lmdb = merge(db.a, descs)
+  #lmdb <- db.final
   db.formatted <- lmdb
   db.formatted
 }

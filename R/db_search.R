@@ -64,8 +64,6 @@ searchMZ <- function(mzs, ionmodes, outfolder,
                             JOIN structures struc
                             ON cpd.struct_id = struc.struct_id"
 
-  print(query)
-
   RSQLite::dbExecute(conn, query)
 
   table.per.db <- lapply(base.dbname, function(db){
@@ -74,7 +72,6 @@ searchMZ <- function(mzs, ionmodes, outfolder,
       DBI::dbExecute(conn, gsubfn::fn$paste("DETACH base"))
     },silent=T)
     query = gsubfn::fn$paste("ATTACH '$dbpath' AS base")
-    print(query)
     RSQLite::dbExecute(conn, query)
 
     query = strwrap("SELECT
@@ -93,7 +90,6 @@ searchMZ <- function(mzs, ionmodes, outfolder,
                   JOIN base.base b
                   ON u.structure = b.structure",width=10000, simplify=TRUE)
 
-    print(query)
     results <- DBI::dbGetQuery(conn, query)
     if(nrow(results)>0){
       results$perciso <- round(results$perciso, 2)
@@ -179,7 +175,6 @@ searchCMMR <- function (cmm_url = "http://ceumass.eps.uspceu.es/mediator/api/v3/
     cat(paste0("Date: ", r$date, "\n"))
     json_file <- RJSONIO::fromJSON(httr::content(r, "text",
                                                  encoding = "UTF-8"))$results
-    print(json_file)
     if (length(json_file) == 0) {
       cat("No compounds found in the database search.\n")
       return("No compounds found in the database search.")
