@@ -6,13 +6,147 @@
 
 
 # should return data table!
+build.MCDB <- function(outfolder){ # WORKS
+
+  options(stringsAsFactors = F)
+
+  file.url <- "http://www.mcdb.ca/system/downloads/current/milk_metabolites.zip"
+  base.loc <- file.path(outfolder, "mcdb_source")
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
+  zip.file <- file.path(base.loc, "MCDB.zip")
+  utils::download.file(file.url, zip.file,mode = "wb",cacheOK = T)
+  utils::unzip(zip.file, exdir = base.loc)
+
+  input = file.path(base.loc, "milk_metabolites.xml")
+
+  theurl <- RCurl::getURL("http://www.mcdb.ca/statistics",.opts = list(ssl.verifypeer = FALSE) )
+  tables <- XML::readHTMLTable(theurl)
+  stats = data.table::rbindlist(tables)
+  n = as.numeric(as.character(gsub(x = stats[Description == "Total Metabolites"]$Count,
+                                   pattern = ",",
+                                   replacement="")))
+
+  db.formatted <- data.frame(
+    compoundname = rep(NA, n),
+    baseformula = rep(NA, n),
+    identifier = rep(NA, n),
+    structure = rep(NA, n),
+    charge = rep(NA, n),
+    description = rep("", n)
+  )
+
+  idx = 1 # which metabolite are we on
+  pb <- pbapply::startpb(min = idx, max = n)
+
+  # FOR WINDOWS
+  sysinf <- Sys.info()
+  if (!is.null(sysinf)){
+    os <- sysinf['sysname']
+    if (os == 'Darwin')
+      os <- "osx"
+  } else { ## mystery machine
+    os <- .Platform$OS.type
+    if (grepl("^darwin", R.version$os))
+      os <- "osx"
+    if (grepl("linux-gnu", R.version$os))
+      os <- "linux"
+  }
+
+  if(tolower(os) == "windows"){
+    acc = "primary"
+    nm = "primary"
+    desc = "primary"
+    con = base::file(input, "r")
+    while (TRUE) {
+
+      line = readLines(con, n = 1,skipNul = T)
+
+      if (length(line) == 0){
+        break
+      }
+
+      if(line == "</metabolite>"){
+        m = m+1
+        pbapply::setpb(pb, idx)
+        acc = "primary"
+        nm = "primary"
+        desc = "primary"
+      }
+
+      tag = stringr::str_match(line, pattern = "<(.*?)>")[,2]
+
+      switch(tag,
+             accession = {
+               if(acc == "primary"){
+                 db.formatted[idx,]$identifier <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+                 acc <- "secondary"
+               }
+             },
+             name = {
+               if(nm == "primary"){
+                 db.formatted[idx,]$compoundname <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+                 nm = "secondary"
+               }
+             },
+             smiles = {
+               db.formatted[idx,]$structure <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+             },
+             description = {
+               if(desc == "primary"){
+                 db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description,
+                                                          " HMDB: ",
+                                                          trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
+                 desc = "secondary"
+               }
+             },
+             cs_description = {
+               db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description,
+                                                        "From ChemSpider: ",
+                                                        trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
+             },
+             chemical_formula = {
+               db.formatted[idx,]$baseformula <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+             })
+    }
+    close(con)
+  }else{
+    metabolite = function(currNode){
+
+      if(idx %% 1000 == 0){
+        pbapply::setpb(pb, idx)
+      }
+
+      currNode <<- currNode
+
+      db.formatted[idx, "compoundname"] <<- XML::xmlValue(currNode[['name']])
+      db.formatted[idx, "identifier"] <<- XML::xmlValue(currNode[['accession']])
+      db.formatted[idx, "baseformula"] <<- XML::xmlValue(currNode[['chemical_formula']])
+      db.formatted[idx, "structure"] <<- XML::xmlValue(currNode[['smiles']])
+      db.formatted[idx, "description"] <<- paste(XML::xmlValue(currNode[['description']])
+      )
+      x <- currNode[['predicted_properties']]
+      properties <- currNode[['predicted_properties']]
+      db.formatted[idx, "charge"] <<- stringr::str_match(XML::xmlValue(properties),
+                                                         pattern = "formal_charge([+|\\-]\\d*|\\d*)")[,2]
+
+      idx <<- idx + 1
+    }
+
+    XML::xmlEventParse(input,
+                       branches = list(metabolite = metabolite),
+                       replaceEntities=T)
+  }
+  db.formatted
+}
+
+# should return data table!
 build.HMDB <- function(outfolder){ # WORKS
 
   options(stringsAsFactors = F)
 
   file.url <- "http://www.hmdb.ca/system/downloads/current/hmdb_metabolites.zip"
   base.loc <- file.path(outfolder, "hmdb_source")
-  if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
   zip.file <- file.path(base.loc, "HMDB.zip")
   utils::download.file(file.url, zip.file,mode = "wb",cacheOK = T)
   utils::unzip(zip.file, exdir = base.loc)
@@ -151,7 +285,7 @@ build.METACYC <- function(outfolder){ # WORKS
 
   source.file = file.path(base.loc, "All_compounds_of_MetaCyc.txt")
   if(!file.exists(source.file)){
-    message("Please download SmartTable from 'https://metacyc.org/group?id=biocyc17-31223-3729417004' as 'All_compounds_of_MetaCyc.txt' and save in the outfolder/metacyc_source folder.")
+    message("Please download SmartTable from 'https://metacyc.org/group?id=biocyc17-31223-3787684059' as 'All_compounds_of_MetaCyc.txt' and save in the outfolder/metacyc_source folder.")
     return(NULL)
   }
   metacyc.raw = read.table(source.file,header = T, sep = "\t",
@@ -160,7 +294,7 @@ build.METACYC <- function(outfolder){ # WORKS
   colnames(metacyc.raw) <- gsub(x=as.character(colnames(metacyc.raw)), pattern = '\\"', replacement="")
   metacyc.raw[] <- lapply(metacyc.raw, gsub, pattern = '\\"', replacement = "")
 
-  compounds <- pbapply::pbsapply(metacyc.raw$Compound, FUN=function(pw){
+  compounds <- pbapply::pbsapply(metacyc.raw$`Compound Name`, FUN=function(pw){
     pw <- iconv(pw, "latin1", "UTF-8",sub='')
     pw <- pw[pw != " // "]
     pw <- gsub(pw, pattern = "&", replacement="")
@@ -170,17 +304,18 @@ build.METACYC <- function(outfolder){ # WORKS
   })
 
   db.formatted <- data.table::data.table(compoundname = compounds,
-                                         description = metacyc.raw$Summary,
+                                         description = sapply(1:nrow(metacyc.raw), function(i){
+                                           species = metacyc.raw$Species[i]
+                                           paste0(metacyc.raw$Summary[i], if(species != "") paste0(" Found in: ", species, ".") else "")
+                                         }),
                                          baseformula = metacyc.raw$`Chemical Formula`,
                                          identifier = paste0("METACYC_CP_", 1:nrow(metacyc.raw)),
                                          charge = c(0),
                                          structure = metacyc.raw$SMILES)
-
   db.formatted
 }
 
 build.CHEBI <- function(outfolder){ # WORKS
-
   db.full <- {
     release = "latest"
     woAssociations = FALSE
@@ -423,10 +558,9 @@ build.CHEBI <- function(outfolder){ # WORKS
 }
 
 build.FOODB <- function(outfolder){ # WORKS
-  file.url <- "http://www.foodb.ca/system/foodb_2017_06_29_csv.tar.gz"
+  file.url <- "http://foodb.ca/public/system/downloads/foodb_2017_06_29_csv.tar.gz"
   base.loc <- file.path(outfolder, "foodb_source")
-
-  if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
+  if(dir.exists(base.loc))(unlink(base.loc,recursive = T)); dir.create(base.loc, recursive = T);
   zip.file <- file.path(base.loc, "foodb.tar.gz")
   utils::download.file(file.url, zip.file, mode = 'wb', method = 'libcurl')
   utils::untar(normalizePath(zip.file), exdir = normalizePath(base.loc))
@@ -554,7 +688,7 @@ build.RESPECT <- function(outfolder){ # WORKS
   file.url <- "http://spectra.psc.riken.jp/menta.cgi/static/respect/respect.zip"
 
   base.loc <- file.path(outfolder, "respect_source")
-  if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
   zip.file <- file.path(base.loc, "respect.zip")
   utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(normalizePath(zip.file), exdir = (base.loc))
@@ -598,7 +732,7 @@ build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
 
   base.loc <- file.path(outfolder, "maconda_source")
 
-  if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
   zip.file <- file.path(base.loc, "maconda.zip")
 
   utils::download.file(file.url, zip.file,mode = "wb",extra = "-k",method = "curl")
@@ -758,7 +892,7 @@ build.T3DB <- function(outfolder){ # WORKS
   file.url <- "http://www.t3db.ca/system/downloads/current/toxins.csv.zip"
   # ----
   base.loc <- file.path(outfolder, "t3db_source")
-  if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
   zip.file <- file.path(base.loc, "T3DB.zip")
   utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
@@ -778,7 +912,7 @@ build.T3DB <- function(outfolder){ # WORKS
 build.HSDB <- function(outfolder){ # NEEDS WORK
   file.url = "ftp://ftp.nlm.nih.gov/nlmdata/.hsdblease/hsdb.xml.20190528.zip"
   base.loc <- file.path(outfolder, "hsdb_source")
-  if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
   zip.file <- file.path(base.loc, "HSDB.zip")
   utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
@@ -866,7 +1000,7 @@ build.EXPOSOMEEXPLORER <- function(outfolder){ # WORKS
 
   base.loc <- file.path(outfolder, "expoexplorer_source")
 
-  if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
   zip.file <- file.path(base.loc, "expoexpo_comp.zip")
   utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
@@ -1488,7 +1622,7 @@ build.PHENOLEXPLORER <- function(outfolder){ # WORKS
 build.MASSBANK <- function(outfolder){ # WORKS
   file.url <- "https://github.com/MassBank/MassBank-data/archive/master.zip"
   base.loc <- file.path(outfolder, "massbank_source")
-  if(!dir.exists(base.loc)) dir.create(base.loc,recursive = T)
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
   zip.file <- file.path(base.loc, "massbank.zip")
   utils::download.file(file.url, zip.file,mode = "wb", method='libcurl')
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
@@ -1686,7 +1820,7 @@ build.LMDB <- function(outfolder){
 build.YMDB <- function(outfolder){
   file.url = "http://www.ymdb.ca/system/downloads/current/ymdb.json.zip"
   base.loc <- file.path(outfolder, "ymdb_source")
-  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
   zip.file <- file.path(base.loc, "ymdb.zip")
   utils::download.file(file.url, zip.file,mode = "wb", cacheOK = T)
   utils::unzip(zip.file, exdir = base.loc)
@@ -1749,6 +1883,75 @@ build.YMDB <- function(outfolder){
   })
   db.formatted = data.table::rbindlist(db.rows)
   db.formatted
+}
+
+build.PAMDB <- function(outfolder){
+  file.url = "http://pseudomonas.umaryland.edu/PaDl/PaMet.xlsx"
+  base.loc <- file.path(outfolder, "pamdb_source")
+  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
+  xlsx.file <- file.path(base.loc, "pamdb.xlsx")
+  utils::download.file(file.url, xlsx.file, mode = "wb", cacheOK = T)
+  db.base = data.table::as.data.table(readxl::read_excel(xlsx.file,sheet = 1))
+  db.formatted <- data.table::data.table(identifier = db.base$MetID,
+                                         compoundname = db.base$Name,
+                                         structure = db.base$SMILES,
+                                         baseformula = c(NA),
+                                         description = gsub(gsub(db.base$Reactions, pattern="\\r", replacement=", "), pattern="\\n", replacement=""),
+                                         charge=db.base$Charge)
+  db.formatted
+}
+
+build.mVOC <- function(outfolder){
+
+  categories = c("\\(", "[",	"$",	"1",	"2",	"3",	"4",	"5",	"6",	"7",	"8",	"9",
+                 "A",	"B",	"C",	"D",	"E",	"F",	"H",	"I",	"M",	"N",	"O",	"P",	"Q",	"S",	"T",	"U")
+  hrefFun <- function(x){
+    XML::xpathSApply(x,'./a',XML::xmlAttrs)
+  }
+
+  urlbase = "http://bioinformatics.charite.de/mvoc/"
+
+  search_urls <- pbapply::pbsapply(categories, function(categ){
+    theurl=paste0("http://bioinformatics.charite.de/mvoc/index.php?site=browse&char=", categ)
+    print(theurl)
+    tables <- XML::readHTMLTable(theurl,elFun = hrefFun)
+    tables.nonull <- tables[sapply(tables, function(x) !is.null(x))]
+    tables.wrows <- tables.nonull[sapply(tables.nonull, function(x) nrow(x)>0)]
+    urls = gsub(unlist(tables.wrows), pattern = "\\./", replacement = urlbase)
+    urls[!is.na(urls)]
+  })
+
+  db_rows <- pbapply::pblapply(unlist(search_urls), function(theurl){
+    try({
+      tables <- XML::readHTMLTable(theurl)
+      tables.nonull <- tables[sapply(tables, function(x) !is.null(x))]
+      end.nameblock <- min(which(!is.na(tables.nonull[[1]][,2])))
+      names = tables.nonull[[1]][1:end.nameblock-1,1]
+      restblock = tables.nonull[[1]][-c(1:end.nameblock),]
+      trans_restblock = as.data.frame(t(restblock))
+      colnames(trans_restblock) <- trans_restblock[1,]
+      trans_restblock <- trans_restblock[2,]
+      # - - - -
+      has.desc <- which(sapply(tables.nonull, function(x) "Biological Function" %in% colnames(x)))
+      tbl_desc <- tables.nonull[[has.desc]]
+      desc <- paste0(sapply(1:nrow(tbl_desc), function(i){
+        row = tbl_desc[i, 1:2]
+        paste0(row[2], "(",row[1],")")
+        #paste0(row, collapse=",")
+      }), collapse=". ")
+      db.formatted <- data.table::data.table(identifier = trans_restblock$`PubChem ID`,
+                                             compoundname = names[1],
+                                             structure = trans_restblock$SMILES,
+                                             baseformula = trans_restblock$Formula,
+                                             description = paste0("Microbes producing this compound:",desc, ". Other names:", paste0(names[-1], collapse=",")),
+                                             charge=c(0))
+      Sys.sleep(1)
+      db.formatted
+    })
+  })
+
+  db.formatted <- data.table::rbindlist(db_rows[sapply(db_rows, function(x) !is.null(nrow(x)))])
+
 }
 
 build.NANPDB <- function(outfolder){

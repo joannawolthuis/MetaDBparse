@@ -201,20 +201,22 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
                            vmh = build.VMH(outfolder),
                            hmdb = build.HMDB(outfolder),
                            smpdb = build.SMPDB(outfolder),
-                           supernatural = build.SUPERNATURAL(outfolder),
                            lmdb = build.LMDB(outfolder),
                            ymdb = build.YMDB(outfolder),
                            ecmdb = build.ECMDB(outfolder),
                            bmdb = build.BMDB(outfolder),
                            rmdb = build.RMDB(outfolder),
                            stoff = build.STOFF(outfolder),
-                           nanpdb = build.NANPDB(outfolder))
+                           nanpdb = build.NANPDB(outfolder),
+                           mcdb = build.MCDB(outfolder),
+                           mvoc = build.mVOC(outfolder),
+                           pamdb = build.PAMDB(outfolder))
   }else{
     db.formatted <- data.table::fread(custom_csv_path, header=T)
   }
 
   print(head(db.formatted))
-  Sys.sleep(5)
+  Sys.sleep(1)
   if(dbname == "maconda") return(NA)
 
   db.formatted <- data.table::as.data.table(db.formatted)

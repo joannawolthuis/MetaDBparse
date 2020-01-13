@@ -48,41 +48,42 @@ parallel::clusterEvalQ(cl = cl, expr = {
   library(pbapply)
 })
 #
-dbs = c("lipidmaps", "kegg",
-        "vmh","expoexplorer",
-        "phenolexplorer", "chebi", "dimedb",
-        "t3db","metacyc",
-        "massbank", "respect",
-        "drugbank", "foodb",
-        "smpdb",
-        "bloodexposome",
-        "wikidata","hmdb",
-        "metabolights"
+dbs = c("chebi", "maconda",
+        "kegg",
+        "bloodexposome","dimedb",
+        "expoexplorer", "foodb", "drugbank", "lipidmaps","massbank",
+        "metabolights",
+        "metacyc", "phenolexplorer", "respect",
+        "wikidata",
+        "t3db", "vmh", "hmdb",
+        "smpdb", "lmdb", "ymdb",
+        "ecmdb", "bmdb", "rmdb",
+        "stoff", "nanpdb","mcdb",
+        "mvoc", "pamdb"
         )
 
 outfolder = normalizePath("~/MetaboShiny/databases")
 
-dbs = c("ymdb", "ecmdb", "stoff", "rmdb", "bmdb", "nanpdb")
 for(db in dbs){
    try({
       #=== INDEXING ===
-      conn <- openBaseDB(outfolder, paste0(db,".db"))
-      RSQLite::dbExecute(conn, "CREATE INDEX IF NOT EXISTS b_idx1 ON base(structure)")
-      RSQLite::dbDisconnect(conn)
-      # #=== BUILD BASE ===
-      buildBaseDB(outfolder = outfolder,
-                  dbname = db,
-                  cl=0, silent=F)
+      # conn <- openBaseDB(outfolder, paste0(db,".db"))
+      # RSQLite::dbExecute(conn, "CREATE INDEX IF NOT EXISTS b_idx1 ON base(structure)")
+      # RSQLite::dbDisconnect(conn)
+      # # #=== BUILD BASE ===
+      # buildBaseDB(outfolder = outfolder,
+      #             dbname = db,
+      #             cl=0, silent=F)
       #=== BUILD EXTENDED ===
       buildExtDB(outfolder,
                  base.dbname = db,
-                 cl = session_cl,
+                 cl = cl,
                  blocksize = 600,
                  mzrange = c(60,800),
                  adduct_table = adducts,
                  adduct_rules = adduct_rules,
                  silent = F,
-                 ext.dbname = "extended",
+                 ext.dbname = "extended_new",
                  use.rules = TRUE)
    })
 }
@@ -101,6 +102,7 @@ adducts <- data.table::fread("/Users/jwolthuis/MetaDBparse/inst/files/adducts_fi
 usethis::use_data(adduct_rules, overwrite=T)
 usethis::use_data(adducts, overwrite=T)
 usethis::use_data(lmdb, overwrite=T)
+usethis::use_data(adducts_no_deut, overwrite=T)
 
 #
 # {
