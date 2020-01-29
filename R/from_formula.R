@@ -118,12 +118,14 @@ filterFormula = function(formulas, rules){
   checks = data.table::rbindlist(ch_nops_chnops_rows)
   deconstructed <- cbind(deconstructed, checks)
 
-  if(length(rules)>0){
+  if(length(rules) > 0){
     passes.checks <- rep(TRUE, nrow(deconstructed))
     for(rule in rules){
       passes.checks <- passes.checks & deconstructed[[rule]]
     }
     keep.candidates <- formulas[passes.checks]
+  }else{
+    keep.candidates <- formulas
   }
   keep.candidates
 }
@@ -218,12 +220,14 @@ getPredicted <- function(mz,
         theor_orig_formula = new_formula
 
         # remove last adduct
-        theor_orig_formula = revertAdduct(theor_orig_formula, add_name)
+        theor_orig_formula = revertAdduct(theor_orig_formula,
+                                          add_name,
+                                          adduct_table = adducts)
         if(is.na(theor_orig_formula)){
           return(data.table())
         }else{
           data.table::data.table(query_mz = c(mz),
-                                 name = new_formula,
+                                 name = theor_orig_formula,
                                  baseformula = theor_orig_formula,
                                  fullformula = new_formula,
                                  basecharge = c(0),
@@ -399,6 +403,11 @@ searchFormulaWeb <- function(formulas,
                print("Searching ChemSpider...")
                cs_url = "https://api.rsc.org/compounds/v1/filter/formula/batch"
                formblocks = split(formulas, ceiling(seq_along(formulas)/100))
+
+               if(apikey == ""){
+                 print("No ChemSpider API key supplied!")
+                 return(data.table::data.table())
+                }
 
                rows = pbapply::pblapply(formblocks, function(formgroup){
                  formjson <- paste0('"', paste0(formgroup, collapse='","'), '"')
