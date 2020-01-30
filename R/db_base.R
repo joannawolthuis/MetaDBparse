@@ -180,7 +180,7 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
   removeDB(outfolder, paste0(dbname,".db"))
   conn <- openBaseDB(outfolder, paste0(dbname,".db"))
   if(is.null(custom_csv_path)){
-    db.formatted <- switch(dbname,
+    db.formatted.all <- switch(dbname,
                            chebi = build.CHEBI(outfolder),
                            maconda = build.MACONDA(outfolder, conn),
                            kegg = build.KEGG(outfolder),
@@ -212,21 +212,28 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
                            mvoc = build.mVOC(outfolder),
                            pamdb = build.PAMDB(outfolder))
   }else{
-    db.formatted <- data.table::fread(custom_csv_path, header=T)
+    db.formatted.all <- list(db = data.table::fread(custom_csv_path, header=T),
+                             version = Sys.time())
   }
 
-  print(head(db.formatted))
-  Sys.sleep(1)
   if(dbname == "maconda") return(NA)
 
-  db.formatted <- data.table::as.data.table(db.formatted)
+  print(db.formatted.all$version)
+
+  db.formatted <- data.table::as.data.table(db.formatted.all$db)
   db.formatted <- data.frame(lapply(db.formatted, as.character), stringsAsFactors=FALSE)
 
   #options(java.home="C:\\Program Files\\Java\\jre1.8.0_221/") # windows...
 
-  db.final <- cleanDB(db.formatted, cl=cl, silent=silent, blocksize=400)
+  db.final <- cleanDB(db.formatted,
+                      cl = cl,
+                      silent = silent,
+                      blocksize=400)
 
   # - - - - - - - - - - - - - - - - - -
+  writeDB(conn, data.table::data.table(date = Sys.Date(),
+                                       version = db.formatted.all$version),
+          "metadata")
   writeDB(conn, db.final, "base")
   RSQLite::dbExecute(conn, "CREATE INDEX b_idx1 ON base(structure)")
   DBI::dbDisconnect(conn)

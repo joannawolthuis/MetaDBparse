@@ -248,14 +248,6 @@ buildExtDB <- function(outfolder,
 
   # old structures that need to be redone
 
-  # new structures that need everything done
-
-  if(length(new_adducts)==0){
-    return(NULL)
-  }else{
-    print(paste0("New adducts:", paste0(new_adducts, collapse=", ")))
-  }
-
   RSQLite::dbExecute(full.conn, strwrap("CREATE TABLE IF NOT EXISTS extended(
                                          struct_id INT,
                                          fullformula text,
@@ -300,6 +292,8 @@ buildExtDB <- function(outfolder,
         to.do$struct_id <- c(NA)
         adduct_table <- data.table::as.data.table(adduct_table)[Name %in% new_adducts,]
       }
+    }else{
+      adduct_only = F
     }
   }
 
@@ -475,7 +469,10 @@ buildExtDB <- function(outfolder,
   })
 
   full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
-  RSQLite::dbWriteTable(full.conn, "adducts", as.data.frame(adduct_table), overwrite=T)
+  RSQLite::dbWriteTable(full.conn,
+                        "adducts",
+                        as.data.frame(adduct_table),
+                        overwrite=T)
   RSQLite::dbDisconnect(full.conn)
 
  unlink(c(tmpfiles.ext, tmpfiles.struct))

@@ -9,7 +9,6 @@
 build.MCDB <- function(outfolder){ # WORKS
 
   options(stringsAsFactors = F)
-
   file.url <- "http://www.mcdb.ca/system/downloads/current/milk_metabolites.zip"
   base.loc <- file.path(outfolder, "mcdb_source")
   if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
@@ -18,6 +17,13 @@ build.MCDB <- function(outfolder){ # WORKS
   utils::unzip(zip.file, exdir = base.loc)
 
   input = file.path(base.loc, "milk_metabolites.xml")
+  header = readLines(input,n = 10)
+  version = trimws(gsub(grep(pattern = "<version", header, value = T),
+                        pattern = "<\\/?version>",
+                        replacement = ""))
+  date = trimws(gsub(grep(pattern = "update_date", header, value = T),
+                     pattern = "<\\/?update_date>",
+                     replacement = ""))
 
   theurl <- RCurl::getURL("http://www.mcdb.ca/statistics",.opts = list(ssl.verifypeer = FALSE) )
   tables <- XML::readHTMLTable(theurl)
@@ -111,7 +117,6 @@ build.MCDB <- function(outfolder){ # WORKS
     close(con)
   }else{
     metabolite = function(currNode){
-
       if(idx %% 1000 == 0){
         pbapply::setpb(pb, idx)
       }
@@ -136,7 +141,7 @@ build.MCDB <- function(outfolder){ # WORKS
                        branches = list(metabolite = metabolite),
                        replaceEntities=T)
   }
-  db.formatted
+  list(db = db.formatted, version = version)
 }
 
 # should return data table!
@@ -150,8 +155,15 @@ build.HMDB <- function(outfolder){ # WORKS
   zip.file <- file.path(base.loc, "HMDB.zip")
   utils::download.file(file.url, zip.file,mode = "wb",cacheOK = T)
   utils::unzip(zip.file, exdir = base.loc)
-
   input = file.path(base.loc, "hmdb_metabolites.xml")
+
+  header = readLines(input,n = 10)
+  version = trimws(gsub(grep(pattern = "<version", header, value = T),
+                     pattern = "<\\/?version>",
+                     replacement = ""))
+  date = trimws(gsub(grep(pattern = "update_date", header, value = T),
+                        pattern = "<\\/?update_date>",
+                        replacement = ""))
 
   theurl <- RCurl::getURL("http://www.hmdb.ca/statistics",.opts = list(ssl.verifypeer = FALSE) )
   tables <- XML::readHTMLTable(theurl)
@@ -273,7 +285,7 @@ build.HMDB <- function(outfolder){ # WORKS
                        branches = list(metabolite = metabolite),
                        replaceEntities=T)
   }
-  db.formatted
+  list(db = db.formatted, version = version)
 }
 
 build.METACYC <- function(outfolder){ # WORKS
@@ -288,8 +300,19 @@ build.METACYC <- function(outfolder){ # WORKS
     message("Please download SmartTable from 'https://metacyc.org/group?id=biocyc17-31223-3787684059' as 'All_compounds_of_MetaCyc.txt' and save in the outfolder/metacyc_source folder.")
     return(NULL)
   }
-  metacyc.raw = read.table(source.file,header = T, sep = "\t",
-                           check.names = F,fill=T,quote="")
+
+  theurl <- RCurl::getURL("https://metacyc.org/group?id=biocyc17-31223-3787684059",.opts = list(ssl.verifypeer = FALSE))
+  header = stringr::str_match(theurl, pattern = "Created: (.*), Last Modified: (.*), Readable")
+  date = header[,2]
+  version = header[,3]
+
+  #tables <- XML::readHTMLTable(theurl)
+  #stats = data.table::rbindlist(tables)
+
+  metacyc.raw = data.table::fread(source.file,
+                                  fill=TRUE,
+                                  quote="",
+                                  sep ="\t")
 
   colnames(metacyc.raw) <- gsub(x=as.character(colnames(metacyc.raw)), pattern = '\\"', replacement="")
   metacyc.raw[] <- lapply(metacyc.raw, gsub, pattern = '\\"', replacement = "")
@@ -308,11 +331,11 @@ build.METACYC <- function(outfolder){ # WORKS
                                            species = metacyc.raw$Species[i]
                                            paste0(metacyc.raw$Summary[i], if(species != "") paste0(" Found in: ", species, ".") else "")
                                          }),
-                                         baseformula = metacyc.raw$`Chemical Formula`,
+                                         baseformula = c(NA),
                                          identifier = paste0("METACYC_CP_", 1:nrow(metacyc.raw)),
                                          charge = c(0),
                                          structure = metacyc.raw$SMILES)
-  db.formatted
+  list(db = db.formatted, version = version)
 }
 
 build.CHEBI <- function(outfolder){ # WORKS
@@ -332,6 +355,9 @@ build.CHEBI <- function(outfolder){ # WORKS
     } else {
       release <- releases[match(release, releases)]
     }
+
+    version = release
+
     message("OK")
     ftp <- paste0("ftp://ftp.ebi.ac.uk/pub/databases/chebi/archive/rel",
                   release, "/Flat_file_tab_delimited/")
@@ -553,8 +579,7 @@ build.CHEBI <- function(outfolder){ # WORKS
                                         charge = gsub(CHARGE,pattern = "$\\+\\d", replacement = ""),
                                         structure = toupper(STRUCTURE)
   )])
-
-  db.formatted
+  list(db = db.formatted, version = version)
 }
 
 build.FOODB <- function(outfolder){ # WORKS
@@ -564,7 +589,14 @@ build.FOODB <- function(outfolder){ # WORKS
   zip.file <- file.path(base.loc, "foodb.tar.gz")
   utils::download.file(file.url, zip.file, mode = 'wb', method = 'libcurl')
   utils::untar(normalizePath(zip.file), exdir = normalizePath(base.loc))
-  base.table <- data.table::fread(file = file.path(base.loc, "foodb_2017_06_29_csv", "compounds.csv"))
+
+  theurl <- RCurl::getURL("http://foodb.ca/downloads",.opts = list(ssl.verifypeer = FALSE))
+  version = stringr::str_match(theurl, pattern = "FooDB Version <strong>(...)<")[,2]
+  date = stringr::str_match(theurl, pattern = "FooDB CSV file<\\/td><td>(.{3,40})<\\/td>")[,2]
+  date = as.Date(date, format = "%B%e%Y")
+  subdate = gsub(date, pattern = "-", replacement = "_")
+
+  base.table <- data.table::fread(file = file.path(base.loc, gsubfn::fn$paste("foodb_$subdate_csv"), "compounds.csv"))
 
   db.formatted <- data.table::data.table(compoundname = base.table$name,
                                          description = base.table$description,
@@ -575,10 +607,15 @@ build.FOODB <- function(outfolder){ # WORKS
 
   db.formatted <- unique(db.formatted)
 
-  db.formatted
+  list(db = db.formatted, version = version)
+
 }
 
 build.WIKIDATA <- function(outfolder){ # WORKS
+
+  date = Sys.Date()
+  version = Sys.Date()
+
   sparql_query <- 'PREFIX wd: <http://www.wikidata.org/entity/>
                            PREFIX wds: <http://www.wikidata.org/entity/statement/>
                            PREFIX wdv: <http://www.wikidata.org/value/>
@@ -632,7 +669,8 @@ build.WIKIDATA <- function(outfolder){ # WORKS
 
   # - - write - -
 
-  db.formatted
+  list(db = db.formatted, version = version)
+
 }
 
 # RE-ENABLE AFTER TALKING TO EGON
@@ -693,6 +731,11 @@ build.RESPECT <- function(outfolder){ # WORKS
   utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(normalizePath(zip.file), exdir = (base.loc))
 
+  theurl <- RCurl::getURL("http://spectra.psc.riken.jp/menta.cgi/respect/download/download",.opts = list(ssl.verifypeer = FALSE))
+  version = stringr::str_match(theurl, pattern = "<b>(.{1,30}) Update")[,2]
+  version = gsub(version, pattern="\\.", replacement = "-")
+  date = version
+
   cpd_files <- list.files(base.loc,
                           full.names = T)
 
@@ -723,7 +766,8 @@ build.RESPECT <- function(outfolder){ # WORKS
 
   # - - -
 
-  db.formatted
+  list(db = db.formatted, version = version)
+
 }
 
 build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
@@ -734,6 +778,11 @@ build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
 
   if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
   zip.file <- file.path(base.loc, "maconda.zip")
+
+  theurl <- RCurl::getURL("https://www.maconda.bham.ac.uk/downloads.php",.opts = list(ssl.verifypeer = FALSE))
+  version = stringr::str_match(theurl, pattern = "Version (...)")[,2]
+  version = gsub(version, pattern="\\.", replacement = "-")
+  date = Sys.Date()
 
   utils::download.file(file.url, zip.file,mode = "wb",extra = "-k",method = "curl")
 
@@ -771,6 +820,9 @@ build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
   db.final <- cleanDB(db.base, cl=0, silent=F, blocksize=400)
 
   #write to base db
+  writeDB(conn, data.table::data.table(date = Sys.Date(),
+                                       version = version),
+          "metadata")
   writeDB(conn, db.final, "base")
   RSQLite::dbExecute(conn, "CREATE INDEX b_idx1 ON base(structure)")
   DBI::dbDisconnect(conn)
@@ -880,7 +932,6 @@ build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
   maconda.extended = unique(meta.table[,-"structure"])
 
   # map SMILES to smile_id
-
   RSQLite::dbWriteTable(full.conn, "extended", maconda.extended, append=T)
   RSQLite::dbWriteTable(full.conn, "structures", mapper, append=T)
 
@@ -896,6 +947,11 @@ build.T3DB <- function(outfolder){ # WORKS
   zip.file <- file.path(base.loc, "T3DB.zip")
   utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+
+  theurl <- RCurl::getURL("http://www.t3db.ca/downloads",.opts = list(ssl.verifypeer = FALSE))
+  version = stringr::str_match(theurl, pattern = "T3DB Version <strong>(...)")[,2]
+  date = Sys.Date()
+
   db.formatted <- data.table::fread(file.path(base.loc, "toxins.csv"), fill=T)
 
   db.formatted <- data.table::data.table(
@@ -906,7 +962,9 @@ build.T3DB <- function(outfolder){ # WORKS
     identifier = db.formatted$`T3DB ID`,
     structure = db.formatted$SMILES
   )
-  return(db.formatted)
+
+  list(db = db.formatted, version = version)
+
 }
 
 build.HSDB <- function(outfolder){ # NEEDS WORK
@@ -918,7 +976,6 @@ build.HSDB <- function(outfolder){ # NEEDS WORK
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
 
   input = list.files(base.loc, pattern = "\\.xml",full.names = T)
-
   theurl <- getURL("https://toxnet.nlm.nih.gov/help/hsdbcasrn.html",.opts = list(ssl.verifypeer = FALSE) )
 
   n = str_count(as.character(theurl), pattern = "cgi-bin")
@@ -956,7 +1013,6 @@ build.HSDB <- function(outfolder){ # NEEDS WORK
 
   smiles = pbapply::pbsapply(cas_ids, function(id) webchem::cir_query(id, representation = "smiles", resolver = NULL,
                                                                       first = FALSE)[[1]])
-
   # TBA
   # - - - - - - - - - - - -
   db.formatted
@@ -969,6 +1025,9 @@ build.BLOODEXPOSOME <- function(outfolder){ # WORKS
   if(!dir.exists(base.loc)) dir.create(base.loc)
   excel.file <- file.path(base.loc, "exposome.xlsx")
   utils::download.file(file.url, excel.file, mode="wb")
+
+  version = "1.0"
+  date = Sys.Date()
 
   db.full <- openxlsx::read.xlsx(excel.file, sheet = 1, colNames=T, startRow = 3)
 
@@ -992,7 +1051,8 @@ build.BLOODEXPOSOME <- function(outfolder){ # WORKS
                                                 charge = db.full$Charge,
                                                 structure = db.full$CanonicalSMILES))
 
-  db.formatted
+  list(db = db.formatted, version = version)
+
 }
 
 build.EXPOSOMEEXPLORER <- function(outfolder){ # WORKS
@@ -1004,6 +1064,12 @@ build.EXPOSOMEEXPLORER <- function(outfolder){ # WORKS
   zip.file <- file.path(base.loc, "expoexpo_comp.zip")
   utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+
+  version = stringr::str_match(RCurl::getURL("http://exposome-explorer.iarc.fr/releases",.opts = list(ssl.verifypeer = FALSE)),
+                               pattern = "Release (...)")[,2]
+  date = stringr::str_match(RCurl::getURL("http://exposome-explorer.iarc.fr/downloads",.opts = list(ssl.verifypeer = FALSE)),
+                               pattern = "(\\d{4}-\\d{2}-\\d{2})")[,2]
+
 
   base.table <- data.table::fread(file = file.path(base.loc, "biomarkers.csv"))
 
@@ -1018,13 +1084,13 @@ build.EXPOSOMEEXPLORER <- function(outfolder){ # WORKS
 
   # - - use correlations to get some custom descriptions :) - -
 
-  file.url <- "http://exposome-explorer.iarc.fr/system/downloads/current/correlation_values.csv.zip"
+  file.url <- "http://exposome-explorer.iarc.fr/system/downloads/current/correlations.csv.zip"
 
   zip.file <- file.path(base.loc, "expoexpo_corr.zip")
   utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
 
-  corr.table <- data.table::fread(file = file.path(base.loc, "correlation_values.csv"))
+  corr.table <- data.table::fread(file = file.path(base.loc, "correlations.csv"))
 
   descriptions <- pbapply::pbsapply(1:nrow(corr.table), function(i){
     row = corr.table[i,]
@@ -1052,7 +1118,8 @@ build.EXPOSOMEEXPLORER <- function(outfolder){ # WORKS
 
   db.formatted <- final.table[,-"Pasted"]
 
-  db.formatted
+  list(db = db.formatted, version = version)
+
 }
 
 build.SMPDB <- function(outfolder){ # OK I THINK
@@ -1064,6 +1131,16 @@ build.SMPDB <- function(outfolder){ # OK I THINK
   utils::download.file(file.url, zip.file, mode="wb")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
   # -------------------------------
+
+  theurl = "http://smpdb.ca/release_notes"
+  header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
+  versions = stringr::str_match_all(header,
+                               pattern = "Release (.{1,30}) -")[[1]]
+  version = gsub(pattern = "SMPDB ", replacement = "", x = versions[nrow(versions),2])
+  dates = stringr::str_match_all(header,
+                                  pattern = "Release .{1,30}- (.{1,30})<\\/h")[[1]]
+  date = dates[nrow(dates),2]
+  date = as.Date(date, format = "%B%d,%Y")
 
   smpdb.paths <- list.files(path = base.loc, pattern = "\\.csv$", full.names = T)
 
@@ -1083,7 +1160,8 @@ build.SMPDB <- function(outfolder){ # OK I THINK
   db.formatted <- db.formatted[,.(description=paste0(unique(description),collapse=", ")),by=list(compoundname, baseformula, identifier, structure)]
   db.formatted <- db.formatted[-1,]
 
-  db.formatted
+  list(db = db.formatted, version = version)
+
 }
 
 build.KEGG <- function(outfolder){ # WORKS
@@ -1093,6 +1171,13 @@ build.KEGG <- function(outfolder){ # WORKS
   })
   cpd.ids <- Reduce(c, cpds)
   id.batches <- split(cpd.ids, ceiling(seq_along(cpd.ids)/10))
+
+  theurl = "https://www.genome.jp/kegg/compound/"
+  header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
+  version = stringr::str_match(header,
+                                    pattern = "Last updated: (.{1,30})<")[,2]
+  date = as.Date(date, format = "%B%d,%Y")
+  #version = date
 
   # --- GET COMPOUNDS ---
 
@@ -1165,7 +1250,9 @@ build.KEGG <- function(outfolder){ # WORKS
                                          charge = db.merged$calcharge,
                                          structure = db.merged$smiles)
   # - - - - - -
-  db.formatted
+
+  list(db = db.formatted, version = version)
+
 }
 
 build.DRUGBANK <- function(outfolder){  # WORKS
@@ -1177,6 +1264,16 @@ build.DRUGBANK <- function(outfolder){  # WORKS
     file.rename(file.path(base.loc, "drugbank_all_full_database.xml.zip"), zip.file)
   }
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+
+  input = file.path(base.loc, "full database.xml")
+  header = readLines(input, n = 10)
+  hasInfo = grep(x = header, pattern = "version", value = T, perl = T)[2]
+  version = stringr::str_match(string = hasInfo, pattern = "version=\"(.*)\" exported")[,2]
+
+  # theurl = "https://www.drugbank.ca/releases/latest"
+  # header = XML::readHTMLTable(RCurl::getURL(theurl, .opts = list(ssl.verifypeer = FALSE)))[[1]]
+  # date = header$`Released on`
+  # version = header$Version
 
   theurl <- RCurl::getURL("https://www.drugbank.ca/stats",.opts = list(ssl.verifypeer = FALSE) )
   tables <- XML::readHTMLTable(theurl,header = F)
@@ -1268,14 +1365,15 @@ build.DRUGBANK <- function(outfolder){  # WORKS
     }
   }
 
-  res = XML::xmlEventParse(file = file.path(base.loc, "full database.xml"), branches =
+  res = XML::xmlEventParse(file = input, branches =
                              list("drug" = metabolite, "drugbank-metabolite-id-value" = print))
 
   db.formatted <- db.formatted[-1,]
 
   # - - -
 
-  db.formatted
+  list(db = db.formatted, version = version)
+
 }
 
 build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking)
@@ -1291,6 +1389,7 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
   zip::unzip(zipfile = normalizePath(zip.file), exdir = normalizePath(base.loc))
   # -------------------------------
 
+  version = Sys.Date()
   sdf.path <- list.files(base.loc,
                          pattern = "sdf",
                          full.names = T,
@@ -1354,7 +1453,8 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
   # - - - - - - - - - - - - - - - -
   db.formatted <- db.base[,-1,with=F]
 
-  db.formatted
+  list(db = db.formatted, version = version)
+
 }
 
 build.METABOLIGHTS <- function(outfolder){
@@ -1369,6 +1469,7 @@ build.METABOLIGHTS <- function(outfolder){
   utils::download.file(file.url, xml.file, mode="wb")
 
   # ----
+  version = Sys.Date()
 
   mtbls = XML::xmlToList(file.path(base.loc, "metabolights.xml"))
 
@@ -1427,7 +1528,7 @@ build.METABOLIGHTS <- function(outfolder){
     if(is.null(id)){
       return(data.table::data.table())
     }else{
-      studies = overview[identifier == id, description]
+      studies = overview[identifier == id, ..description]
       study.summary = paste0(unlist(studies), collapse=" ")
       row$description <- paste0(row$description, " Mentioned in the following studies --> ", study.summary)
       return(row)
@@ -1436,7 +1537,8 @@ build.METABOLIGHTS <- function(outfolder){
 
   db.formatted <- data.table::rbindlist(db.rows.final,
                                         use.names = T)
-  db.formatted
+
+  list(db = db.formatted, version = version)
 
 }
 
@@ -1456,6 +1558,7 @@ build.DIMEDB <- function(outfolder){ # WORKS
     utils::download.file(url, zip.file, mode="wb")
     utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
   })
+  version = Sys.Date()
   atom <- data.table::fread(file.path(base.loc,"dimedb_pc_info.tsv"))
   ids <- data.table::fread(file.path(base.loc,"dimedb_id_info.tsv"))
   source <- data.table::fread(file.path(base.loc,"dimedb_sources.tsv"))
@@ -1481,9 +1584,7 @@ build.DIMEDB <- function(outfolder){ # WORKS
 
   db.formatted = db.formatted[-rmv,]
 
-  # - - - -
-
-  db.formatted
+  list(db = db.formatted, version = version)
 }
 
 build.VMH <- function(outfolder){ # WORKS
@@ -1491,6 +1592,11 @@ build.VMH <- function(outfolder){ # WORKS
 
   pagerange = 150
   # get the first page
+
+  theurl = "https://www.vmh.life/files/release-notes/release.html"
+  header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
+  version = stringr::str_match(header,
+                               pattern = "(\\w+ 20\\d\\d)")[,2]
 
   table_list <- pbapply::pblapply(1:pagerange, function(i){
     tbl = NA
@@ -1551,7 +1657,8 @@ build.VMH <- function(outfolder){ # WORKS
 
   db.formatted <- db.formatted[,-c("isHuman", "isMicrobe")]
 
-  db.formatted
+  list(db = db.formatted, version = version)
+
 }
 
 build.PHENOLEXPLORER <- function(outfolder){ # WORKS
@@ -1562,6 +1669,11 @@ build.PHENOLEXPLORER <- function(outfolder){ # WORKS
       "compounds-structures.csv.zip",
       "metabolites.csv.zip",
       "metabolites-structures.csv.zip"))
+
+  theurl="http://phenol-explorer.eu/"
+  header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
+  version = stringr::str_match(header,
+                               pattern = "Welcome to Phenol-Explorer (\\d\\.\\d)")[,2]
 
   base.loc <- file.path(outfolder, "phenolexplorer_source")
   if(!dir.exists(base.loc)) dir.create(base.loc)
@@ -1616,10 +1728,17 @@ build.PHENOLEXPLORER <- function(outfolder){ # WORKS
   db.formatted <- db.formatted[ , .(description = paste(description, collapse=". ")),
                                 by = c("compoundname", "baseformula", "identifier", "charge", "structure")]
 
-  db.formatted
+  list(db = db.formatted, version = version)
+
 }
 
 build.MASSBANK <- function(outfolder){ # WORKS
+
+  theurl = "https://massbank.eu/MassBank/"
+  header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
+  version = stringr::str_match(header,
+                               pattern = "Update (.* 20\\d\\d):")[,2]
+
   file.url <- "https://github.com/MassBank/MassBank-data/archive/master.zip"
   base.loc <- file.path(outfolder, "massbank_source")
   if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
@@ -1669,16 +1788,25 @@ build.MASSBANK <- function(outfolder){ # WORKS
                             FUN = function(x) paste0(unique(x), collapse="/"))
 
   db.formatted <- db.formatted[,-1]
-  db.formatted
+
+  list(db = db.formatted, version = version)
 }
 
+# ======= HERE WITH VERSION NUMBERS =======
+
 build.BMDB <- function(outfolder){
+
+  theurl = "http://bmdb.wishartlab.com/about"
+  header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
+  version = stringr::str_match(header,
+                               pattern = "BMDB Version <strong>(\\d.\\d)")[,2]
+
   file.url = "http://www.cowmetdb.ca/public/downloads/current/metabocards.gz"
   base.loc <- file.path(outfolder, "bmdb_source")
   if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
   gz.file <- file.path(base.loc, "bmdb.gz")
   utils::download.file(file.url, gz.file,mode = "wb", cacheOK = T)
-  zz = gzfile(gz.file,'rt')
+  zz = gzfile(gz.file, 'rt')
   dat = readLines(zz)
   dat.pasted = paste0(dat, collapse = ";")
   n = sum(grepl("END_METABOCARD",dat))
@@ -1702,12 +1830,15 @@ build.BMDB <- function(outfolder){
   })
   db.formatted = data.table::rbindlist(db.rows)
   db.formatted$charge <- c(0)
-  db.formatted
+
+  list(db = db.formatted, version = version)
+
 }
 
 build.RMDB <- function(outfolder){
   file.url = "http://www.rumendb.ca/public/downloads/current/metabocards.gz"
   base.loc <- file.path(outfolder, "rmdb_source")
+  version = Sys.Date()
   if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
   gz.file <- file.path(base.loc, "rmdb.gz")
   utils::download.file(file.url, gz.file,mode = "wb", cacheOK = T)
@@ -1735,10 +1866,18 @@ build.RMDB <- function(outfolder){
   })
   db.formatted = data.table::rbindlist(db.rows)
   db.formatted$charge = c(0)
-  db.formatted
+
+  list(db = db.formatted, version = version)
+
 }
 
 build.ECMDB <- function(outfolder){
+
+  theurl = "http://ecmdb.ca/downloads"
+  header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
+  version = stringr::str_match(header,
+                               pattern = "Version <strong>(\\d.\\d)")[,2]
+
   file.url = "http://ecmdb.ca/download/ecmdb.json.zip"
   base.loc <- file.path(outfolder, "ecmdb_source")
   if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
@@ -1756,44 +1895,45 @@ build.ECMDB <- function(outfolder){
     charge = db.base$moldb_formal_charge,
     structure = db.base$moldb_smiles
   )
-  db.formatted
+
+  list(db = db.formatted, version = version)
+
 }
 
 build.LMDB <- function(outfolder){
-  file.url = "http://lmdb.ca/system/downloads/current/structures.zip"
-  base.loc <- file.path(outfolder, "lmdb_source")
-  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
-  zip.file <- file.path(base.loc, "lmdb.zip")
-  utils::download.file(file.url, zip.file,mode = "wb", cacheOK = T)
-  utils::unzip(zip.file, exdir = base.loc)
-  sdf.path <- list.files(base.loc,
-                         pattern = "sdf$",
-                         full.names = T,
-                         recursive = T)
-
-  desc <- function(sdfset){
-    mat <- NULL
-    db <- data.table::as.data.table(ChemmineR::datablock2ma(datablocklist=ChemmineR::datablock(sdfset)))
-    info = data.table::data.table(identifier = db$DATABASE_ID,
-                                  compoundname = db$GENERIC_NAME,
-                                  structure = db$SMILES,
-                                  baseformula = db$JCHEM_FORMULA,
-                                  description = paste0("Synonyms: ", db$SYNONYMS))
-    info
-  }
-
-  out.csv = file.path(base.loc,
-                      "lmdb_parsed.csv")
-  if(file.exists(out.csv)){
-    file.remove(out.csv)
-  }
-
-  require(ChemmineR)
-  sdfStream.joanna(input=sdf.path, output=out.csv,
-                   append=FALSE,
-                   fct=desc,
-                   silent = T)
-
+  # file.url = "http://lmdb.ca/system/downloads/current/structures.zip"
+  # base.loc <- file.path(outfolder, "lmdb_source")
+  # if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
+  # zip.file <- file.path(base.loc, "lmdb.zip")
+  # utils::download.file(file.url, zip.file,mode = "wb", cacheOK = T)
+  # utils::unzip(zip.file, exdir = base.loc)
+  # sdf.path <- list.files(base.loc,
+  #                        pattern = "sdf$",
+  #                        full.names = T,
+  #                        recursive = T)
+  #
+  # desc <- function(sdfset){
+  #   mat <- NULL
+  #   db <- data.table::as.data.table(ChemmineR::datablock2ma(datablocklist=ChemmineR::datablock(sdfset)))
+  #   info = data.table::data.table(identifier = db$DATABASE_ID,
+  #                                 compoundname = db$GENERIC_NAME,
+  #                                 structure = db$SMILES,
+  #                                 baseformula = db$JCHEM_FORMULA,
+  #                                 description = paste0("Synonyms: ", db$SYNONYMS))
+  #   info
+  # }
+  #
+  # out.csv = file.path(base.loc,
+  #                     "lmdb_parsed.csv")
+  # if(file.exists(out.csv)){
+  #   file.remove(out.csv)
+  # }
+  #
+  # require(ChemmineR)
+  # sdfStream.joanna(input=sdf.path, output=out.csv,
+  #                  append=FALSE,
+  #                  fct=desc,
+  #                  silent = T)
   #db.struct <- data.table::fread(file.path(base.loc, "lmdb_parsed.csv"), fill = T, header=T)
   # - lmdb is only available as seperate file here -
   #
@@ -1806,6 +1946,11 @@ build.LMDB <- function(outfolder){
   #                   structure = moldb_smiles,
   #                   description = description,
   #                   charge = c(0))]
+  theurl = "http://lmdb.ca/"
+  header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
+  version = stringr::str_match(header,
+                               pattern = "Version <strong>(\\d.\\d)")[,2]
+
   data(lmdb)
   # descs = data.table::fread("~/Downloads/lmdb_descriptions.csv", header=T)
   # descs <- data.table::data.table(identifier = c(colnames(descs)[1], descs[,1][[1]]),
@@ -1814,7 +1959,9 @@ build.LMDB <- function(outfolder){
   # lmdb = merge(db.a, descs)
   #lmdb <- db.final
   db.formatted <- lmdb
-  db.formatted
+
+  list(db = db.formatted, version = version)
+
 }
 
 build.YMDB <- function(outfolder){
@@ -1882,7 +2029,14 @@ build.YMDB <- function(outfolder){
                            description = if(is.na(row$description.x)) row$description.y else row$description.x)
   })
   db.formatted = data.table::rbindlist(db.rows)
-  db.formatted
+
+  theurl = "http://www.ymdb.ca/about"
+  header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
+  version = stringr::str_match(header,
+                               pattern = "Version <strong>(\\d.\\d)")[,2]
+
+  list(db = db.formatted, version = version)
+
 }
 
 build.PAMDB <- function(outfolder){
@@ -1898,7 +2052,12 @@ build.PAMDB <- function(outfolder){
                                          baseformula = c(NA),
                                          description = gsub(gsub(db.base$Reactions, pattern="\\r", replacement=", "), pattern="\\n", replacement=""),
                                          charge=db.base$Charge)
-  db.formatted
+  theurl = "http://pseudomonas.umaryland.edu/"
+  header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
+  version = stringr::str_match(header,
+                               pattern = "Version  <STRONG>(\\d.\\d)")[,2]
+
+  list(db = db.formatted, version = version)
 }
 
 build.mVOC <- function(outfolder){
@@ -1952,6 +2111,13 @@ build.mVOC <- function(outfolder){
 
   db.formatted <- data.table::rbindlist(db_rows[sapply(db_rows, function(x) !is.null(nrow(x)))])
 
+  theurl = "http://bioinformatics.charite.de/mvoc/index.php?site=home"
+  header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
+  version = stringr::str_match(header,
+                               pattern = "mVOC (\\d.\\d)")[,2]
+
+  list(db = db.formatted, version = version)
+
 }
 
 build.NANPDB <- function(outfolder){
@@ -1964,7 +2130,10 @@ build.NANPDB <- function(outfolder){
   db.formatted = db.base[, .(identifier = V2, structure = V1, compoundname = V3)]
   db.formatted$charge = c(0)
   db.formatted$description = c("Found in North Africa. For more info,check the NANPDB website.")
-  db.formatted
+
+  version = Sys.Date()
+
+  list(db = db.formatted, version = version)
 }
 
 build.STOFF <- function(outfolder){
@@ -1986,6 +2155,8 @@ build.STOFF <- function(outfolder){
   db.base.aggr$charge = c(0)
   db.formatted = db.base.aggr[!is.na(compoundname)]
   colnames(db.formatted)[1] <- "identifier"
-  db.formatted
+
+  version = Sys.Date()
+  list(db = db.formatted, version = version)
 }
 
