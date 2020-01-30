@@ -1528,7 +1528,7 @@ build.METABOLIGHTS <- function(outfolder){
     if(is.null(id)){
       return(data.table::data.table())
     }else{
-      studies = overview[identifier == id, ..description]
+      studies = overview[identifier == id, study]
       study.summary = paste0(unlist(studies), collapse=" ")
       row$description <- paste0(row$description, " Mentioned in the following studies --> ", study.summary)
       return(row)
