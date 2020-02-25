@@ -21,8 +21,15 @@ searchMZ <- function(mzs, ionmodes, outfolder,
   # create temp range tables for chosen mz (mimic mzvals, mzrangea
   mzvals = data.table::data.table(mzmed = as.numeric(mzs),
                                   foundinmode=ionmodes)
-  mzranges = data.table::data.table(mzmin=sapply(as.numeric(mzs), function(mz) mz - (mz*(ppm*1e-6))),
-                                    mzmax=sapply(as.numeric(mzs), function(mz) mz + (mz*(ppm*1e-6))))
+  eachPPM <- length(ppm) > 1
+
+  mzranges = data.table::rbindlist(lapply(1:length(mzs), function(i){
+    mz = as.numeric(mzs[i])
+    if(eachPPM) ppm <- as.numeric(ppm[i])
+    data.table::data.table(mzmin = mz - (mz*(ppm*1e-6)),
+                           mzmax = mz + (mz*(ppm*1e-6)))
+  }))
+
   # create tables
   RSQLite::dbExecute(conn, "DROP TABLE IF EXISTS mzvals")
   sql.make.meta <- strwrap("CREATE TABLE mzvals(

@@ -134,6 +134,8 @@ cleanDB <- function(db.formatted, cl, silent, blocksize){
       valid.struct = valid.struct[-null.or.na]
     }
 
+    print(head(db.removed.invalid))
+
     checked <- enviPat::check_chemform(isotopes,
                                        chemforms = as.character(db.removed.invalid$baseformula))
 
@@ -153,19 +155,6 @@ cleanDB <- function(db.formatted, cl, silent, blocksize){
       db.removed.invalid <- db.removed.invalid[-invalid.formula,]
     }
 
-    #deuterated = which(grepl("D\\d*", x = db.removed.invalid$baseformula))
-    # if(length(deuterated)>0){
-    #   nondeuterated = gsub("D(\\d)*", "H\\1", db.removed.invalid$baseformula[deuterated])
-    #   matching = data.table::as.data.table(db.removed.invalid)[baseformula %in% nondeuterated,]
-    #   if(nrow(matching)>0){
-    #     print("in progress... merge descriptions and add a note for deuterated")
-    #   }else{
-    #     db.removed.invalid$baseformula[deuterated] <- gsub("D(\\d)*", "H\\1",
-    #                                                        db.removed.invalid$baseformula[deuterated])
-    #     db.removed.invalid$description[deuterated] <- paste0("THIS DESCRIPTION IS FOR A SPECIFIC ISOTOPE, LIKELY NOT THE 100 PEAK!",
-    #                                                          db.removed.invalid$description[deuterated])
-    #   }
-    # }
     return(db.removed.invalid)
   })
 
@@ -219,16 +208,17 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
   if(dbname == "maconda") return(NA)
 
   print(db.formatted.all$version)
+  print(head(db.formatted.all$db))
 
   db.formatted <- data.table::as.data.table(db.formatted.all$db)
   db.formatted <- data.frame(lapply(db.formatted, as.character), stringsAsFactors=FALSE)
 
   #options(java.home="C:\\Program Files\\Java\\jre1.8.0_221/") # windows...
 
-  db.final <- cleanDB(db.formatted,
-                      cl = cl,
-                      silent = silent,
-                      blocksize=400)
+  db.final <- MetaDBparse::cleanDB(db.formatted,
+                                   cl = cl,
+                                   silent = silent,
+                                   blocksize=400)
 
   # - - - - - - - - - - - - - - - - - -
   writeDB(conn, data.table::data.table(date = Sys.Date(),

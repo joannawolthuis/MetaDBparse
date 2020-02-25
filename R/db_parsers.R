@@ -317,11 +317,12 @@ build.METACYC <- function(outfolder){ # WORKS
   colnames(metacyc.raw) <- gsub(x=as.character(colnames(metacyc.raw)), pattern = '\\"', replacement="")
   metacyc.raw[] <- lapply(metacyc.raw, gsub, pattern = '\\"', replacement = "")
 
-  compounds <- pbapply::pbsapply(metacyc.raw$`Compound Name`, FUN=function(pw){
+  compounds <- pbapply::pbsapply(metacyc.raw$`Common-Name`, FUN=function(pw){
     pw <- iconv(pw, "latin1", "UTF-8",sub='')
     pw <- pw[pw != " // "]
     pw <- gsub(pw, pattern = "&", replacement="")
     pw <- gsub(pw, pattern = ";", replacement="")
+    res <- gsub(pw, pattern = "<(i|\\/i)>", replacement = "",perl = T)
     res <- gsub(pw, pattern = "<((i|\\/i)|sub)>|\\/|\\|", replacement = "",perl = T)
     paste0(res, collapse=" --- ")
   })
@@ -332,7 +333,7 @@ build.METACYC <- function(outfolder){ # WORKS
                                            paste0(metacyc.raw$Summary[i], if(species != "") paste0(" Found in: ", species, ".") else "")
                                          }),
                                          baseformula = c(NA),
-                                         identifier = paste0("METACYC_CP_", 1:nrow(metacyc.raw)),
+                                         identifier = metacyc.raw$`Object ID`,
                                          charge = c(0),
                                          structure = metacyc.raw$SMILES)
   list(db = db.formatted, version = version)

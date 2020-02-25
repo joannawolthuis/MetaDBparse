@@ -232,6 +232,7 @@ buildExtDB <- function(outfolder,
                                  struct_id INT PRIMARY KEY,
                                  smiles TEXT,
                                  UNIQUE(struct_id, smiles))")
+
   # TODO: extra table with structure -> adduct combinations already done
   # IF STRUCTURES ALREADY IN db:
   # on start, check if new adduct for these structures
@@ -239,15 +240,15 @@ buildExtDB <- function(outfolder,
   # do all adducts with the new compounds as usual
 
   if(RSQLite::dbExistsTable(full.conn, "extended")){
-    new_adducts <- setdiff(adduct_table$Name,
-                           RSQLite::dbGetQuery(full.conn,
-                                               "SELECT DISTINCT Name FROM adducts")[,1])
+    done_adducts <- RSQLite::dbGetQuery(full.conn,
+                                        gsubfn::fn$paste("SELECT DISTINCT Name FROM adducts
+                                                          WHERE dbname == '$base.dbname'"))[,1]
+    new_adducts <- setdiff(adduct_table$Name, done_adducts)
   }else{
-    new_adducts <- adduct_table$Name
+    new_adducts <- adducts$Name
   }
 
   # old structures that need to be redone
-
   RSQLite::dbExecute(full.conn, strwrap("CREATE TABLE IF NOT EXISTS extended(
                                          struct_id INT,
                                          fullformula text,
@@ -286,6 +287,7 @@ buildExtDB <- function(outfolder,
       adduct_only = if(nrow(to.do )== 0) T else F
       # and adjust adduct list
       if(adduct_only){
+        print(paste0("New adducts: ", paste0(new_adducts, collapse = ",")))
         to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula,
                                                               structure, charge
                                               FROM tmp.base")
@@ -313,13 +315,22 @@ buildExtDB <- function(outfolder,
                                   smiles = to.do$structure,
                                   baseformula = to.do$baseformula,
                                   charge = as.numeric(to.do$charge))
+
+  if(adduct_only){
+    print("Getting structure IDs...")
+    mapper_now <- unique(mapper[,-"struct_id"])
+    DBI::dbWriteTable(full.conn, "mapper", mapper_now, overwrite=T)
+    mapper_filled <- data.table::as.data.table(RSQLite::dbGetQuery(full.conn, "SELECT * FROM structures s JOIN mapper m ON s.smiles = m.smiles"))
+    mapper <- mapper_filled[,c("struct_id", "smiles", "baseformula", "charge")]
+  }
+
   mapper[is.na(charge)]$charge <- c(0)
 
   print(paste("Parsing", nrow(mapper), "new compounds..."))
 
   blocks = split(mapper, ceiling(seq_along(1:nrow(mapper))/blocksize))
 
-  tempdir = file.path(outfolder, "extended_inprogress")
+  tempdir = file.path(outfolder, paste0(ext.dbname, "_inprogress"))
   if(dir.exists(tempdir)){
     unlink(tempdir,recursive = T)
   }
@@ -437,15 +448,20 @@ buildExtDB <- function(outfolder,
 
     to.write = data.table::rbindlist(per.adduct.tables)
 
+    print(to.write)
+
     if(nrow(to.write)>0){
       structs = unique(blocks[[i]][,c("struct_id", "smiles")])
-          data.table::fwrite(to.write,
-                             file=tmpfiles.ext[i],
-                             append=F)
-          data.table::fwrite(structs,
-                             file = tmpfiles.struct[i],
-                             append=F)
+      data.table::fwrite(to.write[,c("struct_id","fullformula",
+                                     "finalcharge",
+                                     "fullmz","adduct","isoprevalence")],
+                         file=tmpfiles.ext[i],
+                         append=F)
+      data.table::fwrite(structs,
+                         file = tmpfiles.struct[i],
+                         append=F)
     }
+
     #RSQLite::dbExecute(full.conn, "PRAGMA wal_checkpoint(TRUNCATE)")
   },mzrange=mzrange, silent=silent, blocks=blocks,
   adduct_table=adduct_table, adduct_rules=adduct_rules,
@@ -458,21 +474,32 @@ buildExtDB <- function(outfolder,
   pbapply::pbsapply(1:length(blocks), function(i){
     full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
     try({
-      extended = data.table::fread(tmpfiles.ext[i])
-      structures = data.table::fread(tmpfiles.struct[i])
-      RSQLite::dbWriteTable(full.conn, "extended", extended, append=T)
+      extended_csv = tmpfiles.ext[i]
+      structures_csv = tmpfiles.struct[i]
+      RSQLite::dbWriteTable(full.conn, "extended", extended_csv, append=T)
       if(!adduct_only){
-        RSQLite::dbWriteTable(full.conn, "structures", structures, append=T)
+        RSQLite::dbWriteTable(full.conn, "structures", structures_csv, append=T)
       }
     })
     RSQLite::dbDisconnect(full.conn)
   })
 
   full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
+
+  adduct_table$dbname <- base.dbname
+
+  if(!first.db){
+    existing_adducts <- RSQLite::dbReadTable(full.conn, "adducts")
+    #existing_adducts <- existing_adducts[!(grepl("NaCl", x = existing_adducts$Name))]
+    adduct_tbl_named <- unique(rbind(adduct_table, existing_adducts))
+  }else{
+    adduct_tbl_named <- adduct_table
+  }
+
   RSQLite::dbWriteTable(full.conn,
                         "adducts",
-                        as.data.frame(adduct_table),
-                        overwrite=T)
+                        as.data.frame(adduct_tbl_named),overwrite=T)
+
   RSQLite::dbDisconnect(full.conn)
 
  unlink(c(tmpfiles.ext, tmpfiles.struct))
