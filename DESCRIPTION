@@ -41,6 +41,3 @@ Imports:
   httr,
   devtools,
   SPARQL
-Remotes:
-  bioc::ChemmineR,
-  bioc::KEGGREST
