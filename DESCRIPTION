@@ -10,11 +10,36 @@ License: What license is it under?
 Encoding: UTF-8
 LazyData: true
 Imports:
-  data.table,
+  rcdk,
+  rJava,
   enviPat,
-  stringr,
-  xml2,
-  rvest,
-  rpubchem,
+  data.table,
+  parallel,
+  pbapply,
+  RSQLite,
+  DBI,
+  gsubfn,
+  utils,
+  XML,
+  RCurl,
   rlist,
-  rapport
+  base,
+  stringr,
+  WikidataQueryServiceR,
+  webchem,
+  openxlsx,
+  jsonlite,
+  R.utils,
+  rapport,
+  zip,
+  rvest,
+  xml2,
+  stringi,
+  curl,
+  reshape2,
+  Hmisc,
+  httr,
+  devtools
+Remotes:
+  bioc::ChemmineR, 
+  bioc::KEGGREST
