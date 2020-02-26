@@ -39,7 +39,8 @@ Imports:
   reshape2,
   Hmisc,
   httr,
-  devtools
+  devtools,
+  SPARQL
 Remotes:
   bioc::ChemmineR,
   bioc::KEGGREST
