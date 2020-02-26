@@ -33,8 +33,6 @@ writeDB <- function(conn, table, tblname){
 sdfStream.joanna <- function (input, output, append = FALSE, fct, Nlines = 10000,
                               startline = 1, restartNlines = 10000, silent = FALSE, ...)
 {
-  require(ChemmineR)
-
   stop <- FALSE
   f <- file(input, "r")
   n <- Nlines
@@ -93,28 +91,15 @@ sdfStream.joanna <- function (input, output, append = FALSE, fct, Nlines = 10000
                                                1, index[-length(index)] + 1), SDFlineEnd = index)
       offset <- indexDF[length(indexDF[, 2]), 2]
       sdfset <- read.SDFset(read.SDFstr(complete))
-      #valid <- validSDF(sdfset)
-      #sdfset <- sdfset[valid]
-      #indexDForig <- indexDF
-      #indexDF <- indexDF[valid, ]
+
       if (length(indexDF[, 1]) == 1) {
         suppressWarnings(sdfset <- c(sdfset, sdfset))
         resultMA <- fct(sdfset, ...)
-        # resultMA <- cbind(as.data.frame(indexDF), as.data.frame(resultMA[1,
-        #                                                                  , drop = FALSE]), row.names = row.names(resultMA)[1])
-      }
+              }
       else {
         resultMA <- fct(sdfset, ...)
-        # resultMA <- cbind(as.data.frame(indexDF), as.data.frame(resultMA),
-        #                   row.names = row.names(resultMA))
-      }
-      #resultMA <- resultMA[names(valid), ]
-      #if (any(is.na(resultMA))) {
-      #  resultMA[, 1:2] <- indexDForig[, 1:2]
-      #}
-      #rownames(resultMA) <- paste("CMP", cmpid:(cmpid +
-      #                                            length(resultMA[, 1]) - 1), sep = "")
-      #cmpid <- cmpid + length(resultMA[, 1])
+              }
+
       if (silent == FALSE) {
         print(rownames(resultMA))
       }

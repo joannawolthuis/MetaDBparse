@@ -1,7 +1,4 @@
 smiles.to.iatom <- function(smiles, silent=T, cl=0){
-
-  require(rcdk)
-
   iatoms <- sapply(smiles, function(x, silent){
     mol=NULL
     try({
@@ -41,8 +38,6 @@ iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=T){
     cat("Defaulting to 'Canonical'.")
   }
 
-  require(rcdk)
-
   new.smiles <- sapply(iatoms, function(mol, silent){
     smi = ""
     try({
@@ -60,8 +55,6 @@ iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=T){
 }
 
 iatom.to.charge <- function(iatoms, silent=T){
-
-  require(rcdk)
 
   new.charges <- sapply(iatoms, function(mol, silent){
     ch=0
@@ -81,8 +74,6 @@ iatom.to.charge <- function(iatoms, silent=T){
 
 iatom.to.formula <- function(iatoms, silent=T){
 
-  require(rcdk)
-
   new.formulas <- sapply(iatoms, function(mol,silent){
     form = NULL
     try({
@@ -99,44 +90,8 @@ iatom.to.formula <- function(iatoms, silent=T){
   return(new.formulas)
 }
 
-# BIG BOI
-
-buildBaseDB <- function(outfolder, dbname,
-                        smitype = "Canonical", silent=T, cl=0){
-
-  require(enviPat)
-  data(isotopes)
-
-  removeDB(outfolder, paste0(dbname,".db"))
-  conn <- openBaseDB(outfolder, paste0(dbname,".db"))
-  db.formatted <- switch(dbname,
-                    chebi = build.CHEBI(outfolder),
-                    maconda = build.MACONDA(outfolder),
-                    kegg = build.KEGG(outfolder),
-                    bloodexposome = build.BLOODEXPOSOME(outfolder),
-                    dimedb = build.DIMEDB(outfolder),
-                    expoexplorer = build.EXPOSOMEEXPLORER(outfolder),
-                    foodb = build.FOODB(outfolder),
-                    drugbank = build.DRUGBANK(outfolder),
-                    lipidmaps = build.LIPIDMAPS(outfolder),
-                    massbank = build.MASSBANK(outfolder),
-                    metabolights = build.METABOLIGHTS(outfolder),
-                    metacyc = build.METACYC(outfolder),
-                    phenolexplorer = build.PHENOLEXPLORER(outfolder),
-                    respect = build.RESPECT(outfolder),
-                    wikidata = build.WIKIDATA(outfolder),
-                    wikipathways = build.WIKIPATHWAYS(outfolder),
-                    t3db = build.T3DB(outfolder),
-                    vmh = build.VMH(outfolder),
-                    hmdb = build.HMDB(outfolder),
-                    smpdb = build.SMPDB(outfolder),
-                    supernatural = build.SUPERNATURAL(outfolder))
-
-  db.formatted <- data.table::as.data.table(db.formatted)
-
-  options(java.home="C:\\Program Files\\Java\\jre1.8.0_221/")
-
-  blocks = split(1:nrow(db.formatted), ceiling(seq_along(1:nrow(db.formatted))/1000))
+cleanDB <- function(db.formatted, cl, silent, blocksize){
+  blocks = split(1:nrow(db.formatted), ceiling(seq_along(1:nrow(db.formatted))/blocksize))
 
   if(is.list(cl)){
     parallel::clusterExport(cl, varlist = c("db.formatted",
@@ -157,9 +112,7 @@ buildBaseDB <- function(outfolder, dbname,
     iats = smiles.to.iatom(db.form.block$structure,
                            silent=silent)
 
-  valid.struct <- unlist(lapply(iats, function(x) !is.null(x)))
-
-    require(enviPat)
+    valid.struct <- unlist(lapply(iats, function(x) !is.null(x)))
 
     new.smiles = iatom.to.smiles(iats[valid.struct], smitype = "Canonical",silent=silent)
 
@@ -176,10 +129,12 @@ buildBaseDB <- function(outfolder, dbname,
     formulas = as.character(db.redone.struct$baseformula)
     null.or.na <- which(is.null(formulas) | is.na(formulas) | formulas == "NULL")
 
-    if(length(null.or.na)>0){
+    if(length(null.or.na) > 0){
       db.removed.invalid <- db.removed.invalid[-null.or.na,]
       valid.struct = valid.struct[-null.or.na]
     }
+
+    print(head(db.removed.invalid))
 
     checked <- enviPat::check_chemform(isotopes,
                                        chemforms = as.character(db.removed.invalid$baseformula))
@@ -200,25 +155,75 @@ buildBaseDB <- function(outfolder, dbname,
       db.removed.invalid <- db.removed.invalid[-invalid.formula,]
     }
 
-    deuterated = which(grepl("D\\d*", x = db.removed.invalid$baseformula))
-
-    if(length(deuterated)>0){
-      nondeuterated = gsub("D(\\d)*", "H\\1", db.removed.invalid$baseformula[deuterated])
-      matching = data.table::as.data.table(db.removed.invalid)[baseformula %in% nondeuterated,]
-      if(nrow(matching)>0){
-        print("in progress... merge descriptions and add a note for deuterated")
-      }else{
-        db.removed.invalid$baseformula[deuterated] <- gsub("D(\\d)*", "H\\1",
-                                                           db.removed.invalid$baseformula[deuterated])
-        db.removed.invalid$description[deuterated] <- paste0("THIS DESCRIPTION IS FOR A SPECIFIC ISOTOPE, LIKELY NOT THE 100 PEAK!",
-                                                             db.removed.invalid$description[deuterated])
-      }
-    }
     return(db.removed.invalid)
   })
 
-  db.final <- data.table::rbindlist(db.fixed.rows)
+  return(data.table::rbindlist(db.fixed.rows))
+}
+
+# BIG BOI
+
+buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
+                        smitype = "Canonical", silent=T, cl=0){
+
+  removeDB(outfolder, paste0(dbname,".db"))
+  conn <- openBaseDB(outfolder, paste0(dbname,".db"))
+  if(is.null(custom_csv_path)){
+    db.formatted.all <- switch(dbname,
+                           chebi = build.CHEBI(outfolder),
+                           maconda = build.MACONDA(outfolder, conn),
+                           kegg = build.KEGG(outfolder),
+                           bloodexposome = build.BLOODEXPOSOME(outfolder),
+                           dimedb = build.DIMEDB(outfolder),
+                           expoexplorer = build.EXPOSOMEEXPLORER(outfolder),
+                           foodb = build.FOODB(outfolder),
+                           drugbank = build.DRUGBANK(outfolder),
+                           lipidmaps = build.LIPIDMAPS(outfolder),
+                           massbank = build.MASSBANK(outfolder),
+                           metabolights = build.METABOLIGHTS(outfolder),
+                           metacyc = build.METACYC(outfolder),
+                           phenolexplorer = build.PHENOLEXPLORER(outfolder),
+                           respect = build.RESPECT(outfolder),
+                           wikidata = build.WIKIDATA(outfolder),
+                           #wikipathways = build.WIKIPATHWAYS(outfolder),
+                           t3db = build.T3DB(outfolder),
+                           vmh = build.VMH(outfolder),
+                           hmdb = build.HMDB(outfolder),
+                           smpdb = build.SMPDB(outfolder),
+                           lmdb = build.LMDB(outfolder),
+                           ymdb = build.YMDB(outfolder),
+                           ecmdb = build.ECMDB(outfolder),
+                           bmdb = build.BMDB(outfolder),
+                           rmdb = build.RMDB(outfolder),
+                           stoff = build.STOFF(outfolder),
+                           nanpdb = build.NANPDB(outfolder),
+                           mcdb = build.MCDB(outfolder),
+                           mvoc = build.mVOC(outfolder),
+                           pamdb = build.PAMDB(outfolder))
+  }else{
+    db.formatted.all <- list(db = data.table::fread(custom_csv_path, header=T),
+                             version = Sys.time())
+  }
+
+  if(dbname == "maconda") return(NA)
+
+  print(db.formatted.all$version)
+  print(head(db.formatted.all$db))
+
+  db.formatted <- data.table::as.data.table(db.formatted.all$db)
+  db.formatted <- data.frame(lapply(db.formatted, as.character), stringsAsFactors=FALSE)
+
+  #options(java.home="C:\\Program Files\\Java\\jre1.8.0_221/") # windows...
+
+  db.final <- MetaDBparse::cleanDB(db.formatted,
+                                   cl = cl,
+                                   silent = silent,
+                                   blocksize=400)
+
   # - - - - - - - - - - - - - - - - - -
+  writeDB(conn, data.table::data.table(date = Sys.Date(),
+                                       version = db.formatted.all$version),
+          "metadata")
   writeDB(conn, db.final, "base")
   RSQLite::dbExecute(conn, "CREATE INDEX b_idx1 ON base(structure)")
   DBI::dbDisconnect(conn)

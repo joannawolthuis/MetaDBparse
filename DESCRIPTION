@@ -4,14 +4,40 @@ Title: What the Package Does (Title Case)
 Version: 0.1.0
 Author: Joanna Wolthuis
 Maintainer: Joanna Wolthuis <J.C.Wolthuis-2@umcutrecht.nl>
+Depends:
+    R (>= 2.10)
 Description: More about what it does (maybe more than one line)
     Use four spaces when indenting paragraphs within the Description.
 License: What license is it under?
 Encoding: UTF-8
 LazyData: true
 Imports:
+<<<<<<< HEAD
   rcdk,
   rJava,
+=======
+  ChemmineR,
+  KEGGREST,
+  R.utils,
+  DBI, 
+  Hmisc,
+  KEGGREST, 
+  R.utils, 
+  RCurl, 
+  RSQLite,
+  WikidataQueryServiceR,
+  gsubfn, 
+  httr, 
+  jsonlite, 
+  openxlsx,
+  pbapply,
+  rJava,
+  rcdk, 
+  reshape2, 
+  zip,
+  methods,
+  data.table,
+>>>>>>> d135d17d17293718a476c8957bef1fc2e6faa29b
   enviPat,
   data.table,
   parallel,
@@ -25,6 +51,7 @@ Imports:
   rlist,
   base,
   stringr,
+<<<<<<< HEAD
   WikidataQueryServiceR,
   webchem,
   openxlsx,
@@ -43,3 +70,14 @@ Imports:
 Remotes:
   bioc::ChemmineR, 
   bioc::KEGGREST
+=======
+  stringi,
+  webchem,
+  xml2,
+  rpubchem,
+  rlist,
+  rvest,
+  rapport,
+  SPARQL,
+  XML
+>>>>>>> d135d17d17293718a476c8957bef1fc2e6faa29b
