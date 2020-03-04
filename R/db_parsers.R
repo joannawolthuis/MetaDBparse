@@ -2161,3 +2161,72 @@ build.STOFF <- function(outfolder){
   list(db = db.formatted, version = version)
 }
 
+build.SIGMA <- function(outfolder){
+  theurl <- "https://www.sigmaaldrich.com/catalog/search?interface=All&N=9634086+4294494793&page=1&mode=partialmax&focus=product&lang=en&region=global"
+  header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
+  content <- readLines(theurl)
+  doc <- XML::htmlParse(content)
+
+  n <- {
+    lineWithCount <- as.character(grep(content, pattern="CreatePageviewTag", value=T))
+    as.numeric(stringr::str_match(string = lineWithCount,
+                       pattern="\\d+")[,1])
+  }
+  pages = ceiling(n/30)
+
+  splitAt <- function(x, pos) {
+    out <- list()
+    pos2 <- c(1, pos, length(x)+1)
+    for (i in seq_along(pos2[-1])) {
+      out[[i]] <- x[pos2[i]:(pos2[i+1]-1)]
+    }
+    return(out)
+  }
+
+  html2txt <- function(str) {
+    XML::xpathApply(XML::htmlParse(str, asText=TRUE),
+               "//body//text()",
+               XML::xmlValue)[[1]]
+  }
+
+  db_rows <- pbapply::pblapply(1:pages, function(page){
+    cpds = list()
+    try({
+      pageurl = gsubfn::fn$paste("https://www.sigmaaldrich.com/catalog/search?interface=All&N=9634086+4294494793&page=$page&mode=partialmax&focus=product&lang=en&region=global")
+      content <- readLines(pageurl)
+      empty = which(gsub(content, pattern=" |\\t", replacement="") == "")
+      content = content[-empty]
+      headers = grep(content, pattern = "h2")
+      spl = splitAt(content, headers)[2:30]
+      cpd.rows <- lapply(spl, function(l){
+        name <- html2txt(gsub(l[[1]], pattern="<.*?>", replacement=""))
+        formula = stringr::str_match(str = grep(l,
+                                                 pattern = "Empirical Formula",
+                                                 value=T),
+                                      pattern = "Empirical Formula.*?<span.*?>(.*?)<\\/span>")[,2]
+        formula = gsub(formula, pattern = "<\\/?SUB>", replacement = "")
+        formula = gsub(formula, pattern = "<SUP>", replacement = "[")
+        formula = gsub(formula, pattern = "<\\/SUP>", replacement = "]")
+        productNames = trimws(html2txt(l[grep("productNumberValue", l)+1]))
+        productInfo = trimws(html2txt(l[grep("applicationValue", l)]))
+        res = data.table::data.table(identifier = paste0(productNames,collapse=","),
+                                     compoundname = name,
+                                     structure = NA,
+                                     baseformula = formula,
+                                     description = productInfo,
+                                     charge=c(0))
+        res[!is.na(baseformula)]
+      })
+      cpds = data.table::rbindlist(cpd.rows)
+    })
+    Sys.sleep(rnorm(n = 1, mean = 5, sd = 4))
+    cpds
+  })
+
+  db.formatted <- data.table::rbindlist(db_rows)
+  data.table::fwrite(db.formatted, "sigma.csv")
+  db.formatted$identifier <- gsub("·.*$| ", "", db.formatted$baseformula) # remove salts, hcl
+  db.formatted$baseformula <- gsub("·.*$| ", "", db.formatted$baseformula) # remove salts, hcl
+  version = Sys.Date()
+  list(db = db.formatted, version = version)
+}

@@ -215,16 +215,18 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
 
   #options(java.home="C:\\Program Files\\Java\\jre1.8.0_221/") # windows...
 
-  db.final <- MetaDBparse::cleanDB(db.formatted,
+  db.final <- data.table::as.data.table(MetaDBparse::cleanDB(db.formatted,
                                    cl = cl,
                                    silent = silent,
-                                   blocksize=400)
+                                   blocksize=400))
+
+  db.final <- db.final[, lapply(.SD, as.character)]
 
   # - - - - - - - - - - - - - - - - - -
   writeDB(conn, data.table::data.table(date = Sys.Date(),
                                        version = db.formatted.all$version),
           "metadata")
-  writeDB(conn, db.final, "base")
+  writeDB(conn, table = db.final, "base")
   RSQLite::dbExecute(conn, "CREATE INDEX b_idx1 ON base(structure)")
   DBI::dbDisconnect(conn)
 }
