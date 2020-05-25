@@ -94,14 +94,18 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
 
   checked = enviPat::check_chemform(isotopes,chemforms = formula)
 
-  #if(checked$warning) return(data.table::data.table())
+  phailed = which(checked$warning)
 
-  formula = checked$new_formula
+  if(all(checked$warning)) return(data.table::data.table())
 
   unique_formulas <- unique(data.table::data.table(
     structure = structure,
-    baseformula = formula,
+    baseformula = checked$new_formula,
     charge = charge))
+
+  if(length(phailed) > 0){
+    unique_formulas <- unique_formulas[-phailed,]
+  }
 
   adduct_before <- row$AddAt
   deduct_before <- row$RemAt
@@ -127,6 +131,8 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
     unique_formulas <- unique_formulas[can.deduct]
   }
 
+  unique_formulas <- unique_formulas[which(unique_formulas$adducted != "NANA"),]
+
   # --- multiplication ---
   multiplier <- as.numeric(row$xM)
 
@@ -144,13 +150,13 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
 
   if(!(adduct_after %in% c("", "FALSE", FALSE, NA))){
     unique_formulas$adducted <- enviPat::mergeform(formula1 = unique_formulas$adducted,
-                                                   formula2 = adduct_after)}
+                                                   formula2 = adduct_after)
+    }
 
   # --- is deduction necessary? ---
-  if(!(deduct_after  %in% c("", "FALSE", FALSE, NA))){
+  if(!(deduct_after %in% c("", "FALSE", FALSE, NA))){
     can.deduct <- which(!as.logical(enviPat::check_ded(formulas = unique_formulas$adducted,
                                                        deduct = deduct_after)))
-
     if(length(can.deduct) == 0) return(data.table::data.table())
     unique_formulas$adducted[can.deduct] <- enviPat::subform(unique_formulas$adducted[can.deduct], deduct_after)
     unique_formulas <- unique_formulas[can.deduct]
@@ -277,11 +283,13 @@ buildExtDB <- function(outfolder,
     to.do$struct_id <- c(NA)
     adduct_only = F
   }else{
+    #print(RSQLite::dbGetQuery(full.conn, "SELECT * FROM structures LIMIT 20"))
+    #print(RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge FROM tmp.base LIMIT 20"))
+
     to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge
                                             FROM tmp.base LEFT JOIN structures str
                                             ON base.structure = str.smiles
                                             WHERE str.smiles IS NULL")
-
     # if none, check for new adducts
     if(length(new_adducts) > 0){
       adduct_only = if(nrow(to.do )== 0) T else F
@@ -334,6 +342,7 @@ buildExtDB <- function(outfolder,
   if(dir.exists(tempdir)){
     unlink(tempdir,recursive = T)
   }
+
   dir.create(tempdir)
   tmpfiles.ext = sapply(1:length(blocks), function(i) file.path(tempdir, paste0(base.dbname,"_ext_", i, ".csv")))
   tmpfiles.struct = sapply(1:length(blocks), function(i) file.path(tempdir, paste0(base.dbname,"_str_", i, ".csv")))
@@ -343,15 +352,19 @@ buildExtDB <- function(outfolder,
   # - - - - L O O P  T H I S - - - - -
 
   # completely new compounds
-  per.adduct.tables = pbapply::pblapply(1:length(blocks), cl=cl, function(i, mzrange=mzrange, silent=silent, blocks=blocks,
-                                                                          adduct_table=adduct_table, adduct_rules=adduct_rules,
-                                                                          tmpfiles.ext=tmpfiles.ext, tmpfiles.struct=tmpfiles.struct,
-                                                                          mapper=mapper, use.rules = use.rules){
+  per.adduct.tables = pbapply::pblapply(1:length(blocks),
+                                        cl=cl,
+                                        function(i,
+                                                 mzrange=mzrange,
+                                                 silent=silent,
+                                                 blocks=blocks,
+                                                 adduct_table=adduct_table,
+                                                 adduct_rules=adduct_rules,
+                                                 tmpfiles.ext=tmpfiles.ext,
+                                                 tmpfiles.struct=tmpfiles.struct,
+                                                 mapper=mapper,
+                                                 use.rules = use.rules){
 
-    #full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
-    #RSQLite::dbExecute(full.conn, "PRAGMA busy_timeout=5000;")
-
-    print(i)
     # for each block
     block = blocks[[i]]
     last.block <<- block
@@ -448,8 +461,6 @@ buildExtDB <- function(outfolder,
 
     to.write = data.table::rbindlist(per.adduct.tables)
 
-    print(to.write)
-
     if(nrow(to.write)>0){
       structs = unique(blocks[[i]][,c("struct_id", "smiles")])
       data.table::fwrite(to.write[,c("struct_id","fullformula",
@@ -474,8 +485,8 @@ buildExtDB <- function(outfolder,
   pbapply::pbsapply(1:length(blocks), function(i){
     full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
     try({
-      extended_csv = tmpfiles.ext[i]
-      structures_csv = tmpfiles.struct[i]
+      extended_csv = data.table::fread(tmpfiles.ext[i])
+      structures_csv = data.table::fread(tmpfiles.struct[i])
       RSQLite::dbWriteTable(full.conn, "extended", extended_csv, append=T)
       if(!adduct_only){
         RSQLite::dbWriteTable(full.conn, "structures", structures_csv, append=T)

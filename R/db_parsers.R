@@ -72,7 +72,7 @@ build.MCDB <- function(outfolder){ # WORKS
       }
 
       if(line == "</metabolite>"){
-        m = m+1
+        idx <<- idx+1
         pbapply::setpb(pb, idx)
         acc = "primary"
         nm = "primary"
@@ -165,7 +165,7 @@ build.HMDB <- function(outfolder){ # WORKS
                         pattern = "<\\/?update_date>",
                         replacement = ""))
 
-  theurl <- RCurl::getURL("http://www.hmdb.ca/statistics",.opts = list(ssl.verifypeer = FALSE) )
+  theurl <- RCurl::getURL("https://hmdb.ca/statistics",.opts = list(ssl.verifypeer = FALSE) )
   tables <- XML::readHTMLTable(theurl)
   stats = data.table::rbindlist(tables)
   n = as.numeric(as.character(gsub(x = stats[Description == "Total Number of Metabolites"]$Count,
@@ -212,47 +212,53 @@ build.HMDB <- function(outfolder){ # WORKS
       }
 
       if(line == "</metabolite>"){
-        m = m+1
-        pbapply::setpb(pb, idx)
+        idx = idx + 1
+        if(idx %% 100 == 0){
+          pbapply::setpb(pb, idx)
+        }
         acc = "primary"
         nm = "primary"
         desc = "primary"
       }
 
-      tag = stringr::str_match(line, pattern = "<(.*?)>")[,2]
+      if(idx >= 2){
+        tag = stringr::str_match(line, pattern = "<(.*?)>")[,2]
 
-      switch(tag,
-             accession = {
-               if(acc == "primary"){
-                 db.formatted[idx,]$identifier <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
-                 acc <- "secondary"
-               }
-             },
-             name = {
-               if(nm == "primary"){
-                 db.formatted[idx,]$compoundname <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
-                 nm = "secondary"
-               }
-             },
-             smiles = {
-               db.formatted[idx,]$structure <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
-             },
-             description = {
-               if(desc == "primary"){
+        switch(tag,
+               accession = {
+                 if(acc == "primary"){
+                   db.formatted[idx,]$identifier <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+                   acc <- "secondary"
+                 }
+               },
+               name = {
+                 if(nm == "primary"){
+                   db.formatted[idx,]$compoundname <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+                   nm = "secondary"
+                 }
+               },
+               smiles = {
+                 db.formatted[idx,]$structure <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+               },
+               description = {
+                 if(desc == "primary"){
+                   db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description,
+                                                            " HMDB: ",
+                                                            trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
+                   desc = "secondary"
+                 }
+               },
+               cs_description = {
                  db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description,
-                                                          " HMDB: ",
+                                                          "From ChemSpider: ",
                                                           trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
-                 desc = "secondary"
-               }
-             },
-             cs_description = {
-               db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description,
-                                                        "From ChemSpider: ",
-                                                        trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
-             },
-             chemical_formula = {
-               db.formatted[idx,]$baseformula <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
-             })
+               },
+               chemical_formula = {
+                 db.formatted[idx,]$baseformula <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+               })
+      }
+
+
     }
     close(con)
   }else{
@@ -297,7 +303,14 @@ build.METACYC <- function(outfolder){ # WORKS
 
   source.file = file.path(base.loc, "All_compounds_of_MetaCyc.txt")
   if(!file.exists(source.file)){
-    message("Please download SmartTable from 'https://metacyc.org/group?id=biocyc17-31223-3787684059' as 'All_compounds_of_MetaCyc.txt' and save in the outfolder/metacyc_source folder.")
+    msg = "Please download SmartTable from 'https://trmetacyc.org/group?id=biocyc17-31223-3787684059' as 'All_compounds_of_MetaCyc.txt' and save in the databases/metacyc_source folder."
+    if("MetaboShiny" %in% (.packages())){
+      try({
+        MetaboShiny::metshiAlert(msg)
+      })
+    }else{
+      message(msg)
+    }
     return(NULL)
   }
 
@@ -584,20 +597,21 @@ build.CHEBI <- function(outfolder){ # WORKS
 }
 
 build.FOODB <- function(outfolder){ # WORKS
-  file.url <- "http://foodb.ca/public/system/downloads/foodb_2017_06_29_csv.tar.gz"
+  # TODO: make sure that it automatically grabs the most recent CSV?
+  file.url <- "https://foodb.ca/public/system/downloads/foodb_2020_4_7_csv.tar.gz"
   base.loc <- file.path(outfolder, "foodb_source")
   if(dir.exists(base.loc))(unlink(base.loc,recursive = T)); dir.create(base.loc, recursive = T);
   zip.file <- file.path(base.loc, "foodb.tar.gz")
   utils::download.file(file.url, zip.file, mode = 'wb', method = 'libcurl')
   utils::untar(normalizePath(zip.file), exdir = normalizePath(base.loc))
 
-  theurl <- RCurl::getURL("http://foodb.ca/downloads",.opts = list(ssl.verifypeer = FALSE))
+  theurl <- RCurl::getURL("https://foodb.ca/downloads",.opts = list(ssl.verifypeer = FALSE))
   version = stringr::str_match(theurl, pattern = "FooDB Version <strong>(...)<")[,2]
   date = stringr::str_match(theurl, pattern = "FooDB CSV file<\\/td><td>(.{3,40})<\\/td>")[,2]
   date = as.Date(date, format = "%B%e%Y")
   subdate = gsub(date, pattern = "-", replacement = "_")
 
-  base.table <- data.table::fread(file = file.path(base.loc, gsubfn::fn$paste("foodb_$subdate_csv"), "compounds.csv"))
+  base.table <- data.table::fread(file = file.path(base.loc, paste0("foodb_", subdate, "_csv"), "compounds.csv"))
 
   db.formatted <- data.table::data.table(compoundname = base.table$name,
                                          description = base.table$description,
@@ -780,7 +794,7 @@ build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
   if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
   zip.file <- file.path(base.loc, "maconda.zip")
 
-  theurl <- RCurl::getURL("https://www.maconda.bham.ac.uk/downloads.php",.opts = list(ssl.verifypeer = FALSE))
+  theurl <- paste0(readLines("https://www.maconda.bham.ac.uk/downloads.php"),collapse="")
   version = stringr::str_match(theurl, pattern = "Version (...)")[,2]
   version = gsub(version, pattern="\\.", replacement = "-")
   date = Sys.Date()
@@ -1177,7 +1191,7 @@ build.KEGG <- function(outfolder){ # WORKS
   header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
   version = stringr::str_match(header,
                                     pattern = "Last updated: (.{1,30})<")[,2]
-  date = as.Date(date, format = "%B%d,%Y")
+  date = as.Date(version, format = "%B%d, %Y")
   #version = date
 
   # --- GET COMPOUNDS ---
@@ -1261,6 +1275,19 @@ build.DRUGBANK <- function(outfolder){  # WORKS
   if(!dir.exists(base.loc)) dir.create(base.loc)
 
   zip.file <- file.path(base.loc, "drugbank.zip")
+
+  if(length(list.files(base.loc)) == 0){
+    msg = "Please create a DrugBank account to download the database: https://www.drugbank.ca/releases/latest. Save the .xml.zip file in the databases/drugbank_source folder."
+    if("MetaboShiny" %in% (.packages())){
+      try({
+        MetaboShiny::metshiAlert(msg)
+      })
+    }else{
+      message(msg)
+    }
+    return(NULL)
+  }
+
   if(!file.exists(zip.file)){
     file.rename(file.path(base.loc, "drugbank_all_full_database.xml.zip"), zip.file)
   }
@@ -1379,7 +1406,7 @@ build.DRUGBANK <- function(outfolder){  # WORKS
 
 build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking)
 
-  file.url = "https://www.lipidmaps.org/resources/downloads/LMSD/LMSD_20190711.sdf.zip"
+  file.url = "https://www.lipidmaps.org/files/?file=LMSD_20191002&ext=sdf.zip"
 
   # ----
   base.loc <- file.path(outfolder, "lipidmaps_source")
@@ -1520,7 +1547,7 @@ build.METABOLIGHTS <- function(outfolder){
                                    charge = info$charge,
                                    structure = info$smiles
       )
-    })
+    }, silent = T)
     res
   })
 
@@ -1602,9 +1629,9 @@ build.VMH <- function(outfolder){ # WORKS
   table_list <- pbapply::pblapply(1:pagerange, function(i){
     tbl = NA
     try({
-      url = gsubfn::fn$paste("http://vmh.uni.lu/_api/metabolites/?page=$i")
+      url = paste0("http://vmh.uni.lu/_api/metabolites/?page=", i)
       r <- httr::GET(url, httr::accept(".json"))
-      lst <- jsonlite::fromJSON(httr::content(r, "text"))
+      lst <- jsonlite::fromJSON(httr::content(r, "text",encoding = "UTF-8"))
       tbl <- lst[[4]]
       Sys.sleep(.1)
     })
@@ -1736,9 +1763,9 @@ build.PHENOLEXPLORER <- function(outfolder){ # WORKS
 build.MASSBANK <- function(outfolder){ # WORKS
 
   theurl = "https://massbank.eu/MassBank/"
-  header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
+  header = paste0(readLines(theurl), collapse=" ")
   version = stringr::str_match(header,
-                               pattern = "Update (.* 20\\d\\d):")[,2]
+                               pattern = "Update (.*?):")[,2]
 
   file.url <- "https://github.com/MassBank/MassBank-data/archive/master.zip"
   base.loc <- file.path(outfolder, "massbank_source")
@@ -1797,42 +1824,173 @@ build.MASSBANK <- function(outfolder){ # WORKS
 
 build.BMDB <- function(outfolder){
 
-  theurl = "http://bmdb.wishartlab.com/about"
+  theurl = "http://www.bovinedb.ca/about"
   header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
   version = stringr::str_match(header,
                                pattern = "BMDB Version <strong>(\\d.\\d)")[,2]
 
-  file.url = "http://www.cowmetdb.ca/public/downloads/current/metabocards.gz"
+  options(stringsAsFactors = F)
+  file.url <- "http://www.bovinedb.ca/system/downloads/current/bmdb_metabolites.zip"
   base.loc <- file.path(outfolder, "bmdb_source")
-  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
-  gz.file <- file.path(base.loc, "bmdb.gz")
-  utils::download.file(file.url, gz.file,mode = "wb", cacheOK = T)
-  zz = gzfile(gz.file, 'rt')
-  dat = readLines(zz)
-  dat.pasted = paste0(dat, collapse = ";")
-  n = sum(grepl("END_METABOCARD",dat))
-  split = stringr::str_split(dat.pasted, pattern = "END_METABOCARD")[[1]]
-  db.rows = pbapply::pblapply(split, function(l){
-    data.table::data.table(identifier = stringr::str_extract(string = l,
-                                                             pattern = "BMDB\\d+"),
-                           compoundname = stringr::str_match(string = l,
-                                                             pattern = "name:;(.*?);;")[,2],
-                           baseformula = stringr::str_match(string = l,
-                                                            pattern = "chemical_formula:;(.*?);;")[,2],
-                           description = paste0(stringr::str_match(string = l,
-                                                                   pattern = "description:;(.*?);")[,2],
-                                                " Found in ",
-                                                tolower(stringr::str_match(string = l,
-                                                                           pattern = "biofluid_location:;(.*?);")[,2]),
-                                                "."),
-                           structure = stringr::str_match(string = l,
-                                                          pattern = "smiles_canonical:;(.*?);;")[,2]
-    )
-  })
-  db.formatted = data.table::rbindlist(db.rows)
-  db.formatted$charge <- c(0)
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
+  zip.file <- file.path(base.loc, "BMDB.zip")
+  utils::download.file(file.url, zip.file,mode = "wb",cacheOK = T)
+  utils::unzip(zip.file, exdir = base.loc)
 
+  input = file.path(base.loc, "bmdb_metabolites.xml")
+  header = readLines(input,n = 10)
+  version = trimws(gsub(grep(pattern = "<version", header, value = T),
+                        pattern = "<\\/?version>",
+                        replacement = ""))
+  date = trimws(gsub(grep(pattern = "update_date", header, value = T),
+                     pattern = "<\\/?update_date>",
+                     replacement = ""))
+
+  theurl <- RCurl::getURL("http://www.bovinedb.ca/metabolites",.opts = list(ssl.verifypeer = FALSE) )
+  n = as.numeric(stringr::str_match_all(theurl, "of <.+?>(.*?)<.+?>")[[1]][1,2])
+
+  db.formatted <- data.frame(
+    compoundname = rep(NA, n),
+    baseformula = rep(NA, n),
+    identifier = rep(NA, n),
+    structure = rep(NA, n),
+    charge = rep(NA, n),
+    description = rep("", n)
+  )
+
+  idx = 1 # which metabolite are we on
+  pb <- pbapply::startpb(min = idx, max = n)
+
+  # FOR WINDOWS
+  sysinf <- Sys.info()
+  if (!is.null(sysinf)){
+    os <- sysinf['sysname']
+    if (os == 'Darwin')
+      os <- "osx"
+  } else { ## mystery machine
+    os <- .Platform$OS.type
+    if (grepl("^darwin", R.version$os))
+      os <- "osx"
+    if (grepl("linux-gnu", R.version$os))
+      os <- "linux"
+  }
+
+  if(tolower(os) == "windows"){
+    acc = "primary"
+    nm = "primary"
+    desc = "primary"
+    con = base::file(input, "r")
+    while (TRUE) {
+
+      line = readLines(con, n = 1,skipNul = T)
+
+      if (length(line) == 0){
+        break
+      }
+
+      if(line == "</metabolite>"){
+        idx <<- idx+1
+        pbapply::setpb(pb, idx)
+        acc = "primary"
+        nm = "primary"
+        desc = "primary"
+      }
+
+      tag = stringr::str_match(line, pattern = "<(.*?)>")[,2]
+
+      switch(tag,
+             accession = {
+               if(acc == "primary"){
+                 db.formatted[idx,]$identifier <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+                 acc <- "secondary"
+               }
+             },
+             name = {
+               if(nm == "primary"){
+                 db.formatted[idx,]$compoundname <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+                 nm = "secondary"
+               }
+             },
+             smiles = {
+               db.formatted[idx,]$structure <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+             },
+             description = {
+               if(desc == "primary"){
+                 db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description,
+                                                          " HMDB: ",
+                                                          trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
+                 desc = "secondary"
+               }
+             },
+             cs_description = {
+               db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description,
+                                                        "From ChemSpider: ",
+                                                        trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
+             },
+             chemical_formula = {
+               db.formatted[idx,]$baseformula <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+             })
+    }
+    close(con)
+  }else{
+    metabolite = function(currNode){
+      if(idx %% 1000 == 0){
+        pbapply::setpb(pb, idx)
+      }
+
+      currNode <<- currNode
+
+      db.formatted[idx, "compoundname"] <<- XML::xmlValue(currNode[['name']])
+      db.formatted[idx, "identifier"] <<- XML::xmlValue(currNode[['accession']])
+      db.formatted[idx, "baseformula"] <<- XML::xmlValue(currNode[['chemical_formula']])
+      db.formatted[idx, "structure"] <<- XML::xmlValue(currNode[['smiles']])
+      db.formatted[idx, "description"] <<- paste(XML::xmlValue(currNode[['description']])
+      )
+      x <- currNode[['predicted_properties']]
+      properties <- currNode[['predicted_properties']]
+      db.formatted[idx, "charge"] <<- stringr::str_match(XML::xmlValue(properties),
+                                                         pattern = "formal_charge([+|\\-]\\d*|\\d*)")[,2]
+
+      idx <<- idx + 1
+    }
+
+    XML::xmlEventParse(input,
+                       branches = list(metabolite = metabolite),
+                       replaceEntities=T)
+  }
   list(db = db.formatted, version = version)
+#
+#   file.url = "http://www.cowmetdb.ca/public/downloads/current/metabocards.gz"
+#   base.loc <- file.path(outfolder, "bmdb_source")
+#   if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
+#   gz.file <- file.path(base.loc, "bmdb.gz")
+#   utils::download.file(file.url, gz.file,mode = "wb", cacheOK = T)
+#   zz = gzfile(gz.file, 'rt')
+#   dat = readLines(zz)
+#   dat.pasted = paste0(dat, collapse = ";")
+#   n = sum(grepl("END_METABOCARD",dat))
+#   split = stringr::str_split(dat.pasted, pattern = "END_METABOCARD")[[1]]
+#   db.rows = pbapply::pblapply(split, function(l){
+#     data.table::data.table(identifier = stringr::str_extract(string = l,
+#                                                              pattern = "BMDB\\d+"),
+#                            compoundname = stringr::str_match(string = l,
+#                                                              pattern = "name:;(.*?);;")[,2],
+#                            baseformula = stringr::str_match(string = l,
+#                                                             pattern = "chemical_formula:;(.*?);;")[,2],
+#                            description = paste0(stringr::str_match(string = l,
+#                                                                    pattern = "description:;(.*?);")[,2],
+#                                                 " Found in ",
+#                                                 tolower(stringr::str_match(string = l,
+#                                                                            pattern = "biofluid_location:;(.*?);")[,2]),
+#                                                 "."),
+#                            structure = stringr::str_match(string = l,
+#                                                           pattern = "smiles_canonical:;(.*?);;")[,2]
+#     )
+#   })
+#   db.formatted = data.table::rbindlist(db.rows)
+#   db.formatted$charge <- c(0)
+#
+#   list(db = db.formatted, version = version)
 
 }
 

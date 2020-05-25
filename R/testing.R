@@ -22,82 +22,95 @@
 # #
 # # #db="hmdb"
 # #
-# cl = parallel::makeCluster(2)
-#
-# options(stringsAsFactors = FALSE,"java.parameters" = c("-Xmx16G")) # give java enough memory for smiles parsing
-#
-# require(enviPat)
-# data(isotopes)
-# require(MetaDBparse)
-#
-#adduct_rules <- data.table::fread("/Users/jwolthuis/MetaDBparse/inst/files/adduct_rules_deut.csv")
-#adducts <- data.table::fread("/Users/jwolthuis/MetaDBparse/inst/files/adducts_deut.csv")
-#adducts <- data.table::fread("/Users/jwolthuis/MetaboShiny/saves/admin/adducts.csv")
-#adducts <- adducts[Info != "deut"]
-#
-# parallel::clusterExport(cl, c("smiles.to.iatom",
-#                               "countAdductRuleMatches",
-#                               "checkAdductRule",
-#                               "doAdduct",
-#                               "iatom.to.smiles",
-#                               "smiles.to.iatom",
-#                               "iatom.to.formula",
-#                               "iatom.to.charge",
-#                               "adduct_rules",
-#                               "adducts",
-#                               "doIsotopes",
-#                               "isotopes"))
-#
-# parallel::clusterEvalQ(cl = cl, expr = {
-#   library(data.table)
-#   library(enviPat)
-#   library(pbapply)
-# })
-#
-# dbs = c("chebi",
-#         "maconda",
-#         "kegg",
-#         "bloodexposome","dimedb",
-#         "expoexplorer", "foodb",
-#         "drugbank", "lipidmaps","massbank",
-#         "metabolights",#<-ERRORS!!
-#         "metacyc", "phenolexplorer",
-#         "respect",
-#         "wikidata",
-#         "t3db", "vmh", "hmdb",
-#         "smpdb", "lmdb", "ymdb",
-#         "ecmdb", "bmdb", "rmdb",
-#         "stoff", "nanpdb","mcdb",
-#         "mvoc", "pamdb"
-#         )
-#
-# outfolder = normalizePath("~/MetaboShiny/databases")
-#
-# for(db in dbs){
-#   print(db)
-#    try({
-#       #=== INDEXING ===
-#       conn <- openBaseDB(outfolder, paste0(db,".db"))
-#       RSQLite::dbExecute(conn, "CREATE INDEX IF NOT EXISTS b_idx1 ON base(structure)")
-#       RSQLite::dbDisconnect(conn)
-#       #=== BUILD BASE ===
-#       buildBaseDB(outfolder = outfolder,
-#                   dbname = db,
-#                   cl = cl, silent=F)
-#       #=== BUILD EXTENDED ===
-#       buildExtDB(outfolder,
-#                  base.dbname = db,
-#                  cl = cl,
-#                  blocksize = 600,
-#                  mzrange = c(60,800),
-#                  adduct_table = adducts,
-#                  adduct_rules = adduct_rules,
-#                  silent = F,
-#                  ext.dbname = "extended",
-#                  use.rules = TRUE)
-#    })
-# }
-#
+ncores = parallel::detectCores(all.tests = FALSE)
+
+cl = parallel::makeCluster(ncores)
+
+options(stringsAsFactors = FALSE,"java.parameters" = c("-Xmx16G")) # give java enough memory for smiles parsing
+
+require(enviPat)
+data(isotopes)
+require(MetaDBparse)
+
+adduct_rules <- data.table::fread("/Users/jwolthuis/MetaDBparse/inst/files/adduct_rules_deut.csv")
+adducts <- data.table::fread("/Users/jwolthuis/MetaDBparse/inst/files/adducts_deut.csv")
+adducts <- data.table::fread("/Users/jwolthuis/MetaboShiny/saves/admin/adducts.csv")
+adducts <- adducts[Info != "deut"]
+
+parallel::clusterExport(cl, c("smiles.to.iatom",
+                              "countAdductRuleMatches",
+                              "checkAdductRule",
+                              "doAdduct",
+                              "iatom.to.smiles",
+                              "smiles.to.iatom",
+                              "iatom.to.formula",
+                              "iatom.to.charge",
+                              "adduct_rules",
+                              "adducts",
+                              "doIsotopes",
+                              "isotopes"))
+
+parallel::clusterEvalQ(cl = cl, expr = {
+  library(data.table)
+  library(enviPat)
+  library(pbapply)
+})
+
+dbs = c("chebi",
+        "maconda",
+        "kegg",
+        "bloodexposome","dimedb",
+        "expoexplorer", "foodb",
+        "drugbank", "lipidmaps","massbank",
+        "metabolights",#<-ERRORS!!
+        "metacyc", "phenolexplorer",
+        "respect",
+        "wikidata",
+        "t3db", "vmh", "hmdb",
+        "smpdb", "lmdb", "ymdb",
+        "ecmdb", "bmdb", "rmdb",
+        "stoff", "nanpdb","mcdb",
+        "mvoc", "pamdb"
+        )
+
+outfolder = normalizePath("~/MetaboShiny/databases")
+
+registerDoParallel(cl, cores = detectCores() - 1)
+
+library("parallel")
+library("foreach")
+library("doParallel")
+
+successList=c()
+
+for(db in dbs){
+  print(db)
+  success=F
+   try({
+      #=== INDEXING ===
+      conn <- openBaseDB(outfolder, paste0(db,".db"))
+      RSQLite::dbExecute(conn, "CREATE INDEX IF NOT EXISTS b_idx1 ON base(structure)")
+      RSQLite::dbDisconnect(conn)
+      #=== BUILD BASE ===
+      buildBaseDB(outfolder = outfolder,
+                 dbname = db,
+                 cl = cl, silent=F)
+      success=T
+      #=== BUILD EXTENDED ===
+      #buildExtDB(outfolder,
+      #           base.dbname = db,
+      #           cl = cl,
+      #           blocksize = 600,
+      #           mzrange = c(60,800),
+      #           adduct_table = adducts,
+      #           adduct_rules = adduct_rules,
+      #           silent = F,
+      #           ext.dbname = "extended_no_rules_2",
+      #           use.rules = F)
+   })
+  successList = c(successList, success)
+}
+
 # # # devtools::install()
 # # #
 # # # #
