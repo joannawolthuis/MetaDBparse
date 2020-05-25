@@ -59,7 +59,7 @@ iatom.to.charge <- function(iatoms, silent=T){
   new.charges <- sapply(iatoms, function(mol, silent){
     ch=0
     try({
-      ch = rcdk::get.total.formal.charge(molecule = mol)
+      ch = rcdk::get.total.formal.charge(mol = mol)
     }, silent=silent)
     ch
   },silent=silent)
