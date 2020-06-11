@@ -1,3 +1,20 @@
+#' @title FUNCTION_TITLE
+#' @description FUNCTION_DESCRIPTION
+#' @param outfolder PARAM_DESCRIPTION
+#' @param ext.dbname PARAM_DESCRIPTION, Default: 'extended'
+#' @return OUTPUT_DESCRIPTION
+#' @details DETAILS
+#' @examples 
+#' \dontrun{
+#' if(interactive()){
+#'  #EXAMPLE1
+#'  }
+#' }
+#' @seealso 
+#'  \code{\link[RSQLite]{character(0)}},\code{\link[RSQLite]{SQLite}}
+#' @rdname removeFailedStructures
+#' @export 
+#' @importFrom RSQLite dbConnect SQLite dbExecute dbDisconnect
 removeFailedStructures <- function(outfolder,
                                    ext.dbname = "extended"){
   outfolder <- normalizePath(outfolder)
@@ -25,6 +42,25 @@ removeFailedStructures <- function(outfolder,
 }
 
 # calculate 'rules' for all compounds (requires iatom-ization)
+#' @title FUNCTION_TITLE
+#' @description FUNCTION_DESCRIPTION
+#' @param iatoms PARAM_DESCRIPTION
+#' @param adduct_rules PARAM_DESCRIPTION
+#' @return OUTPUT_DESCRIPTION
+#' @details DETAILS
+#' @examples 
+#' \dontrun{
+#' if(interactive()){
+#'  #EXAMPLE1
+#'  }
+#' }
+#' @seealso 
+#'  \code{\link[rcdk]{matches}},\code{\link[rcdk]{get.total.formal.charge}}
+#'  \code{\link[data.table]{data.table-package}}
+#' @rdname countAdductRuleMatches
+#' @export 
+#' @importFrom rcdk matches get.total.formal.charge
+#' @importFrom data.table data.table
 countAdductRuleMatches <- function(iatoms, adduct_rules){
   smiles = iatom.to.smiles(iatoms)
   res_cols <- lapply(1:nrow(adduct_rules), function(i){
@@ -53,6 +89,23 @@ countAdductRuleMatches <- function(iatoms, adduct_rules){
   cbind(structure=smiles, res)
 }
 
+#' @title FUNCTION_TITLE
+#' @description FUNCTION_DESCRIPTION
+#' @param adduct_rule_scores PARAM_DESCRIPTION
+#' @param adduct_table PARAM_DESCRIPTION
+#' @return OUTPUT_DESCRIPTION
+#' @details DETAILS
+#' @examples 
+#' \dontrun{
+#' if(interactive()){
+#'  #EXAMPLE1
+#'  }
+#' }
+#' @seealso 
+#'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{data.table-package}}
+#' @rdname checkAdductRule
+#' @export 
+#' @importFrom data.table as.data.table data.table
 checkAdductRule <- function(adduct_rule_scores,
                             adduct_table){
 
@@ -87,6 +140,28 @@ checkAdductRule <- function(adduct_rule_scores,
                          qualified.per.adduct)
 }
 
+#' @title FUNCTION_TITLE
+#' @description FUNCTION_DESCRIPTION
+#' @param structure PARAM_DESCRIPTION
+#' @param formula PARAM_DESCRIPTION
+#' @param charge PARAM_DESCRIPTION
+#' @param adduct_table PARAM_DESCRIPTION
+#' @param query_adduct PARAM_DESCRIPTION
+#' @return OUTPUT_DESCRIPTION
+#' @details DETAILS
+#' @examples 
+#' \dontrun{
+#' if(interactive()){
+#'  #EXAMPLE1
+#'  }
+#' }
+#' @seealso 
+#'  \code{\link[enviPat]{check_chemform}},\code{\link[enviPat]{mergeform}},\code{\link[enviPat]{check_ded}},\code{\link[enviPat]{subform}},\code{\link[enviPat]{multiform}}
+#'  \code{\link[data.table]{data.table-package}}
+#' @rdname doAdduct
+#' @export 
+#' @importFrom enviPat check_chemform mergeform check_ded subform multiform
+#' @importFrom data.table data.table
 doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
   row = adduct_table[Name == query_adduct,]
   name <- row$Name
@@ -173,6 +248,25 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
   unique_formulas
 }
 
+#' @title FUNCTION_TITLE
+#' @description FUNCTION_DESCRIPTION
+#' @param formula PARAM_DESCRIPTION
+#' @param charge PARAM_DESCRIPTION
+#' @return OUTPUT_DESCRIPTION
+#' @details DETAILS
+#' @examples 
+#' \dontrun{
+#' if(interactive()){
+#'  #EXAMPLE1
+#'  }
+#' }
+#' @seealso 
+#'  \code{\link[enviPat]{isopattern}}
+#'  \code{\link[data.table]{data.table-package}}
+#' @rdname doIsotopes
+#' @export 
+#' @importFrom enviPat isopattern
+#' @importFrom data.table data.table
 doIsotopes <- function(formula, charge){
   isotables <- enviPat::isopattern(
     isotopes,
@@ -210,6 +304,41 @@ doIsotopes <- function(formula, charge){
 
 }
 
+#' @title FUNCTION_TITLE
+#' @description FUNCTION_DESCRIPTION
+#' @param outfolder PARAM_DESCRIPTION
+#' @param ext.dbname PARAM_DESCRIPTION, Default: 'extended'
+#' @param base.dbname PARAM_DESCRIPTION
+#' @param cl PARAM_DESCRIPTION, Default: 0
+#' @param blocksize PARAM_DESCRIPTION, Default: 600
+#' @param mzrange PARAM_DESCRIPTION, Default: c(60, 600)
+#' @param adduct_table PARAM_DESCRIPTION, Default: adducts
+#' @param adduct_rules PARAM_DESCRIPTION, Default: adduct_rules
+#' @param silent PARAM_DESCRIPTION, Default: silent
+#' @param use.rules PARAM_DESCRIPTION, Default: TRUE
+#' @return OUTPUT_DESCRIPTION
+#' @details DETAILS
+#' @examples 
+#' \dontrun{
+#' if(interactive()){
+#'  #EXAMPLE1
+#'  }
+#' }
+#' @seealso 
+#'  \code{\link[RSQLite]{character(0)}},\code{\link[RSQLite]{SQLite}}
+#'  \code{\link[gsubfn]{fn}}
+#'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{data.table-package}},\code{\link[data.table]{rbindlist}},\code{\link[data.table]{fwrite}},\code{\link[data.table]{fread}}
+#'  \code{\link[DBI]{dbWriteTable}}
+#'  \code{\link[pbapply]{pbapply}}
+#'  \code{\link[enviPat]{check_chemform}}
+#' @rdname buildExtDB
+#' @export 
+#' @importFrom RSQLite dbConnect SQLite dbExecute dbExistsTable dbGetQuery dbDisconnect dbWriteTable dbReadTable
+#' @importFrom gsubfn fn
+#' @importFrom data.table as.data.table data.table rbindlist fwrite fread
+#' @importFrom DBI dbWriteTable
+#' @importFrom pbapply pblapply pbsapply
+#' @importFrom enviPat check_chemform
 buildExtDB <- function(outfolder,
                        ext.dbname = "extended",
                        base.dbname,

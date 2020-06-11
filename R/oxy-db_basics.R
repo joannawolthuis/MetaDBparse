@@ -1,12 +1,15 @@
-# Some useful keyboard shortcuts for package authoring:
-#
-#   Install Package:           'Cmd + Shift + B'
-#   Check Package:             'Cmd + Shift + E'
-#   Test Package:              'Cmd + Shift + T'
-
-
-# define database
-
+#' @title Create/open and prepare SQLite database
+#' @description Create/open and prepare SQLite database
+#' @param outfolder Which folder are you building your databases in?
+#' @param dbname What is the name of the database? (exclude .db)
+#' @return Nothing, writes SQLITE database to outfolder
+#' @seealso
+#'  \code{\link[RSQLite]{character(0)}},\code{\link[RSQLite]{SQLite}}
+#'  \code{\link[DBI]{dbExecute}}
+#' @rdname openBaseDB
+#' @export
+#' @importFrom RSQLite dbConnect SQLite
+#' @importFrom DBI dbExecute
 openBaseDB <- function(outfolder, dbname){
   if(!dir.exists(outfolder)) dir.create(outfolder)
   db <- file.path(normalizePath(outfolder), paste0(dbname))
@@ -21,15 +24,47 @@ openBaseDB <- function(outfolder, dbname){
   conn
 }
 
+#' @title Remove database
+#' @description Removes database from disk completely.
+#' @param outfolder Which folder are you building your databases in?
+#' @param dbname What database do you want to remove? (exclude .db suffix)
+#' @return Nothing, removes database from disk
+#' @rdname removeDB
+#' @export
 removeDB <- function(outfolder, dbname){
   db <- file.path(normalizePath(outfolder), paste0(dbname))
   if(file.exists(db)) unlink(db)
 }
 
+#' @title Write table to SQLite database
+#' @description Simple wrapper - take data table or data frame and append it to the given table in the given database.
+#' @param conn Database connection (from DBI::dbConnect or similar)
+#' @param table Data frame or data table
+#' @param tblname SQLITE table name to append to
+#' @return Nothing, writes table to SQLITE database
+#' @seealso
+#'  \code{\link[DBI]{dbWriteTable}}
+#' @rdname writeDB
+#' @export
+#' @importFrom DBI dbWriteTable
 writeDB <- function(conn, table, tblname){
   DBI::dbWriteTable(conn, tblname, table, append=T)
 }
 
+#' @title Adjusted sdfStream version for databases that store their compounds in SDF format
+#' @description Adjusted from existing function to extract the columns needed for MetaDBparse database format
+#' @param input input SDF file
+#' @param output output CSV file to write to
+#' @param append Append to existing CSV file or start anew?, Default: FALSE
+#' @param fct Function to apply to each object to get the wanted columns
+#' @param Nlines Lines to read in one go?, Default: 10000
+#' @param startline Start at line, Default: 1
+#' @param restartNlines Restart after x lines, Default: 10000
+#' @param silent Suppress warnings?, Default: FALSE
+#' @param ... Other arguments
+#' @return Nothing, writes csv version of given SDF files to disk
+#' @rdname sdfStream.joanna
+#' @export
 sdfStream.joanna <- function (input, output, append = FALSE, fct, Nlines = 10000,
                               startline = 1, restartNlines = 10000, silent = FALSE, ...)
 {
@@ -120,103 +155,18 @@ sdfStream.joanna <- function (input, output, append = FALSE, fct, Nlines = 10000
   }
 }
 
-#Overwrite RSQLite's sqliteWriteTable function with this one to be able to reject duplicates
-#example:
-#create table foo(x int, y int, z int, constraint id primary key(x,y));
-#insert or ignore into foo(x,y,z) values(1,2,3);
-#insert or ignore into foo(x,y,z) values(1,2,3);
-#
-#In R
-#mysqliteWriteTable(con, "foo", data.frame(x=1,y=2,z=3), row.names=F, ignore=T)
-mysqliteWriteTable = function (con, name, value, row.names = TRUE, overwrite = FALSE,
-                               append = FALSE, field.types = NULL, ignore = FALSE, ...)
-{
-  if (overwrite && append)
-    stop("overwrite and append cannot both be TRUE")
-  if (length(RSQLite::dbListResults(con))) {
-    new.con <- RSQLite::dbConnect(con)
-    on.exit(RSQLite::dbDisconnect(new.con))
-  }
-  else {
-    new.con <- con
-  }
-  foundTable <- RSQLite::dbExistsTable(con, name)
-  new.table <- !foundTable
-  createTable <- (new.table || foundTable && overwrite)
-  removeTable <- (foundTable && overwrite)
-  success <- RSQLite::dbBeginTransaction(con)
-  if (!success) {
-    warning("unable to begin transaction")
-    return(FALSE)
-  }
-  if (foundTable && !removeTable && !append) {
-    warning(paste("table", name, "exists in database: aborting dbWriteTable"))
-    success <- FALSE
-  }
-  if (removeTable) {
-    success <- tryCatch({
-      if (RSQLite::dbRemoveTable(con, name)) {
-        TRUE
-      }
-      else {
-        warning(paste("table", name, "couldn't be overwritten"))
-        FALSE
-      }
-    }, error = function(e) {
-      warning(conditionMessage(e))
-      FALSE
-    })
-  }
-  if (!success) {
-    RSQLite::dbRollback(con)
-    return(FALSE)
-  }
-  if (row.names) {
-    value <- cbind(row.names(value), value, stringsAsFactors = FALSE)
-    names(value)[1] <- "row.names"
-  }
-  if (createTable) {
-    sql <- RSQLite::dbBuildTableDefinition(new.con, name, value, field.types = field.types,
-                                  row.names = FALSE)
-    success <- tryCatch({
-      RSQLite::dbGetQuery(new.con, sql)
-      TRUE
-    }, error = function(e) {
-      warning(conditionMessage(e))
-      FALSE
-    })
-    if (!success) {
-      RSQLite::dbRollback(con)
-      return(FALSE)
-    }
-  }
-  valStr <- paste(rep("?", ncol(value)), collapse = ",")
-  if (ignore) sql <- sprintf("insert or ignore into %s values (%s)", name, valStr)
-  else sql <- sprintf("insert into %s values (%s)", name, valStr)
-  success <- tryCatch({
-    ret <- FALSE
-    rs <- RSQLite::dbSendPreparedQuery(new.con, sql, bind.data = value)
-    ret <- TRUE
-  }, error = function(e) {
-    warning(conditionMessage(e))
-    ret <- FALSE
-  }, finally = {
-    if (exists("rs"))
-      RSQLite::dbClearResult(rs)
-    ret
-  })
-  if (!success)
-    RSQLite::dbRollback(con)
-  else {
-    success <- RSQLite::dbCommit(con)
-    if (!success) {
-      warning(RSQLite::dbGetException(con)[["errorMsg"]])
-      RSQLite::dbRollback(con)
-    }
-  }
-  success
-}
-
+#' @title Is this item 'empty'?
+#' @description Checks if given object is either NULL, NA, or just whitespace
+#' @param item object to check
+#' @return TRUE or FALSE
+#' @examples
+#' \dontrun{
+#' if(interactive()){
+#'  is.empty(NA)
+#'  }
+#' }
+#' @rdname is.empty
+#' @export
 is.empty <- function(item){
   if(is.null(item)){
       return(TRUE)

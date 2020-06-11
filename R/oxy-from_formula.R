@@ -1,3 +1,20 @@
+#' @title Find possible formulas for a given m/z
+#' @description Using m/z and isotope distributions for each element, find possible molecular formulas within allowed error margin
+#' @param mz M/z of interest
+#' @param add_name Which adducts to consider
+#' @param adducts Full adduct table (data(adducts) loads it into memory)
+#' @param ppm Allowed error margin in parts per million
+#' @param elements Considered elements in formula generation, Default: c("C", "H", "N", "O", "P", "S")
+#' @return Table with found formulas, their adduct and isotope percentage.
+#' @seealso
+#'  \code{\link[stringr]{str_match}}
+#'  \code{\link[Rdisop]{decomposeIsotopes}},\code{\link[Rdisop]{initializeCHNOPS}}
+#'  \code{\link[data.table]{data.table-package}}
+#' @rdname getFormula
+#' @export
+#' @importFrom stringr str_match_all
+#' @importFrom Rdisop decomposeMass initializeElements
+#' @importFrom data.table data.table
 getFormula <- function(mz, add_name, adducts, ppm, elements = c("C","H","N","O","P","S")
 ){
   def.ele = elements
@@ -29,7 +46,21 @@ getFormula <- function(mz, add_name, adducts, ppm, elements = c("C","H","N","O",
   )
 }
 
-filterFormula = function(formulas, rules){
+#' @title Apply seven golden rules to a vector of formulas
+#' @description Returns formulas that pass the user-given rules.
+#' @param formulas Molecular formulas
+#' @param rules Rules to apply. Default: c("senior", "lewis", "hc", "chnops", "nops")
+#' @return Vector of formulas that pass rules
+#' @seealso
+#'  \code{\link[enviPat]{check_chemform}}
+#'  \code{\link[data.table]{data.table-package}},\code{\link[data.table]{rbindlist}}
+#'  \code{\link[stringr]{str_match}}
+#' @rdname filterFormula
+#' @export
+#' @importFrom enviPat check_chemform
+#' @importFrom data.table data.table rbindlist
+#' @importFrom stringr str_match
+filterFormula = function(formulas, rules=c("senior", "lewis", "hc", "chnops", "nops")){
   require(enviPat)
   data(isotopes)
 
@@ -130,6 +161,17 @@ filterFormula = function(formulas, rules){
   keep.candidates
 }
 
+#' @title Break formula apart into adduct and main formula
+#' @description Used to use the formula creation function and consider adducts at the same time.
+#' @param formula Formula of interest
+#' @param add_name Adduct names to consider ('Name' column of adduct table)
+#' @param adduct_table Full adduct table, Default: adducts
+#' @return Table with formula, adduct, isotope
+#' @seealso
+#'  \code{\link[enviPat]{check_ded}},\code{\link[enviPat]{subform}},\code{\link[enviPat]{mergeform}},\code{\link[enviPat]{multiform}}
+#' @rdname revertAdduct
+#' @export
+#' @importFrom enviPat check_ded subform mergeform multiform
 revertAdduct <- function(formula, add_name, adduct_table=adducts){
 
   # C4H19N4S1Na1         C1H8N1.5S0.5    [2M+ACN+Na]1+  100
@@ -170,6 +212,24 @@ revertAdduct <- function(formula, add_name, adduct_table=adducts){
   formula
 }
 
+#' @title Get predicted formulas and adducts from m/z value
+#' @description Wrapper function to predict formulas and then consider adducts as well.
+#' @param mz M/z of interest
+#' @param ppm Error margin in parts per million, Default: 2
+#' @param mode M/z found in positive or negative mode?, Default: 'positive'
+#' @param rules Which golden rules to apply?, Default: c("senior", "lewis", "hc", "chnops", "nops")
+#' @param elements Which elements to consider?, Default: c("C", "H", "N", "O", "P", "S")
+#' @param search Check the found formulas on PubChem or ChemSpider?, Default: c("PubChem", "ChemSpider")
+#' @param detailed Look up details like description etc. if hit found? Makes things slower!, Default: T
+#' @param calc_adducts Which adducts to consider?, Default: adducts[Ion_mode == mode, ]$Name
+#' @return Table of found matches and associated info
+#' @seealso
+#'  \code{\link[data.table]{data.table-package}},\code{\link[data.table]{rbindlist}}
+#'  \code{\link[enviPat]{check_chemform}}
+#' @rdname getPredicted
+#' @export
+#' @importFrom data.table data.table rbindlist
+#' @importFrom enviPat check_chemform
 getPredicted <- function(mz,
                           ppm = 2,
                           mode = "positive",
@@ -244,7 +304,17 @@ getPredicted <- function(mz,
 
       if(length(res) > 0){
 
-        res_proc = MetaboShiny::flattenlist(res)
+        flattenlist = function(x){
+          morelists <- sapply(x, function(xprime) class(xprime)[1]=="list")
+          out <- c(x[!morelists], unlist(x[morelists], recursive=FALSE, use.names = T))
+          if(sum(morelists)){
+            Recall(out)
+          }else{
+            return(out)
+          }
+        }
+
+        res_proc = flattenlist(res)
 
         tbl <- data.table::rbindlist(res_proc[!sapply(res_proc, is.null)])
     }
@@ -259,6 +329,43 @@ getPredicted <- function(mz,
   total_tbl
 }
 
+#' @title FUNCTION_TITLE
+#' @description FUNCTION_DESCRIPTION
+#' @param formulas PARAM_DESCRIPTION
+#' @param search PARAM_DESCRIPTION, Default: c("PubChem", "ChemSpider")
+#' @param apikey PARAM_DESCRIPTION, Default: 'sp1pysTkYyC0wSETdkWjEeEK8eiXXFuG'
+#' @param detailed PARAM_DESCRIPTION, Default: F
+#' @return OUTPUT_DESCRIPTION
+#' @details DETAILS
+#' @examples
+#' \dontrun{
+#' if(interactive()){
+#'  #EXAMPLE1
+#'  }
+#' }
+#' @seealso
+#'  \code{\link[pbapply]{pbapply}}
+#'  \code{\link[data.table]{data.table-package}},\code{\link[data.table]{as.data.table}},\code{\link[data.table]{rbindlist}}
+#'  \code{\link[enviPat]{check_chemform}}
+#'  \code{\link[gsubfn]{fn}}
+#'  \code{\link[stringr]{str_extract}},\code{\link[stringr]{str_match}}
+#'  \code{\link[XML]{readHTMLTable}}
+#'  \code{\link[rlist]{list.clean}}
+#'  \code{\link[jsonlite]{read_json}}
+#'  \code{\link[httr]{POST}},\code{\link[httr]{add_headers}},\code{\link[httr]{content_type}},\code{\link[httr]{content}},\code{\link[httr]{GET}}
+#'  \code{\link[RJSONIO]{fromJSON}}
+#' @rdname searchFormulaWeb
+#' @export
+#' @importFrom pbapply pblapply
+#' @importFrom data.table data.table as.data.table rbindlist
+#' @importFrom enviPat check_chemform
+#' @importFrom gsubfn fn
+#' @importFrom stringr str_extract str_match
+#' @importFrom XML readHTMLTable
+#' @importFrom rlist list.clean
+#' @importFrom jsonlite read_json
+#' @importFrom httr POST add_headers content_type content GET
+#' @importFrom RJSONIO fromJSON
 searchFormulaWeb <- function(formulas,
                              search = c("PubChem", "ChemSpider"),
                              apikey = "sp1pysTkYyC0wSETdkWjEeEK8eiXXFuG",
@@ -469,6 +576,30 @@ searchFormulaWeb <- function(formulas,
   }
 }
 
+#' @title FUNCTION_TITLE
+#' @description FUNCTION_DESCRIPTION
+#' @param ids PARAM_DESCRIPTION
+#' @param maxn PARAM_DESCRIPTION, Default: 100
+#' @param apikey PARAM_DESCRIPTION, Default: 'sp1pysTkYyC0wSETdkWjEeEK8eiXXFuG'
+#' @return OUTPUT_DESCRIPTION
+#' @details DETAILS
+#' @examples
+#' \dontrun{
+#' if(interactive()){
+#'  #EXAMPLE1
+#'  }
+#' }
+#' @seealso
+#'  \code{\link[gsubfn]{fn}}
+#'  \code{\link[httr]{POST}},\code{\link[httr]{add_headers}}
+#'  \code{\link[jsonlite]{read_json}}
+#'  \code{\link[data.table]{data.table-package}}
+#' @rdname chemspiderInfo
+#' @export
+#' @importFrom gsubfn fn
+#' @importFrom httr POST add_headers
+#' @importFrom jsonlite parse_json
+#' @importFrom data.table data.table
 chemspiderInfo <- function(ids,
                            maxn=100,
                            apikey="sp1pysTkYyC0wSETdkWjEeEK8eiXXFuG"){
@@ -505,6 +636,25 @@ chemspiderInfo <- function(ids,
   rbindlist(row.blocks)
 }
 
+#' @title FUNCTION_TITLE
+#' @description FUNCTION_DESCRIPTION
+#' @param ids PARAM_DESCRIPTION
+#' @param maxn PARAM_DESCRIPTION, Default: 30
+#' @return OUTPUT_DESCRIPTION
+#' @details DETAILS
+#' @examples
+#' \dontrun{
+#' if(interactive()){
+#'  #EXAMPLE1
+#'  }
+#' }
+#' @seealso
+#'  \code{\link[jsonlite]{toJSON, fromJSON}}
+#'  \code{\link[data.table]{rbindlist}}
+#' @rdname pubChemInfo
+#' @export
+#' @importFrom jsonlite fromJSON
+#' @importFrom data.table rbindlist
 pubChemInfo <- function(ids, maxn=30){
   # structural info
   split.ids = split(ids,
