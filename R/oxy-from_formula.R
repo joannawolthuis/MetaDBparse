@@ -760,4 +760,3 @@ pubChemInfo <- function(ids, maxn=30){
     })]
   data.table::rbindlist(res)
 }
-
