@@ -329,18 +329,17 @@ getPredicted <- function(mz,
   total_tbl
 }
 
-#' @title FUNCTION_TITLE
-#' @description FUNCTION_DESCRIPTION
-#' @param formulas PARAM_DESCRIPTION
-#' @param search PARAM_DESCRIPTION, Default: c("PubChem", "ChemSpider")
-#' @param apikey PARAM_DESCRIPTION, Default: 'sp1pysTkYyC0wSETdkWjEeEK8eiXXFuG'
-#' @param detailed PARAM_DESCRIPTION, Default: F
-#' @return OUTPUT_DESCRIPTION
-#' @details DETAILS
+#' @title Find web hits for a molecular formula
+#' @description Takes molecular formula, and scours PubChem and/or ChemSpider for compounds matching that formula.
+#' @param formulas Character vector of formulas to check
+#' @param search Which databases to check?, Default: c("PubChem", "ChemSpider")
+#' @param apikey API key for ChemSpider
+#' @param detailed Find detailed results? Not just the compound name, but other associated info?, Default: F
+#' @return Data table with match results.
 #' @examples
 #' \dontrun{
 #' if(interactive()){
-#'  #EXAMPLE1
+#'  hits = searchFormulaWeb(c("C6H12O6"), "PubChem", detailed = T)
 #'  }
 #' }
 #' @seealso
@@ -368,7 +367,7 @@ getPredicted <- function(mz,
 #' @importFrom RJSONIO fromJSON
 searchFormulaWeb <- function(formulas,
                              search = c("PubChem", "ChemSpider"),
-                             apikey = "sp1pysTkYyC0wSETdkWjEeEK8eiXXFuG",
+                             apikey,# = "sp1pysTkYyC0wSETdkWjEeEK8eiXXFuG",
                              detailed = F){
   if(length(search)>0){
     i = 0
@@ -576,19 +575,12 @@ searchFormulaWeb <- function(formulas,
   }
 }
 
-#' @title FUNCTION_TITLE
-#' @description FUNCTION_DESCRIPTION
-#' @param ids PARAM_DESCRIPTION
-#' @param maxn PARAM_DESCRIPTION, Default: 100
-#' @param apikey PARAM_DESCRIPTION, Default: 'sp1pysTkYyC0wSETdkWjEeEK8eiXXFuG'
-#' @return OUTPUT_DESCRIPTION
-#' @details DETAILS
-#' @examples
-#' \dontrun{
-#' if(interactive()){
-#'  #EXAMPLE1
-#'  }
-#' }
+#' @title Find more info through ChemSpider.
+#' @description Takes ChemSpider CIDs and finds name, SMILES, citations on pubmed/references.
+#' @param ids Character vector of ChemSpider IDs.
+#' @param maxn Max ids per batch (batch search is used), Default: 100
+#' @param apikey ChemSpider API key
+#' @return Data table with match results
 #' @seealso
 #'  \code{\link[gsubfn]{fn}}
 #'  \code{\link[httr]{POST}},\code{\link[httr]{add_headers}}
@@ -602,7 +594,7 @@ searchFormulaWeb <- function(formulas,
 #' @importFrom data.table data.table
 chemspiderInfo <- function(ids,
                            maxn=100,
-                           apikey="sp1pysTkYyC0wSETdkWjEeEK8eiXXFuG"){
+                           apikey){#="sp1pysTkYyC0wSETdkWjEeEK8eiXXFuG"){
   split.ids = split(ids,
                     ceiling(seq_along(ids) / maxn))
 
@@ -636,18 +628,11 @@ chemspiderInfo <- function(ids,
   rbindlist(row.blocks)
 }
 
-#' @title FUNCTION_TITLE
-#' @description FUNCTION_DESCRIPTION
-#' @param ids PARAM_DESCRIPTION
-#' @param maxn PARAM_DESCRIPTION, Default: 30
-#' @return OUTPUT_DESCRIPTION
-#' @details DETAILS
-#' @examples
-#' \dontrun{
-#' if(interactive()){
-#'  #EXAMPLE1
-#'  }
-#' }
+#' @title Find additional info on a PubChem ID.
+#' @description Takes PubChem ID and finds name, formula, smiles, charge
+#' @param ids Vector of identifiers.
+#' @param maxn Compounds searched per batch search, Default: 30
+#' @return Table with additional info on PubChem IDs
 #' @seealso
 #'  \code{\link[jsonlite]{toJSON, fromJSON}}
 #'  \code{\link[data.table]{rbindlist}}
