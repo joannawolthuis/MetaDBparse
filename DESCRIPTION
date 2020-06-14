@@ -1,11 +1,13 @@
 Package: MetaDBparse
 Type: Package
-Title: What the Package Does (Title Case)
-Version: 0.1.0
+Title: Parsing and searching Metabolomics databases, and finding formula for a given m/z.
+Version: 1.0.0
 Author: Joanna Wolthuis
 Maintainer: Joanna Wolthuis <J.C.Wolthuis-2@umcutrecht.nl>
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
+Description: MetaDBparse provides parsing functionality for over 30 metabolomics databases, with most available without having to create an account on given websites. 
+    Once parsed, MetaDBparse calculates given adducts and isotope patterns into one big database which can be used to annotate unknown m/z values.
+    Furthermore, formulas can be predicted for a given m/z, and these can be matched to ChemSpider or PubChem for further annotation.
+    Current databases available: HMDB, ChEBI, LMDB, RMDB, BMDB, MCDB, ECMDB, Wikidata, mVOC, VMH, T3DB, Exposome Explorer, FooDB, MetaCyc (requires account), DrugBank (requires account), ReSPECT, MaConDa, Blood Exposome DB, KEGG, SMPDB, LIPID MAPS, MetaboLights, DimeDB, Phenol Explorer, MassBank, YMDB, PAMDB, NANPDB and STOFF. 
 Depends: R (>= 2.10)
 License: Apache License Version 2.0 + file LICENSE
 Encoding: UTF-8

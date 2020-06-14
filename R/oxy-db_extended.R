@@ -1,19 +1,11 @@
-#' @title FUNCTION_TITLE
-#' @description FUNCTION_DESCRIPTION
-#' @param outfolder PARAM_DESCRIPTION
-#' @param ext.dbname PARAM_DESCRIPTION, Default: 'extended'
-#' @return OUTPUT_DESCRIPTION
-#' @details DETAILS
-#' @examples 
-#' \dontrun{
-#' if(interactive()){
-#'  #EXAMPLE1
-#'  }
-#' }
-#' @seealso 
+#' @title Remove structures where isotope generation failed.
+#' @description Sometimes if a run crashes, or a structure is bugged somehow, it is still registered as 'done' in the extended database and cannot be redone. This function removes these structures. Warning: slow!
+#' @param outfolder Which folder are your databases in?
+#' @param ext.dbname Extended database name (without .db suffix), Default: 'extended'
+#' @seealso
 #'  \code{\link[RSQLite]{character(0)}},\code{\link[RSQLite]{SQLite}}
 #' @rdname removeFailedStructures
-#' @export 
+#' @export
 #' @importFrom RSQLite dbConnect SQLite dbExecute dbDisconnect
 removeFailedStructures <- function(outfolder,
                                    ext.dbname = "extended"){
@@ -41,24 +33,17 @@ removeFailedStructures <- function(outfolder,
   }
 }
 
-# calculate 'rules' for all compounds (requires iatom-ization)
-#' @title FUNCTION_TITLE
-#' @description FUNCTION_DESCRIPTION
-#' @param iatoms PARAM_DESCRIPTION
-#' @param adduct_rules PARAM_DESCRIPTION
-#' @return OUTPUT_DESCRIPTION
-#' @details DETAILS
-#' @examples 
-#' \dontrun{
-#' if(interactive()){
-#'  #EXAMPLE1
-#'  }
-#' }
-#' @seealso 
+#
+#' @title Check which structures are OK according to given adduct rules
+#' @description Calculate 'rules' for all compounds (requires iatom-ization)
+#' @param iatoms Iatomcontainers with compounds
+#' @param adduct_rules Adduct rule table (default is data(adduct_rules))
+#' @return Table with all structures and if they pass the rules given for each adduct
+#' @seealso
 #'  \code{\link[rcdk]{matches}},\code{\link[rcdk]{get.total.formal.charge}}
 #'  \code{\link[data.table]{data.table-package}}
 #' @rdname countAdductRuleMatches
-#' @export 
+#' @export
 #' @importFrom rcdk matches get.total.formal.charge
 #' @importFrom data.table data.table
 countAdductRuleMatches <- function(iatoms, adduct_rules){
@@ -89,22 +74,15 @@ countAdductRuleMatches <- function(iatoms, adduct_rules){
   cbind(structure=smiles, res)
 }
 
-#' @title FUNCTION_TITLE
-#' @description FUNCTION_DESCRIPTION
-#' @param adduct_rule_scores PARAM_DESCRIPTION
-#' @param adduct_table PARAM_DESCRIPTION
-#' @return OUTPUT_DESCRIPTION
-#' @details DETAILS
-#' @examples 
-#' \dontrun{
-#' if(interactive()){
-#'  #EXAMPLE1
-#'  }
-#' }
-#' @seealso 
+#' @title Check for combined adduct rules
+#' @description Sometimes multiple rules apply - this function checks if they all apply as noted in the rule table.
+#' @param adduct_rule_scores Scores from countAdductRuleMatches.
+#' @param adduct_table Adduct tablle
+#' @return Table with T/F for each structure and adduct
+#' @seealso
 #'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{data.table-package}}
 #' @rdname checkAdductRule
-#' @export 
+#' @export
 #' @importFrom data.table as.data.table data.table
 checkAdductRule <- function(adduct_rule_scores,
                             adduct_table){
@@ -140,26 +118,19 @@ checkAdductRule <- function(adduct_rule_scores,
                          qualified.per.adduct)
 }
 
-#' @title FUNCTION_TITLE
-#' @description FUNCTION_DESCRIPTION
-#' @param structure PARAM_DESCRIPTION
-#' @param formula PARAM_DESCRIPTION
-#' @param charge PARAM_DESCRIPTION
-#' @param adduct_table PARAM_DESCRIPTION
-#' @param query_adduct PARAM_DESCRIPTION
-#' @return OUTPUT_DESCRIPTION
-#' @details DETAILS
-#' @examples 
-#' \dontrun{
-#' if(interactive()){
-#'  #EXAMPLE1
-#'  }
-#' }
-#' @seealso 
+#' @title Generate adduct for given structure
+#' @description Takes in formula, an adduct of interest, and returns adduct formulas and charges.
+#' @param structure SMILES structure
+#' @param formula Molecular formula
+#' @param charge Initial charge
+#' @param adduct_table Adduct table
+#' @param query_adduct Adduct 'Name' of interest
+#' @return Table with adducts of this compound
+#' @seealso
 #'  \code{\link[enviPat]{check_chemform}},\code{\link[enviPat]{mergeform}},\code{\link[enviPat]{check_ded}},\code{\link[enviPat]{subform}},\code{\link[enviPat]{multiform}}
 #'  \code{\link[data.table]{data.table-package}}
 #' @rdname doAdduct
-#' @export 
+#' @export
 #' @importFrom enviPat check_chemform mergeform check_ded subform multiform
 #' @importFrom data.table data.table
 doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
@@ -248,25 +219,19 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
   unique_formulas
 }
 
-#' @title FUNCTION_TITLE
-#' @description FUNCTION_DESCRIPTION
-#' @param formula PARAM_DESCRIPTION
-#' @param charge PARAM_DESCRIPTION
-#' @return OUTPUT_DESCRIPTION
-#' @details DETAILS
-#' @examples 
-#' \dontrun{
-#' if(interactive()){
-#'  #EXAMPLE1
-#'  }
-#' }
-#' @seealso 
+#' @title Generate isotopes for given formula
+#' @description Takes in formula and returns isotope pattern m/z values.
+#' @param formula Molecular formula
+#' @param charge Final charge
+#' @return Table with isotopes of this molecular formula
+#' @seealso
 #'  \code{\link[enviPat]{isopattern}}
 #'  \code{\link[data.table]{data.table-package}}
 #' @rdname doIsotopes
-#' @export 
+#' @export
 #' @importFrom enviPat isopattern
 #' @importFrom data.table data.table
+#'
 doIsotopes <- function(formula, charge){
   isotables <- enviPat::isopattern(
     isotopes,
@@ -304,27 +269,19 @@ doIsotopes <- function(formula, charge){
 
 }
 
-#' @title FUNCTION_TITLE
-#' @description FUNCTION_DESCRIPTION
-#' @param outfolder PARAM_DESCRIPTION
-#' @param ext.dbname PARAM_DESCRIPTION, Default: 'extended'
-#' @param base.dbname PARAM_DESCRIPTION
-#' @param cl PARAM_DESCRIPTION, Default: 0
-#' @param blocksize PARAM_DESCRIPTION, Default: 600
-#' @param mzrange PARAM_DESCRIPTION, Default: c(60, 600)
-#' @param adduct_table PARAM_DESCRIPTION, Default: adducts
-#' @param adduct_rules PARAM_DESCRIPTION, Default: adduct_rules
-#' @param silent PARAM_DESCRIPTION, Default: silent
-#' @param use.rules PARAM_DESCRIPTION, Default: TRUE
-#' @return OUTPUT_DESCRIPTION
-#' @details DETAILS
-#' @examples 
-#' \dontrun{
-#' if(interactive()){
-#'  #EXAMPLE1
-#'  }
-#' }
-#' @seealso 
+#' @title Build external database using a given base database
+#' @description Wrapper function that takes a base database, an existing (or not) external database, and fills the extended database with adduct and isotope variants of the compounds in the base database.
+#' @param outfolder Which folder are your databases in?
+#' @param ext.dbname Extended database name (without .db suffix), Default: 'extended'
+#' @param base.dbname Base database name (without .db suffix)
+#' @param cl parallel::makeCluster object for multithreading, Default: 0
+#' @param blocksize How many compounds to process simultanaously? Higher means more memory spikes but faster building, Default: 600
+#' @param mzrange Range of m/zs to include in database, Default: c(60, 600)
+#' @param adduct_table Adduct table, Default: adducts
+#' @param adduct_rules Adduct rule table, Default: adduct_rules
+#' @param silent Silence warnings?, Default: silent
+#' @param use.rules Use adduct rules?, Default: TRUE
+#' @seealso
 #'  \code{\link[RSQLite]{character(0)}},\code{\link[RSQLite]{SQLite}}
 #'  \code{\link[gsubfn]{fn}}
 #'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{data.table-package}},\code{\link[data.table]{rbindlist}},\code{\link[data.table]{fwrite}},\code{\link[data.table]{fread}}
@@ -332,7 +289,7 @@ doIsotopes <- function(formula, charge){
 #'  \code{\link[pbapply]{pbapply}}
 #'  \code{\link[enviPat]{check_chemform}}
 #' @rdname buildExtDB
-#' @export 
+#' @export
 #' @importFrom RSQLite dbConnect SQLite dbExecute dbExistsTable dbGetQuery dbDisconnect dbWriteTable dbReadTable
 #' @importFrom gsubfn fn
 #' @importFrom data.table as.data.table data.table rbindlist fwrite fread
