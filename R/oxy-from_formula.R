@@ -8,8 +8,7 @@
 #' @return Table with found formulas, their adduct and isotope percentage.
 #' @seealso
 #'  \code{\link[stringr]{str_match}}
-#'  \code{\link[Rdisop]{decomposeIsotopes}},\code{\link[Rdisop]{initializeCHNOPS}}
-#'  \code{\link[data.table]{data.table-package}}
+#'  \code{\link[Rdisop]{initializeCHNOPS}}
 #' @rdname getFormula
 #' @export
 #' @importFrom stringr str_match_all
@@ -53,7 +52,7 @@ getFormula <- function(mz, add_name, adducts, ppm, elements = c("C","H","N","O",
 #' @return Vector of formulas that pass rules
 #' @seealso
 #'  \code{\link[enviPat]{check_chemform}}
-#'  \code{\link[data.table]{data.table-package}},\code{\link[data.table]{rbindlist}}
+#'  \code{\link[data.table]{rbindlist}}
 #'  \code{\link[stringr]{str_match}}
 #' @rdname filterFormula
 #' @export
@@ -61,8 +60,7 @@ getFormula <- function(mz, add_name, adducts, ppm, elements = c("C","H","N","O",
 #' @importFrom data.table data.table rbindlist
 #' @importFrom stringr str_match
 filterFormula = function(formulas, rules=c("senior", "lewis", "hc", "chnops", "nops")){
-  require(enviPat)
-  data(isotopes)
+  data(isotopes, package = "enviPat", envir = environment())
 
   corrected = enviPat::check_chemform(isotopes = isotopes, chemforms = formulas)
 
@@ -129,7 +127,6 @@ filterFormula = function(formulas, rules=c("senior", "lewis", "hc", "chnops", "n
     #IF(AND(T4>=0.2,T4<=3,V4>=0,V4<=2,W4>=0,W4<=1.2,X4>=0,X4<=0.32,Y4>=0,Y4<=0.65),"YES","NO")
     # nops
     # IF(AND(V4>=0,V4<=4,W4>=0,W4<=3,X4>=0,X4<=2,Y4>=0,Y4<=3),"YES","NO"
-    require(data.table)
     try({
       res = with(row,{
         HC = nrH/nrC
@@ -224,20 +221,20 @@ revertAdduct <- function(formula, add_name, adduct_table=adducts){
 #' @param calc_adducts Which adducts to consider?, Default: adducts[Ion_mode == mode, ]$Name
 #' @return Table of found matches and associated info
 #' @seealso
-#'  \code{\link[data.table]{data.table-package}},\code{\link[data.table]{rbindlist}}
+#'  \code{\link[data.table]{rbindlist}}
 #'  \code{\link[enviPat]{check_chemform}}
 #' @rdname getPredicted
 #' @export
 #' @importFrom data.table data.table rbindlist
 #' @importFrom enviPat check_chemform
 getPredicted <- function(mz,
-                          ppm = 2,
-                          mode = "positive",
-                          rules = c("senior", "lewis", "hc", "chnops", "nops"),
-                          elements = c("C","H","N","O","P","S"),
-                          search= c("PubChem", "ChemSpider"),
-                          detailed = T,
-                          calc_adducts = adducts[Ion_mode == mode,]$Name){
+                         ppm = 2,
+                         mode = "positive",
+                         rules = c("senior", "lewis", "hc", "chnops", "nops"),
+                         elements = c("C","H","N","O","P","S"),
+                         search= c("PubChem", "ChemSpider"),
+                         detailed = T,
+                         calc_adducts = adducts[Ion_mode == mode,]$Name){
 
   cat("
       _...._
@@ -273,50 +270,50 @@ getPredicted <- function(mz,
 
     res = lapply(1:nrow(iter.rows), function(i, row){
 
-        formula = iter.rows[i,]$fullformula
-        checked <- enviPat::check_chemform(isotopes, formula)
-        new_formula <- checked[1,]$new_formula
-        # check which adducts are possible
-        theor_orig_formula = new_formula
+      formula = iter.rows[i,]$fullformula
+      checked <- enviPat::check_chemform(isotopes, formula)
+      new_formula <- checked[1,]$new_formula
+      # check which adducts are possible
+      theor_orig_formula = new_formula
 
-        # remove last adduct
-        theor_orig_formula = revertAdduct(theor_orig_formula,
-                                          add_name,
-                                          adduct_table = adducts)
-        if(is.na(theor_orig_formula)){
-          return(data.table())
+      # remove last adduct
+      theor_orig_formula = revertAdduct(theor_orig_formula,
+                                        add_name,
+                                        adduct_table = adducts)
+      if(is.na(theor_orig_formula)){
+        return(data.table())
+      }else{
+        data.table::data.table(query_mz = c(mz),
+                               name = theor_orig_formula,
+                               baseformula = theor_orig_formula,
+                               fullformula = new_formula,
+                               basecharge = c(0),
+                               finalcharge = c(adducts[Name == add_name]$Charge),
+                               adduct = row$Name,
+                               `%iso` = 100,
+                               identifier = new_formula,
+                               structure = paste0("[", new_formula, "]0"),
+                               description = "Predicted possible formula for this m/z value.",
+                               source = "magicball",
+                               dppm = iter.rows[i,]$dppm)
+      }
+    }, row = row)
+
+    if(length(res) > 0){
+
+      flattenlist = function(x){
+        morelists <- sapply(x, function(xprime) class(xprime)[1]=="list")
+        out <- c(x[!morelists], unlist(x[morelists], recursive=FALSE, use.names = T))
+        if(sum(morelists)){
+          Recall(out)
         }else{
-          data.table::data.table(query_mz = c(mz),
-                                 name = theor_orig_formula,
-                                 baseformula = theor_orig_formula,
-                                 fullformula = new_formula,
-                                 basecharge = c(0),
-                                 finalcharge = c(adducts[Name == add_name]$Charge),
-                                 adduct = row$Name,
-                                 `%iso` = 100,
-                                 identifier = new_formula,
-                                 structure = paste0("[", new_formula, "]0"),
-                                 description = "Predicted possible formula for this m/z value.",
-                                 source = "magicball",
-                                 dppm = iter.rows[i,]$dppm)
+          return(out)
         }
-      }, row = row)
+      }
 
-      if(length(res) > 0){
+      res_proc = flattenlist(res)
 
-        flattenlist = function(x){
-          morelists <- sapply(x, function(xprime) class(xprime)[1]=="list")
-          out <- c(x[!morelists], unlist(x[morelists], recursive=FALSE, use.names = T))
-          if(sum(morelists)){
-            Recall(out)
-          }else{
-            return(out)
-          }
-        }
-
-        res_proc = flattenlist(res)
-
-        tbl <- data.table::rbindlist(res_proc[!sapply(res_proc, is.null)])
+      tbl <- data.table::rbindlist(res_proc[!sapply(res_proc, is.null)])
     }
 
     uniques <- unique(tbl$baseformula)
@@ -344,7 +341,7 @@ getPredicted <- function(mz,
 #' }
 #' @seealso
 #'  \code{\link[pbapply]{pbapply}}
-#'  \code{\link[data.table]{data.table-package}},\code{\link[data.table]{as.data.table}},\code{\link[data.table]{rbindlist}}
+#'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{rbindlist}}
 #'  \code{\link[enviPat]{check_chemform}}
 #'  \code{\link[gsubfn]{fn}}
 #'  \code{\link[stringr]{str_extract}},\code{\link[stringr]{str_match}}
@@ -414,7 +411,7 @@ searchFormulaWeb <- function(formulas,
                          if("Name" %in% tbl$V1){
                            tbl = data.table::as.data.table(tbl)
                            data.table::data.table(
-                             compoundname = gsub(tbl[V1 == "Name",V2], pattern = "ÃŽÂ.-", replacement = ""),
+                             compoundname = gsub(tbl[V1 == "Name",V2], pattern = "[^\x01-\x7F]+.-", replacement = ""),
                              description = paste0("Toxicity class: ", tbl[V1 == "Tox-class",V2]),
                              baseformula = tbl[V1 == "Formula",V2],
                              identifier = "???",
@@ -478,7 +475,7 @@ searchFormulaWeb <- function(formulas,
                  }else{
                    rows
                  }
-                 })
+               })
                data.table::rbindlist(rows, fill=T)
              },
              pubchem = {
@@ -496,7 +493,7 @@ searchFormulaWeb <- function(formulas,
                    pc_res <- jsonlite::read_json(url,simplifyVector = T)
                    ids <- pc_res$IdentifierList$CID
                    rows$description <- paste0("PubChem found these IDs: ",
-                                                paste0(ids, collapse = ", "))
+                                              paste0(ids, collapse = ", "))
                    if(detailed){
                      rows = pubChemInfo(ids)
                    }
@@ -513,7 +510,7 @@ searchFormulaWeb <- function(formulas,
                if(apikey == ""){
                  print("No ChemSpider API key supplied!")
                  return(data.table::data.table())
-                }
+               }
 
                rows = pbapply::pblapply(formblocks, function(formgroup){
                  formjson <- paste0('"', paste0(formgroup, collapse='","'), '"')
@@ -568,7 +565,7 @@ searchFormulaWeb <- function(formulas,
       fin$identifier <- as.character(fin$identifier)
       fin$structure <- sapply(fin$structure, function(smi) if(is.na(smi)) "" else smi)
     }
-     unique(fin)
+    unique(fin)
   }else{
     print("Please select at least one database to search in!")
     data.table::data.table()
@@ -585,7 +582,6 @@ searchFormulaWeb <- function(formulas,
 #'  \code{\link[gsubfn]{fn}}
 #'  \code{\link[httr]{POST}},\code{\link[httr]{add_headers}}
 #'  \code{\link[jsonlite]{read_json}}
-#'  \code{\link[data.table]{data.table-package}}
 #' @rdname chemspiderInfo
 #' @export
 #' @importFrom gsubfn fn
@@ -628,13 +624,14 @@ chemspiderInfo <- function(ids,
   rbindlist(row.blocks)
 }
 
+#lmdb = lmdb[, lapply(.SD, function(x) textclean::replace_non_ascii(x, remove.nonconverted = T))]
+
 #' @title Find additional info on a PubChem ID.
 #' @description Takes PubChem ID and finds name, formula, smiles, charge
 #' @param ids Vector of identifiers.
 #' @param maxn Compounds searched per batch search, Default: 30
 #' @return Table with additional info on PubChem IDs
 #' @seealso
-#'  \code{\link[jsonlite]{toJSON, fromJSON}}
 #'  \code{\link[data.table]{rbindlist}}
 #' @rdname pubChemInfo
 #' @export
@@ -643,7 +640,7 @@ chemspiderInfo <- function(ids,
 pubChemInfo <- function(ids, maxn=30){
   # structural info
   split.ids = split(ids,
-                     ceiling(seq_along(ids) / maxn))
+                    ceiling(seq_along(ids) / maxn))
 
   chunk.row.list <- lapply(split.ids, function(idgroup){
 
@@ -755,8 +752,8 @@ pubChemInfo <- function(ids, maxn=30){
   res <- chunk.row.list[sapply(chunk.row.list, function(x){
     returnme = F
     try({if(nrow(x)>0){
-        returnme=T}})
+      returnme=T}})
     returnme
-    })]
+  })]
   data.table::rbindlist(res)
 }

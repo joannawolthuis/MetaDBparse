@@ -353,7 +353,7 @@ build.HMDB <- function(outfolder){ # WORKS
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
-#'  \code{\link[data.table]{fread}},\code{\link[data.table]{data.table-package}}
+#'  \code{\link[data.table]{fread}}
 #'  \code{\link[pbapply]{pbapply}}
 #' @rdname build.METACYC
 #' @export
@@ -696,7 +696,7 @@ build.CHEBI <- function(outfolder){ # WORKS
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{untar}}
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
-#'  \code{\link[data.table]{fread}},\code{\link[data.table]{data.table-package}}
+#'  \code{\link[data.table]{fread}}
 #' @rdname build.FOODB
 #' @export
 #' @importFrom utils download.file untar
@@ -745,7 +745,7 @@ build.FOODB <- function(outfolder){ # WORKS
 #' }
 #' @seealso
 #'  \code{\link[WikidataQueryServiceR]{query_wikidata}}
-#'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{data.table-package}}
+#'  \code{\link[data.table]{as.data.table}}
 #' @rdname build.WIKIDATA
 #' @export
 #' @importFrom WikidataQueryServiceR query_wikidata
@@ -876,7 +876,7 @@ build.WIKIDATA <- function(outfolder){ # WORKS
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
 #'  \code{\link[pbapply]{pbapply}}
-#'  \code{\link[data.table]{data.table-package}},\code{\link[data.table]{rbindlist}}
+#'  \code{\link[data.table]{rbindlist}}
 #' @rdname build.RESPECT
 #' @export
 #' @importFrom utils download.file unzip
@@ -935,6 +935,7 @@ build.RESPECT <- function(outfolder){ # WORKS
 #' @title Build MACONDA
 #' @description Parses MACONDA, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param conn Connection to extended database (MaConDa writes directly to there due to anomalous adducts)
 #' @return data table with parsed database
 #' @examples
 #' \dontrun{
@@ -945,10 +946,9 @@ build.RESPECT <- function(outfolder){ # WORKS
 #' @seealso
 #'  \code{\link[stringr]{str_match}}
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
-#'  \code{\link[data.table]{fread}},\code{\link[data.table]{data.table-package}}
+#'  \code{\link[data.table]{fread}}
 #'  \code{\link[pbapply]{pbapply}}
-#'  \code{\link[webchem]{character(0)}}
-#'  \code{\link[RSQLite]{character(0)}},\code{\link[RSQLite]{SQLite}}
+#'  \code{\link[RSQLite]{SQLite}}
 #'  \code{\link[DBI]{dbDisconnect}}
 #'  \code{\link[gsubfn]{fn}}
 #' @rdname build.MACONDA
@@ -957,7 +957,7 @@ build.RESPECT <- function(outfolder){ # WORKS
 #' @importFrom utils download.file unzip
 #' @importFrom data.table fread data.table
 #' @importFrom pbapply pbsapply
-#' @importFrom webchem cs_inchi_smiles
+#' @importFrom webchem cs_convert
 #' @importFrom RSQLite dbExecute dbConnect SQLite dbGetQuery dbWriteTable dbDisconnect
 #' @importFrom DBI dbDisconnect
 #' @importFrom gsubfn fn
@@ -987,7 +987,7 @@ build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
 
   has.inchi <- which(base.table$std_inchi != "")
   inchis <- base.table$std_inchi[has.inchi]
-  smiles = pbapply::pbsapply(inchis, webchem::cs_inchi_smiles)
+  smiles = pbapply::pbsapply(inchis, function(x) webchem::cs_convert(x,from="inchi", to="smiles"))
 
   charges <- gsub(base.table$ion_form, pattern = ".*\\]", replacement = "")
   no.info <- which(charges == "")
@@ -1143,7 +1143,7 @@ build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
-#'  \code{\link[data.table]{fread}},\code{\link[data.table]{data.table-package}}
+#'  \code{\link[data.table]{fread}}
 #' @rdname build.T3DB
 #' @export
 #' @importFrom utils download.file unzip
@@ -1193,7 +1193,6 @@ build.T3DB <- function(outfolder){ # WORKS
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[pbapply]{pboptions}},\code{\link[pbapply]{pbapply}}
 #'  \code{\link[XML]{xmlTreeParse}}
-#'  \code{\link[data.table]{data.table-package}}
 #'  \code{\link[webchem]{cir_query}}
 #' @rdname build.HSDB
 #' @export
@@ -1226,7 +1225,7 @@ build.HSDB <- function(outfolder){ # NEEDS WORK
 
   pb <- pbapply::startpb(min = 0, max = n)
 
-  idx <<- 0
+  idx <- 0
 
   parsed <- XML::xmlTreeParse(input)
   i=1
@@ -1268,7 +1267,6 @@ build.HSDB <- function(outfolder){ # NEEDS WORK
 #'  \code{\link[openxlsx]{read.xlsx}}
 #'  \code{\link[pbapply]{pbapply}}
 #'  \code{\link[jsonlite]{read_json}}
-#'  \code{\link[data.table]{data.table-package}}
 #' @rdname build.BLOODEXPOSOME
 #' @export
 #' @importFrom utils download.file
@@ -1327,7 +1325,7 @@ build.BLOODEXPOSOME <- function(outfolder){ # WORKS
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[stringr]{str_match}}
 #'  \code{\link[RCurl]{getURL}}
-#'  \code{\link[data.table]{fread}},\code{\link[data.table]{data.table-package}}
+#'  \code{\link[data.table]{fread}}
 #'  \code{\link[pbapply]{pbapply}}
 #'  \code{\link[R.utils]{capitalize}}
 #' @rdname build.EXPOSOMEEXPLORER
@@ -1420,7 +1418,7 @@ build.EXPOSOMEEXPLORER <- function(outfolder){ # WORKS
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
 #'  \code{\link[pbapply]{pbapply}}
-#'  \code{\link[data.table]{fread}},\code{\link[data.table]{rbindlist}},\code{\link[data.table]{data.table-package}}
+#'  \code{\link[data.table]{fread}},\code{\link[data.table]{rbindlist}}
 #' @rdname build.SMPDB
 #' @export
 #' @importFrom utils download.file unzip
@@ -1485,8 +1483,8 @@ build.SMPDB <- function(outfolder){ # OK I THINK
 #'  \code{\link[KEGGREST]{keggFind}},\code{\link[KEGGREST]{keggGet}}
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
-#'  \code{\link[data.table]{data.table-package}},\code{\link[data.table]{rbindlist}}
-#'  \code{\link[rcdk]{load.molecules}},\code{\link[rcdk]{get.smiles}},\code{\link[rcdk]{c("get.total.formal.charge", "get.total.formal.charge")}}
+#'  \code{\link[data.table]{rbindlist}}
+#'  \code{\link[rcdk]{load.molecules}},\code{\link[rcdk]{get.smiles}}
 #' @rdname build.KEGG
 #' @export
 #' @importFrom pbapply pblapply
@@ -1662,7 +1660,7 @@ build.DRUGBANK <- function(outfolder){  # WORKS
 
   pb <- pbapply::startpb(min = 0, max = n)
 
-  idx <<- 0
+  idx <- 0
 
   metabolite = function(currNode){
 
@@ -1759,7 +1757,7 @@ build.DRUGBANK <- function(outfolder){  # WORKS
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[zip]{unzip}}
-#'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{data.table-package}},\code{\link[data.table]{fread}},\code{\link[data.table]{rbindlist}}
+#'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{fread}},\code{\link[data.table]{rbindlist}}
 #'  \code{\link[ChemmineR]{datablock2ma}},\code{\link[ChemmineR]{datablock}}
 #'  \code{\link[webchem]{cs_convert}}
 #'  \code{\link[xml2]{read_xml}}
@@ -1832,7 +1830,6 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
   db.base$charge <- c(NA)
 
   # - - - add classification - - -
-  require(rvest)
   doc <- xml2::read_html("https://www.lipidmaps.org/data/classification/LM_classification_exp.php")
   categories = doc %>%
     rvest::html_nodes("div:nth-child(2)") %>%
@@ -1874,7 +1871,7 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[XML]{xmlToList}}
 #'  \code{\link[pbapply]{pbapply}}
-#'  \code{\link[data.table]{data.table-package}},\code{\link[data.table]{rbindlist}}
+#'  \code{\link[data.table]{rbindlist}}
 #'  \code{\link[jsonlite]{read_json}}
 #' @rdname build.METABOLIGHTS
 #' @export
@@ -1981,7 +1978,7 @@ build.METABOLIGHTS <- function(outfolder){
 #' @seealso
 #'  \code{\link[pbapply]{pbapply}}
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
-#'  \code{\link[data.table]{fread}},\code{\link[data.table]{data.table-package}}
+#'  \code{\link[data.table]{fread}}
 #'  \code{\link[reshape2]{cast}}
 #'  \code{\link[Hmisc]{capitalize}}
 #' @rdname build.DIMEDB
@@ -2051,8 +2048,7 @@ build.DIMEDB <- function(outfolder){ # WORKS
 #'  \code{\link[stringr]{str_match}}
 #'  \code{\link[pbapply]{pbapply}}
 #'  \code{\link[httr]{GET}},\code{\link[httr]{content_type}},\code{\link[httr]{content}}
-#'  \code{\link[jsonlite]{toJSON, fromJSON}}
-#'  \code{\link[data.table]{rbindlist}},\code{\link[data.table]{data.table-package}}
+#'  \code{\link[data.table]{rbindlist}}
 #' @rdname build.VMH
 #' @export
 #' @importFrom RCurl getURL
@@ -2150,7 +2146,7 @@ build.VMH <- function(outfolder){ # WORKS
 #'  \code{\link[stringr]{str_match}}
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[openxlsx]{read.xlsx}}
-#'  \code{\link[data.table]{fread}},\code{\link[data.table]{data.table-package}}
+#'  \code{\link[data.table]{fread}}
 #' @rdname build.PHENOLEXPLORER
 #' @export
 #' @importFrom RCurl getURL
@@ -2243,7 +2239,7 @@ build.PHENOLEXPLORER <- function(outfolder){ # WORKS
 #'  \code{\link[stringr]{str_match}}
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[pbapply]{pbapply}}
-#'  \code{\link[data.table]{data.table-package}},\code{\link[data.table]{rbindlist}}
+#'  \code{\link[data.table]{rbindlist}}
 #' @rdname build.MASSBANK
 #' @export
 #' @importFrom stringr str_match
@@ -2523,7 +2519,7 @@ build.BMDB <- function(outfolder){
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[stringr]{str_split}},\code{\link[stringr]{str_extract}},\code{\link[stringr]{str_match}}
 #'  \code{\link[pbapply]{pbapply}}
-#'  \code{\link[data.table]{data.table-package}},\code{\link[data.table]{rbindlist}}
+#'  \code{\link[data.table]{rbindlist}}
 #' @rdname build.RMDB
 #' @export
 #' @importFrom utils download.file
@@ -2581,7 +2577,7 @@ build.RMDB <- function(outfolder){
 #'  \code{\link[stringr]{str_match}}
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[RJSONIO]{fromJSON}}
-#'  \code{\link[data.table]{rbindlist}},\code{\link[data.table]{data.table-package}}
+#'  \code{\link[data.table]{rbindlist}}
 #' @rdname build.ECMDB
 #' @export
 #' @importFrom RCurl getURL
@@ -2664,7 +2660,6 @@ build.LMDB <- function(outfolder){
   #   file.remove(out.csv)
   # }
   #
-  # require(ChemmineR)
   # sdfStream.joanna(input=sdf.path, output=out.csv,
   #                  append=FALSE,
   #                  fct=desc,
@@ -2686,7 +2681,7 @@ build.LMDB <- function(outfolder){
   version = stringr::str_match(header,
                                pattern = "Version <strong>(\\d.\\d)")[,2]
 
-  data(lmdb)
+  data(lmdb, envir = environment())
   # descs = data.table::fread("~/Downloads/lmdb_descriptions.csv", header=T)
   # descs <- data.table::data.table(identifier = c(colnames(descs)[1], descs[,1][[1]]),
   #                                  description = c(colnames(descs)[2], descs[,2][[1]]))
@@ -2711,8 +2706,7 @@ build.LMDB <- function(outfolder){
 #' }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
-#'  \code{\link[jsonlite]{toJSON, fromJSON}}
-#'  \code{\link[data.table]{data.table-package}},\code{\link[data.table]{as.data.table}},\code{\link[data.table]{fread}},\code{\link[data.table]{rbindlist}}
+#'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{fread}},\code{\link[data.table]{rbindlist}}
 #'  \code{\link[ChemmineR]{datablock2ma}},\code{\link[ChemmineR]{datablock}}
 #'  \code{\link[pbapply]{pbapply}}
 #'  \code{\link[RCurl]{getURL}}
@@ -2747,7 +2741,6 @@ build.YMDB <- function(outfolder){
       charge = jsonParsed$physiological_charge,
       structure = ""
     )
-  require(ChemmineR)
   sdf.url = "http://www.ymdb.ca/system/downloads/current/ymdb.sdf.zip"
   zip.file <- file.path(base.loc, "ymdb_sdf.zip")
   utils::download.file(sdf.url, zip.file,mode = "wb",cacheOK = T)
@@ -2813,7 +2806,7 @@ build.YMDB <- function(outfolder){
 #' }
 #' @seealso
 #'  \code{\link[utils]{download.file}}
-#'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{data.table-package}}
+#'  \code{\link[data.table]{as.data.table}}
 #'  \code{\link[readxl]{read_excel}}
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
@@ -2858,7 +2851,7 @@ build.PAMDB <- function(outfolder){
 #' @seealso
 #'  \code{\link[XML]{getNodeSet}},\code{\link[XML]{xmlAttrs}},\code{\link[XML]{readHTMLTable}}
 #'  \code{\link[pbapply]{pbapply}}
-#'  \code{\link[data.table]{data.table-package}},\code{\link[data.table]{rbindlist}}
+#'  \code{\link[data.table]{rbindlist}}
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
 #' @rdname build.mVOC

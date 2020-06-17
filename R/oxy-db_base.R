@@ -11,7 +11,6 @@
 #'  }
 #' }
 #' @seealso
-#'  \code{\link[rcdk]{parse.smiles}},\code{\link[rcdk]{c("do.aromaticity", "do.aromaticity")}},\code{\link[rcdk]{c("do.typing", "do.typing")}},\code{\link[rcdk]{c("do.isotopes", "do.isotopes")}}
 #'  \code{\link[rJava]{jcall}}
 #' @rdname smiles.to.iatom
 #' @export
@@ -246,8 +245,7 @@ cleanDB <- function(db.formatted, cl, silent, blocksize, smitype='Canonical'){
 #' @param cl parallel::makeCluster object for multithreading, Default: 0
 #' @return Nothing, writes SQLite database to 'outfolder'.
 #' @seealso
-#'  \code{\link[data.table]{fread}},\code{\link[data.table]{as.data.table}},\code{\link[data.table]{data.table-package}}
-#'  \code{\link[RSQLite]{character(0)}}
+#'  \code{\link[data.table]{fread}},\code{\link[data.table]{as.data.table}}
 #'  \code{\link[DBI]{dbDisconnect}}
 #' @rdname buildBaseDB
 #' @export

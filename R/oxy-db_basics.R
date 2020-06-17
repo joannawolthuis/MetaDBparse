@@ -4,7 +4,7 @@
 #' @param dbname What is the name of the database? (exclude .db)
 #' @return Nothing, writes SQLITE database to outfolder
 #' @seealso
-#'  \code{\link[RSQLite]{character(0)}},\code{\link[RSQLite]{SQLite}}
+#'  \code{\link[RSQLite]{SQLite}}
 #'  \code{\link[DBI]{dbExecute}}
 #' @rdname openBaseDB
 #' @export

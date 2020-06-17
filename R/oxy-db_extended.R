@@ -3,7 +3,7 @@
 #' @param outfolder Which folder are your databases in?
 #' @param ext.dbname Extended database name (without .db suffix), Default: 'extended'
 #' @seealso
-#'  \code{\link[RSQLite]{character(0)}},\code{\link[RSQLite]{SQLite}}
+#'  \code{\link[RSQLite]{SQLite}}
 #' @rdname removeFailedStructures
 #' @export
 #' @importFrom RSQLite dbConnect SQLite dbExecute dbDisconnect
@@ -33,7 +33,6 @@ removeFailedStructures <- function(outfolder,
   }
 }
 
-#
 #' @title Check which structures are OK according to given adduct rules
 #' @description Calculate 'rules' for all compounds (requires iatom-ization)
 #' @param iatoms Iatomcontainers with compounds
@@ -41,7 +40,6 @@ removeFailedStructures <- function(outfolder,
 #' @return Table with all structures and if they pass the rules given for each adduct
 #' @seealso
 #'  \code{\link[rcdk]{matches}},\code{\link[rcdk]{get.total.formal.charge}}
-#'  \code{\link[data.table]{data.table-package}}
 #' @rdname countAdductRuleMatches
 #' @export
 #' @importFrom rcdk matches get.total.formal.charge
@@ -80,7 +78,7 @@ countAdductRuleMatches <- function(iatoms, adduct_rules){
 #' @param adduct_table Adduct tablle
 #' @return Table with T/F for each structure and adduct
 #' @seealso
-#'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{data.table-package}}
+#'  \code{\link[data.table]{as.data.table}}
 #' @rdname checkAdductRule
 #' @export
 #' @importFrom data.table as.data.table data.table
@@ -128,7 +126,6 @@ checkAdductRule <- function(adduct_rule_scores,
 #' @return Table with adducts of this compound
 #' @seealso
 #'  \code{\link[enviPat]{check_chemform}},\code{\link[enviPat]{mergeform}},\code{\link[enviPat]{check_ded}},\code{\link[enviPat]{subform}},\code{\link[enviPat]{multiform}}
-#'  \code{\link[data.table]{data.table-package}}
 #' @rdname doAdduct
 #' @export
 #' @importFrom enviPat check_chemform mergeform check_ded subform multiform
@@ -226,7 +223,6 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
 #' @return Table with isotopes of this molecular formula
 #' @seealso
 #'  \code{\link[enviPat]{isopattern}}
-#'  \code{\link[data.table]{data.table-package}}
 #' @rdname doIsotopes
 #' @export
 #' @importFrom enviPat isopattern
@@ -282,9 +278,9 @@ doIsotopes <- function(formula, charge){
 #' @param silent Silence warnings?, Default: silent
 #' @param use.rules Use adduct rules?, Default: TRUE
 #' @seealso
-#'  \code{\link[RSQLite]{character(0)}},\code{\link[RSQLite]{SQLite}}
+#'  \code{\link[RSQLite]{SQLite}}
 #'  \code{\link[gsubfn]{fn}}
-#'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{data.table-package}},\code{\link[data.table]{rbindlist}},\code{\link[data.table]{fwrite}},\code{\link[data.table]{fread}}
+#'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{rbindlist}},\code{\link[data.table]{fwrite}},\code{\link[data.table]{fread}}
 #'  \code{\link[DBI]{dbWriteTable}}
 #'  \code{\link[pbapply]{pbapply}}
 #'  \code{\link[enviPat]{check_chemform}}
@@ -453,7 +449,6 @@ buildExtDB <- function(outfolder,
 
     # for each block
     block = blocks[[i]]
-    last.block <<- block
     deut = grep(block$baseformula, pattern="D")
     if(length(deut) > 0){
       block$baseformula[deut] <- gsub(block$baseformula[deut], pattern = "D", replacement = "[2]H")

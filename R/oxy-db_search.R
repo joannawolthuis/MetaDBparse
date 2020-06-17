@@ -13,7 +13,7 @@
 #'  }
 #' }
 #' @seealso
-#'  \code{\link[RSQLite]{character(0)}},\code{\link[RSQLite]{SQLite}}
+#'  \code{\link[RSQLite]{SQLite}}
 #' @rdname showAllBase
 #' @export
 #' @importFrom RSQLite dbConnect SQLite dbGetQuery dbDisconnect
@@ -38,8 +38,8 @@ showAllBase <- function(outfolder, base.dbname){
 #' @param append Use this when searching muiltiple base databases, so only one result table is created, Default: F
 #' @return Data table with match results
 #' @seealso
-#'  \code{\link[RSQLite]{character(0)}},\code{\link[RSQLite]{SQLite}}
-#'  \code{\link[data.table]{data.table-package}},\code{\link[data.table]{rbindlist}}
+#'  \code{\link[RSQLite]{SQLite}}
+#'  \code{\link[data.table]{rbindlist}}
 #'  \code{\link[DBI]{dbExecute}},\code{\link[DBI]{dbGetQuery}},\code{\link[DBI]{dbDisconnect}}
 #'  \code{\link[gsubfn]{fn}}
 #' @rdname searchMZ
@@ -162,8 +162,8 @@ searchMZ <- function(mzs, ionmodes, outfolder,
 #' @param base.dbname Base database name (without .db suffix)
 #' @return Data table with compounds with this molecular formula and the other available information
 #' @seealso
-#'  \code{\link[RSQLite]{character(0)}},\code{\link[RSQLite]{SQLite}}
-#'  \code{\link[data.table]{data.table-package}},\code{\link[data.table]{rbindlist}}
+#'  \code{\link[RSQLite]{SQLite}}
+#'  \code{\link[data.table]{rbindlist}}
 #' @rdname searchFormula
 #' @export
 #' @importFrom RSQLite dbConnect SQLite dbExecute dbWriteTable dbGetQuery
@@ -201,7 +201,7 @@ searchFormula <- function(formula, outfolder, base.dbname){
 #' @param outfolder Which folder are your databases in?
 #' @return Data table with m/z values, additionally molecular formula, charge, adduct, isotope %.
 #' @seealso
-#'  \code{\link[RSQLite]{character(0)}},\code{\link[RSQLite]{SQLite}}
+#'  \code{\link[RSQLite]{SQLite}}
 #' @rdname searchRev
 #' @export
 #' @importFrom RSQLite dbConnect SQLite dbSendStatement dbBind dbFetch dbClearResult dbDisconnect
@@ -294,9 +294,7 @@ searchCMMR <- function (cmm_url = "http://ceumass.eps.uspceu.es/mediator/api/v3/
 #' @param which_db Which online database do you want to search?, Default: 'cmmr'
 #' @return Table with match information
 #' @seealso
-#'  \code{\link[data.table]{data.table-package}}
 #'  \code{\link[pbapply]{pbapply}}
-#'  \code{\link[webchem]{character(0)}}
 #' @rdname searchMZonline
 #' @export
 #' @importFrom data.table data.table
@@ -309,7 +307,6 @@ searchMZonline <- function(mz=178.1219,
                            which_db = "cmmr"){
   switch(which_db,
          cmmr={
-           library(cmmr)
            results <- searchCMMR('http://ceumass.eps.uspceu.es/mediator/api/v3/batch',
                                  masses_mode = 'mz',
                                  ion_mode = 'positive',
@@ -317,7 +314,7 @@ searchMZonline <- function(mz=178.1219,
                                  tolerance_mode = 'ppm',
                                  unique_mz = mz)
             if(typeof(results) == "character"){
-              data.table()
+              data.table::data.table()
             }else{
               base.table = data.table::data.table(name = results$name,
                            baseformula = results$formula,
@@ -333,8 +330,8 @@ searchMZonline <- function(mz=178.1219,
               has.inchi <- which(!is.na(base.table$structure))
               if(length(has.inchi) >0){
                 inchis <- base.table$structure[has.inchi]
-                inchi = pbapply::pbsapply(inchis, webchem::cs_inchikey_inchi)
-                smiles = pbapply::pbsapply(inchi, webchem::cs_inchi_smiles)
+                inchi = pbapply::pbsapply(inchis, function(x) webchem::cs_convert(x, "inchikey", "inchi"))
+                smiles = pbapply::pbsapply(inchi, function(x) webchem::cs_convert(x, "inchi", "smiles"))
                 base.table$structure[has.inchi] <- smiles
                 base.table$structure[!has.inchi] <- c("")
               }else{
