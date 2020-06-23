@@ -1,3 +1,21 @@
+#' @title Get iatom containers from SMILES
+#' @description FUNCTION_DESCRIPTION
+#' @param smiles character vector of smiles
+#' @param silent suppress warnings?, Default: T
+#' @param cl parallel::makeCluster object for multithreading, Default: 0
+#' @return iatom containers for use in rcdk package
+#' @examples
+#' \dontrun{
+#' if(interactive()){
+#'  smiles.to.iatom(c('OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O'))
+#'  }
+#' }
+#' @seealso
+#'  \code{\link[rJava]{jcall}}
+#' @rdname smiles.to.iatom
+#' @export
+#' @importFrom rcdk parse.smiles do.aromaticity do.typing do.isotopes
+#' @importFrom rJava .jcall
 smiles.to.iatom <- function(smiles, silent=T, cl=0){
   iatoms <- sapply(smiles, function(x, silent){
     mol=NULL
@@ -24,6 +42,19 @@ smiles.to.iatom <- function(smiles, silent=T, cl=0){
   return(iatoms)
 }
 
+#' @title Get SMILES from iatom container
+#' @description This function takes an rcdk iatomcontainer and returns SMILES
+#' @param iatoms list of iatomcontainers
+#' @param smitype Which type of SMILES to export?, Default: 'Canonical'
+#' @param silent Suppress warnings?, Default: T
+#' @return character vector of SMILES in the chosen format
+#' @seealso
+#'  \code{\link[rcdk]{get.smiles}},\code{\link[rcdk]{smiles.flavors}}
+#'  \code{\link[rJava]{jcall}}
+#' @rdname iatom.to.smiles
+#' @export
+#' @importFrom rcdk get.smiles smiles.flavors
+#' @importFrom rJava .jcall
 iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=T){
 
   if(!silent){
@@ -54,6 +85,18 @@ iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=T){
   return(new.smiles)
 }
 
+#' @title Get formal charge from iatomcontainer
+#' @description This function takes iatomcontainer object and returns the formal charge.
+#' @param iatoms list of rcdk iatomcontainers
+#' @param silent suppress warnings?, Default: T
+#' @return Character vector of formal charges per iatomcontainer.
+#' @seealso
+#'  \code{\link[rcdk]{get.total.formal.charge}}
+#'  \code{\link[rJava]{jcall}}
+#' @rdname iatom.to.charge
+#' @export
+#' @importFrom rcdk get.total.formal.charge
+#' @importFrom rJava .jcall
 iatom.to.charge <- function(iatoms, silent=T){
 
   new.charges <- sapply(iatoms, function(mol, silent){
@@ -72,6 +115,18 @@ iatom.to.charge <- function(iatoms, silent=T){
   return(new.charges)
 }
 
+#' @title Get molecular formula from iatomcontainer
+#' @description This function takes iatomcontainer object and returns the molecular formula.
+#' @param iatoms list of rcdk iatomcontainers
+#' @param silent suppress warnings?, Default: T
+#' @return Character vector of formulas per iatomcontainer.
+#' @seealso
+#'  \code{\link[rcdk]{get.mol2formula}}
+#'  \code{\link[rJava]{jcall}}
+#' @rdname iatom.to.formula
+#' @export
+#' @importFrom rcdk get.mol2formula
+#' @importFrom rJava .jcall
 iatom.to.formula <- function(iatoms, silent=T){
 
   new.formulas <- sapply(iatoms, function(mol,silent){
@@ -90,7 +145,26 @@ iatom.to.formula <- function(iatoms, silent=T){
   return(new.formulas)
 }
 
-cleanDB <- function(db.formatted, cl, silent, blocksize){
+#' @title Uniformize database and remove invalid formulas/SMILES
+#' @description This is a wrapper function to take a 'raw' input data table with compound information, uniformize the SMILES
+#' @param db.formatted Data table with columns 'compoundname, structure, baseformula, charge, description'
+#' @param cl parallel::makeCluster object for multithreading
+#' @param silent Suppress warnings?
+#' @param blocksize How many compounds to process per 'block'? Higher number means bigger memory spikes, but faster processing time.
+#' @param smitype SMILES format, Default: 'Canonical'
+#' @return Data table with SMILES in the correct format, and charge/formula re-generated from said SMILES if available.
+#' @seealso
+#'  \code{\link[parallel]{clusterApply}}
+#'  \code{\link[pbapply]{pbapply}}
+#'  \code{\link[enviPat]{check_chemform}}
+#'  \code{\link[data.table]{rbindlist}}
+#' @rdname cleanDB
+#' @export
+#' @importFrom parallel clusterExport
+#' @importFrom pbapply pblapply
+#' @importFrom enviPat check_chemform
+#' @importFrom data.table rbindlist
+cleanDB <- function(db.formatted, cl, silent, blocksize, smitype='Canonical'){
   blocks = split(1:nrow(db.formatted), ceiling(seq_along(1:nrow(db.formatted))/blocksize))
 
   if(is.list(cl)){
@@ -114,7 +188,7 @@ cleanDB <- function(db.formatted, cl, silent, blocksize){
 
     valid.struct <- unlist(lapply(iats, function(x) !is.null(x)))
 
-    new.smiles = iatom.to.smiles(iats[valid.struct], smitype = "Canonical",silent=silent)
+    new.smiles = iatom.to.smiles(iats[valid.struct], smitype = smitype, silent=silent)
 
     new.charge = iatom.to.charge(iats[valid.struct],silent=silent)
 
@@ -161,8 +235,23 @@ cleanDB <- function(db.formatted, cl, silent, blocksize){
   return(data.table::rbindlist(db.fixed.rows))
 }
 
-# BIG BOI
-
+#' @title Build the base database
+#' @description This is a large wrapper function that calls upon all individual database parsers, cleans the resulting database and saves it in a SQLite database.
+#' @param outfolder In which folder are you building your databases? Temp folders etc. will be put here.
+#' @param dbname Which database do you want to build? Options: chebi,maconda,kegg,bloodexposome,dimedb,expoexplorer, foodb, drugbank, lipidmaps, massbank, metabolights, metacyc, phenolexplorer, respect, wikidata, wikipathways, t3db, vmh, hmdb, smpdb, lmdb, ymdb, ecmdb, bmdb, rmdb, stoff, nanpdb, mcdb, mvoc, pamdb
+#' @param custom_csv_path PARAM_DESCRIPTION, Default: NULL
+#' @param smitype Which SMILES format do you want?, Default: 'Canonical'
+#' @param silent Suppress warnings?, Default: T
+#' @param cl parallel::makeCluster object for multithreading, Default: 0
+#' @return Nothing, writes SQLite database to 'outfolder'.
+#' @seealso
+#'  \code{\link[data.table]{fread}},\code{\link[data.table]{as.data.table}}
+#'  \code{\link[DBI]{dbDisconnect}}
+#' @rdname buildBaseDB
+#' @export
+#' @importFrom data.table fread as.data.table data.table
+#' @importFrom RSQLite dbExecute
+#' @importFrom DBI dbDisconnect
 buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
                         smitype = "Canonical", silent=T, cl=0){
 
@@ -215,16 +304,18 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
 
   #options(java.home="C:\\Program Files\\Java\\jre1.8.0_221/") # windows...
 
-  db.final <- MetaDBparse::cleanDB(db.formatted,
+  db.final <- data.table::as.data.table(cleanDB(db.formatted,
                                    cl = cl,
                                    silent = silent,
-                                   blocksize=400)
+                                   blocksize=400))
+
+  db.final <- db.final[, lapply(.SD, as.character)]
 
   # - - - - - - - - - - - - - - - - - -
   writeDB(conn, data.table::data.table(date = Sys.Date(),
                                        version = db.formatted.all$version),
           "metadata")
-  writeDB(conn, db.final, "base")
+  writeDB(conn, table = db.final, "base")
   RSQLite::dbExecute(conn, "CREATE INDEX b_idx1 ON base(structure)")
   DBI::dbDisconnect(conn)
 }

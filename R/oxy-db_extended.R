@@ -1,3 +1,12 @@
+#' @title Remove structures where isotope generation failed.
+#' @description Sometimes if a run crashes, or a structure is bugged somehow, it is still registered as 'done' in the extended database and cannot be redone. This function removes these structures. Warning: slow!
+#' @param outfolder Which folder are your databases in?
+#' @param ext.dbname Extended database name (without .db suffix), Default: 'extended'
+#' @seealso
+#'  \code{\link[RSQLite]{SQLite}}
+#' @rdname removeFailedStructures
+#' @export
+#' @importFrom RSQLite dbConnect SQLite dbExecute dbDisconnect
 removeFailedStructures <- function(outfolder,
                                    ext.dbname = "extended"){
   outfolder <- normalizePath(outfolder)
@@ -24,7 +33,17 @@ removeFailedStructures <- function(outfolder,
   }
 }
 
-# calculate 'rules' for all compounds (requires iatom-ization)
+#' @title Check which structures are OK according to given adduct rules
+#' @description Calculate 'rules' for all compounds (requires iatom-ization)
+#' @param iatoms Iatomcontainers with compounds
+#' @param adduct_rules Adduct rule table (default is data(adduct_rules))
+#' @return Table with all structures and if they pass the rules given for each adduct
+#' @seealso
+#'  \code{\link[rcdk]{matches}},\code{\link[rcdk]{get.total.formal.charge}}
+#' @rdname countAdductRuleMatches
+#' @export
+#' @importFrom rcdk matches get.total.formal.charge
+#' @importFrom data.table data.table
 countAdductRuleMatches <- function(iatoms, adduct_rules){
   smiles = iatom.to.smiles(iatoms)
   res_cols <- lapply(1:nrow(adduct_rules), function(i){
@@ -53,6 +72,16 @@ countAdductRuleMatches <- function(iatoms, adduct_rules){
   cbind(structure=smiles, res)
 }
 
+#' @title Check for combined adduct rules
+#' @description Sometimes multiple rules apply - this function checks if they all apply as noted in the rule table.
+#' @param adduct_rule_scores Scores from countAdductRuleMatches.
+#' @param adduct_table Adduct tablle
+#' @return Table with T/F for each structure and adduct
+#' @seealso
+#'  \code{\link[data.table]{as.data.table}}
+#' @rdname checkAdductRule
+#' @export
+#' @importFrom data.table as.data.table data.table
 checkAdductRule <- function(adduct_rule_scores,
                             adduct_table){
 
@@ -87,6 +116,20 @@ checkAdductRule <- function(adduct_rule_scores,
                          qualified.per.adduct)
 }
 
+#' @title Generate adduct for given structure
+#' @description Takes in formula, an adduct of interest, and returns adduct formulas and charges.
+#' @param structure SMILES structure
+#' @param formula Molecular formula
+#' @param charge Initial charge
+#' @param adduct_table Adduct table
+#' @param query_adduct Adduct 'Name' of interest
+#' @return Table with adducts of this compound
+#' @seealso
+#'  \code{\link[enviPat]{check_chemform}},\code{\link[enviPat]{mergeform}},\code{\link[enviPat]{check_ded}},\code{\link[enviPat]{subform}},\code{\link[enviPat]{multiform}}
+#' @rdname doAdduct
+#' @export
+#' @importFrom enviPat check_chemform mergeform check_ded subform multiform
+#' @importFrom data.table data.table
 doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
   row = adduct_table[Name == query_adduct,]
   name <- row$Name
@@ -94,14 +137,18 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
 
   checked = enviPat::check_chemform(isotopes,chemforms = formula)
 
-  #if(checked$warning) return(data.table::data.table())
+  phailed = which(checked$warning)
 
-  formula = checked$new_formula
+  if(all(checked$warning)) return(data.table::data.table())
 
   unique_formulas <- unique(data.table::data.table(
     structure = structure,
-    baseformula = formula,
+    baseformula = checked$new_formula,
     charge = charge))
+
+  if(length(phailed) > 0){
+    unique_formulas <- unique_formulas[-phailed,]
+  }
 
   adduct_before <- row$AddAt
   deduct_before <- row$RemAt
@@ -127,6 +174,8 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
     unique_formulas <- unique_formulas[can.deduct]
   }
 
+  unique_formulas <- unique_formulas[which(unique_formulas$adducted != "NANA"),]
+
   # --- multiplication ---
   multiplier <- as.numeric(row$xM)
 
@@ -144,13 +193,13 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
 
   if(!(adduct_after %in% c("", "FALSE", FALSE, NA))){
     unique_formulas$adducted <- enviPat::mergeform(formula1 = unique_formulas$adducted,
-                                                   formula2 = adduct_after)}
+                                                   formula2 = adduct_after)
+    }
 
   # --- is deduction necessary? ---
-  if(!(deduct_after  %in% c("", "FALSE", FALSE, NA))){
+  if(!(deduct_after %in% c("", "FALSE", FALSE, NA))){
     can.deduct <- which(!as.logical(enviPat::check_ded(formulas = unique_formulas$adducted,
                                                        deduct = deduct_after)))
-
     if(length(can.deduct) == 0) return(data.table::data.table())
     unique_formulas$adducted[can.deduct] <- enviPat::subform(unique_formulas$adducted[can.deduct], deduct_after)
     unique_formulas <- unique_formulas[can.deduct]
@@ -167,6 +216,18 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
   unique_formulas
 }
 
+#' @title Generate isotopes for given formula
+#' @description Takes in formula and returns isotope pattern m/z values.
+#' @param formula Molecular formula
+#' @param charge Final charge
+#' @return Table with isotopes of this molecular formula
+#' @seealso
+#'  \code{\link[enviPat]{isopattern}}
+#' @rdname doIsotopes
+#' @export
+#' @importFrom enviPat isopattern
+#' @importFrom data.table data.table
+#'
 doIsotopes <- function(formula, charge){
   isotables <- enviPat::isopattern(
     isotopes,
@@ -204,6 +265,33 @@ doIsotopes <- function(formula, charge){
 
 }
 
+#' @title Build external database using a given base database
+#' @description Wrapper function that takes a base database, an existing (or not) external database, and fills the extended database with adduct and isotope variants of the compounds in the base database.
+#' @param outfolder Which folder are your databases in?
+#' @param ext.dbname Extended database name (without .db suffix), Default: 'extended'
+#' @param base.dbname Base database name (without .db suffix)
+#' @param cl parallel::makeCluster object for multithreading, Default: 0
+#' @param blocksize How many compounds to process simultanaously? Higher means more memory spikes but faster building, Default: 600
+#' @param mzrange Range of m/zs to include in database, Default: c(60, 600)
+#' @param adduct_table Adduct table, Default: adducts
+#' @param adduct_rules Adduct rule table, Default: adduct_rules
+#' @param silent Silence warnings?, Default: silent
+#' @param use.rules Use adduct rules?, Default: TRUE
+#' @seealso
+#'  \code{\link[RSQLite]{SQLite}}
+#'  \code{\link[gsubfn]{fn}}
+#'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{rbindlist}},\code{\link[data.table]{fwrite}},\code{\link[data.table]{fread}}
+#'  \code{\link[DBI]{dbWriteTable}}
+#'  \code{\link[pbapply]{pbapply}}
+#'  \code{\link[enviPat]{check_chemform}}
+#' @rdname buildExtDB
+#' @export
+#' @importFrom RSQLite dbConnect SQLite dbExecute dbExistsTable dbGetQuery dbDisconnect dbWriteTable dbReadTable
+#' @importFrom gsubfn fn
+#' @importFrom data.table as.data.table data.table rbindlist fwrite fread
+#' @importFrom DBI dbWriteTable
+#' @importFrom pbapply pblapply pbsapply
+#' @importFrom enviPat check_chemform
 buildExtDB <- function(outfolder,
                        ext.dbname = "extended",
                        base.dbname,
@@ -277,11 +365,13 @@ buildExtDB <- function(outfolder,
     to.do$struct_id <- c(NA)
     adduct_only = F
   }else{
+    #print(RSQLite::dbGetQuery(full.conn, "SELECT * FROM structures LIMIT 20"))
+    #print(RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge FROM tmp.base LIMIT 20"))
+
     to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge
                                             FROM tmp.base LEFT JOIN structures str
                                             ON base.structure = str.smiles
                                             WHERE str.smiles IS NULL")
-
     # if none, check for new adducts
     if(length(new_adducts) > 0){
       adduct_only = if(nrow(to.do )== 0) T else F
@@ -334,6 +424,7 @@ buildExtDB <- function(outfolder,
   if(dir.exists(tempdir)){
     unlink(tempdir,recursive = T)
   }
+
   dir.create(tempdir)
   tmpfiles.ext = sapply(1:length(blocks), function(i) file.path(tempdir, paste0(base.dbname,"_ext_", i, ".csv")))
   tmpfiles.struct = sapply(1:length(blocks), function(i) file.path(tempdir, paste0(base.dbname,"_str_", i, ".csv")))
@@ -343,18 +434,21 @@ buildExtDB <- function(outfolder,
   # - - - - L O O P  T H I S - - - - -
 
   # completely new compounds
-  per.adduct.tables = pbapply::pblapply(1:length(blocks), cl=cl, function(i, mzrange=mzrange, silent=silent, blocks=blocks,
-                                                                          adduct_table=adduct_table, adduct_rules=adduct_rules,
-                                                                          tmpfiles.ext=tmpfiles.ext, tmpfiles.struct=tmpfiles.struct,
-                                                                          mapper=mapper, use.rules = use.rules){
+  per.adduct.tables = pbapply::pblapply(1:length(blocks),
+                                        cl=cl,
+                                        function(i,
+                                                 mzrange=mzrange,
+                                                 silent=silent,
+                                                 blocks=blocks,
+                                                 adduct_table=adduct_table,
+                                                 adduct_rules=adduct_rules,
+                                                 tmpfiles.ext=tmpfiles.ext,
+                                                 tmpfiles.struct=tmpfiles.struct,
+                                                 mapper=mapper,
+                                                 use.rules = use.rules){
 
-    #full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
-    #RSQLite::dbExecute(full.conn, "PRAGMA busy_timeout=5000;")
-
-    print(i)
     # for each block
     block = blocks[[i]]
-    last.block <<- block
     deut = grep(block$baseformula, pattern="D")
     if(length(deut) > 0){
       block$baseformula[deut] <- gsub(block$baseformula[deut], pattern = "D", replacement = "[2]H")
@@ -447,9 +541,6 @@ buildExtDB <- function(outfolder,
     }})
 
     to.write = data.table::rbindlist(per.adduct.tables)
-
-    print(head(to.write))
-
     if(nrow(to.write)>0){
       structs = unique(blocks[[i]][,c("struct_id", "smiles")])
       data.table::fwrite(to.write[,c("struct_id","fullformula",
@@ -474,8 +565,8 @@ buildExtDB <- function(outfolder,
   pbapply::pbsapply(1:length(blocks), function(i){
     full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
     try({
-      extended_csv = tmpfiles.ext[i]
-      structures_csv = tmpfiles.struct[i]
+      extended_csv = data.table::fread(tmpfiles.ext[i])
+      structures_csv = data.table::fread(tmpfiles.struct[i])
       RSQLite::dbWriteTable(full.conn, "extended", extended_csv, append=T)
       if(!adduct_only){
         RSQLite::dbWriteTable(full.conn, "structures", structures_csv, append=T)

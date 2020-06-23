@@ -1,5 +1,22 @@
 # === MOVE TO db_search.R ===
 
+#' @title Show all compounds in base db
+#' @description Shows all compounds in this base database as data table.
+#' @param outfolder Which folder is your database in?
+#' @param base.dbname Which base database do you want to explore? (exclude .db suffix)
+#' @return Data table with whole database.
+#' @details This may be quite memory consuming for larger databases!!
+#' @examples
+#' \dontrun{
+#' if(interactive()){
+#'  full_database <- showAllBase(outfolder, database_name)
+#'  }
+#' }
+#' @seealso
+#'  \code{\link[RSQLite]{SQLite}}
+#' @rdname showAllBase
+#' @export
+#' @importFrom RSQLite dbConnect SQLite dbGetQuery dbDisconnect
 showAllBase <- function(outfolder, base.dbname){
   conn <- RSQLite::dbConnect(RSQLite::SQLite(), file.path(outfolder, paste0(base.dbname,".db"))) # change this to proper var later
   # --- browse ---
@@ -10,6 +27,27 @@ showAllBase <- function(outfolder, base.dbname){
 }
 
 
+#' @title Find matches for m/z value in given database
+#' @description This function takes user m/z, ppm error, base database and the extended database to return hits of interest.
+#' @param mzs Vector of m/z values
+#' @param ionmodes Vector of pos/negative mode for each m/z value
+#' @param outfolder Which folder are your databases stored in?
+#' @param base.dbname Which base database do you want to retrieve info from? (without .db suffix)
+#' @param ppm Parts per million accepted error range
+#' @param ext.dbname Name of extended database (without .db suffix), Default: 'extended'
+#' @param append Use this when searching muiltiple base databases, so only one result table is created, Default: F
+#' @return Data table with match results
+#' @seealso
+#'  \code{\link[RSQLite]{SQLite}}
+#'  \code{\link[data.table]{rbindlist}}
+#'  \code{\link[DBI]{dbExecute}},\code{\link[DBI]{dbGetQuery}},\code{\link[DBI]{dbDisconnect}}
+#'  \code{\link[gsubfn]{fn}}
+#' @rdname searchMZ
+#' @export
+#' @importFrom RSQLite dbConnect SQLite dbExecute dbWriteTable
+#' @importFrom data.table data.table rbindlist
+#' @importFrom DBI dbExecute dbGetQuery dbDisconnect
+#' @importFrom gsubfn fn
 searchMZ <- function(mzs, ionmodes, outfolder,
                      base.dbname, ppm,
                      ext.dbname="extended",
@@ -117,6 +155,19 @@ searchMZ <- function(mzs, ionmodes, outfolder,
   return(merged.results)
 }
 
+#' @title Find matches based on molecular formula
+#' @description Goes through database of choice (base database) and retrieves hits that have the  molecular formula of interest.
+#' @param formula Molecular formula (should be checked by enviPat::check_chemform first!)
+#' @param outfolder Which folder are your databases stored in?
+#' @param base.dbname Base database name (without .db suffix)
+#' @return Data table with compounds with this molecular formula and the other available information
+#' @seealso
+#'  \code{\link[RSQLite]{SQLite}}
+#'  \code{\link[data.table]{rbindlist}}
+#' @rdname searchFormula
+#' @export
+#' @importFrom RSQLite dbConnect SQLite dbExecute dbWriteTable dbGetQuery
+#' @importFrom data.table data.table rbindlist
 searchFormula <- function(formula, outfolder, base.dbname){
   table.per.db <- lapply(base.dbname, function(db){
     conn <- RSQLite::dbConnect(RSQLite::SQLite(), file.path(outfolder, paste0(db,".db"))) # change this to proper var later
@@ -143,6 +194,17 @@ searchFormula <- function(formula, outfolder, base.dbname){
   return(merged.results)
 }
 
+#' @title Reverse searching
+#' @description Takes a SMILES structure and finds m/z values for all adducts and isotopes matching that structure.
+#' @param structure SMILES structure string
+#' @param ext.dbname Name of extended database (without .db), Default: 'extended'
+#' @param outfolder Which folder are your databases in?
+#' @return Data table with m/z values, additionally molecular formula, charge, adduct, isotope %.
+#' @seealso
+#'  \code{\link[RSQLite]{SQLite}}
+#' @rdname searchRev
+#' @export
+#' @importFrom RSQLite dbConnect SQLite dbSendStatement dbBind dbFetch dbClearResult dbDisconnect
 searchRev <- function(structure, ext.dbname="extended", outfolder){
   conn <- RSQLite::dbConnect(RSQLite::SQLite(), file.path(outfolder,
                                                           paste0(ext.dbname,".db"))) # change this to proper var later
@@ -160,6 +222,32 @@ searchRev <- function(structure, ext.dbname="extended", outfolder){
   res
 }
 
+#' @title Search CMMR
+#' @description Queries Ceu Mass Mediator through their API
+#' @param cmm_url API base url, Default: 'http://ceumass.eps.uspceu.es/mediator/api/v3/batch'
+#' @param metabolites_type Which type of metabolites to consider?, Default: 'all-except-peptides'
+#' @param databases Which databases to consider?, Default: '["all-except-mine"]'
+#' @param masses_mode Format of input compound, Default: 'mz'
+#' @param ion_mode Which ion mode was the compound found in?, Default: 'positive'
+#' @param adducts Adducts to be considered, Default: switch(ion_mode, positive = "[\"M+H\", \"M+2H\", \"M+Na\", \"M+K\", \"M+NH4\", \"M+H-H2O\"]",
+#'    negative = "[\"M-H\", \"M+Cl\", \"M+FA-H\", \"M-H-H2O\"]")
+#' @param tolerance Error margin, units of 'tolerance_mode', Default: 10
+#' @param tolerance_mode Mode of error margin, Default: 'ppm'
+#' @param unique_mz M/z(s) to use in query
+#' @return Data table with match results
+#' @seealso
+#'  \code{\link[cmmr]{create_batch_body}}
+#'  \code{\link[httr]{POST}},\code{\link[httr]{content_type}},\code{\link[httr]{content}}
+#'  \code{\link[RJSONIO]{fromJSON}}
+#'  \code{\link[progress]{progress_bar}}
+#'  \code{\link[data.table]{rbindlist}}
+#' @rdname searchCMMR
+#' @export
+#' @importFrom cmmr create_batch_body
+#' @importFrom httr POST content_type content
+#' @importFrom RJSONIO fromJSON
+#' @importFrom progress progress_bar
+#' @importFrom data.table rbindlist
 searchCMMR <- function (cmm_url = "http://ceumass.eps.uspceu.es/mediator/api/v3/batch",
                         metabolites_type = "all-except-peptides", databases = "[\"all-except-mine\"]",
                         masses_mode = "mz", ion_mode = "positive", adducts = switch(ion_mode,
@@ -197,6 +285,21 @@ searchCMMR <- function (cmm_url = "http://ceumass.eps.uspceu.es/mediator/api/v3/
   }
 }
 
+#' @title Find m/z matches with CMMR, ChemSpider or PubChem
+#' @description Wrapper function for all online searches.
+#' @param mz M/z of interest, Default: 178.1219
+#' @param mode Is m/z positive or negative mode?, Default: 'positive'
+#' @param adducts Which adducts will you consider (for cmmr only)
+#' @param ppm Allowed error margin in parts per million, Default: 2
+#' @param which_db Which online database do you want to search?, Default: 'cmmr'
+#' @return Table with match information
+#' @seealso
+#'  \code{\link[pbapply]{pbapply}}
+#' @rdname searchMZonline
+#' @export
+#' @importFrom data.table data.table
+#' @importFrom pbapply pbsapply
+#' @importFrom webchem cs_inchikey_inchi cs_inchi_smiles
 searchMZonline <- function(mz=178.1219,
                            mode="positive",
                            adducts,
@@ -205,7 +308,6 @@ searchMZonline <- function(mz=178.1219,
                            apikey = NULL){
   switch(which_db,
          cmmr={
-           library(cmmr)
            results <- searchCMMR('http://ceumass.eps.uspceu.es/mediator/api/v3/batch',
                                  masses_mode = 'mz',
                                  ion_mode = 'positive',
@@ -213,7 +315,7 @@ searchMZonline <- function(mz=178.1219,
                                  tolerance_mode = 'ppm',
                                  unique_mz = mz)
             if(typeof(results) == "character"){
-              data.table()
+              data.table::data.table()
             }else{
               base.table = data.table::data.table(name = results$name,
                            baseformula = results$formula,
@@ -235,6 +337,7 @@ searchMZonline <- function(mz=178.1219,
                   base.table$structure[has.inchi] <- smiles
                   base.table$structure[!has.inchi] <- c("")
                 }
+
               }else{
                 base.table$structure <- c("")
               }
