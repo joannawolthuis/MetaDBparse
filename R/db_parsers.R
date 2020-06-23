@@ -1234,7 +1234,7 @@ build.KEGG <- function(outfolder){ # WORKS
     try({
       iatom = rcdk::load.molecules(molfiles = fn)[[1]]
       smiles = rcdk::get.smiles(molecule = iatom)
-      charge = rcdk::get.total.formal.charge(molecule = iatom)
+      charge = rcdk::get.total.formal.charge(mol = iatom)
     })
     id = gsub(basename(fn), pattern = "\\.mol", replacement="")
     data.table::data.table(identifier = id, smiles = smiles, calcharge = charge)
@@ -1952,7 +1952,7 @@ build.LMDB <- function(outfolder){
   version = stringr::str_match(header,
                                pattern = "Version <strong>(\\d.\\d)")[,2]
 
-  data(lmdb)
+  data(lmdb, package = "MetaDBparse")
   # descs = data.table::fread("~/Downloads/lmdb_descriptions.csv", header=T)
   # descs <- data.table::data.table(identifier = c(colnames(descs)[1], descs[,1][[1]]),
   #                                  description = c(colnames(descs)[2], descs[,2][[1]]))

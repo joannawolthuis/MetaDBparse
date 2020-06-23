@@ -375,7 +375,7 @@ buildExtDB <- function(outfolder,
     structure.adducts.possible <- data.table::data.table()
 
     # = = = FOR THE GOOD STRUCTURES = = =
-    if(length(good.structures)>0){
+    if(length(good.structures) > 0 | use.rules){
       parsable.iats = iatoms[good.structures]
       structure.reactive.groups = countAdductRuleMatches(parsable.iats,
                                                            adduct_rules)
@@ -448,7 +448,7 @@ buildExtDB <- function(outfolder,
 
     to.write = data.table::rbindlist(per.adduct.tables)
 
-    print(to.write)
+    print(head(to.write))
 
     if(nrow(to.write)>0){
       structs = unique(blocks[[i]][,c("struct_id", "smiles")])

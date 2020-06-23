@@ -201,7 +201,8 @@ searchMZonline <- function(mz=178.1219,
                            mode="positive",
                            adducts,
                            ppm=2,
-                           which_db = "cmmr"){
+                           which_db = "cmmr",
+                           apikey = NULL){
   switch(which_db,
          cmmr={
            library(cmmr)
@@ -228,14 +229,15 @@ searchMZonline <- function(mz=178.1219,
               has.inchi <- which(!is.na(base.table$structure))
               if(length(has.inchi) >0){
                 inchis <- base.table$structure[has.inchi]
-                inchi = pbapply::pbsapply(inchis, webchem::cs_inchikey_inchi)
-                smiles = pbapply::pbsapply(inchi, webchem::cs_inchi_smiles)
-                base.table$structure[has.inchi] <- smiles
-                base.table$structure[!has.inchi] <- c("")
+                if(!is.null(apikey)){
+                  inchi = pbapply::pbsapply(inchis, function(x) webchem::cs_convert(x, from = "inchikey", to = "inchi", apikey = apikey))
+                  smiles = pbapply::pbsapply(inchi, function(x) webchem::cs_convert(x, from = "inchi", to = "smiles", apikey = apikey))
+                  base.table$structure[has.inchi] <- smiles
+                  base.table$structure[!has.inchi] <- c("")
+                }
               }else{
                 base.table$structure <- c("")
               }
-
               return(base.table)
             }
          })
