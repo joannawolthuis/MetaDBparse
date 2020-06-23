@@ -1,22 +1,20 @@
 #' @title Get iatom containers from SMILES
 #' @description FUNCTION_DESCRIPTION
 #' @param smiles character vector of smiles
-#' @param silent suppress warnings?, Default: T
+#' @param silent suppress warnings?, Default: TRUE
 #' @param cl parallel::makeCluster object for multithreading, Default: 0
 #' @return iatom containers for use in rcdk package
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  smiles.to.iatom(c('OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O'))
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[rJava]{jcall}}
 #' @rdname smiles.to.iatom
 #' @export
 #' @importFrom rcdk parse.smiles do.aromaticity do.typing do.isotopes
 #' @importFrom rJava .jcall
-smiles.to.iatom <- function(smiles, silent=T, cl=0){
+smiles.to.iatom <- function(smiles, silent=TRUE, cl=0){
   iatoms <- sapply(smiles, function(x, silent){
     mol=NULL
     try({
@@ -25,7 +23,7 @@ smiles.to.iatom <- function(smiles, silent=T, cl=0){
         mol = rcdk::parse.smiles(x)[[1]]
       })
       if(is.null(mol)){
-        mol = rcdk::parse.smiles(x,kekulise = F)[[1]]
+        mol = rcdk::parse.smiles(x,kekulise = FALSE)[[1]]
       }
       rcdk::do.aromaticity(mol)
       rcdk::do.typing(mol)
@@ -46,7 +44,7 @@ smiles.to.iatom <- function(smiles, silent=T, cl=0){
 #' @description This function takes an rcdk iatomcontainer and returns SMILES
 #' @param iatoms list of iatomcontainers
 #' @param smitype Which type of SMILES to export?, Default: 'Canonical'
-#' @param silent Suppress warnings?, Default: T
+#' @param silent Suppress warnings?, Default: TRUE
 #' @return character vector of SMILES in the chosen format
 #' @seealso
 #'  \code{\link[rcdk]{get.smiles}},\code{\link[rcdk]{smiles.flavors}}
@@ -55,7 +53,7 @@ smiles.to.iatom <- function(smiles, silent=T, cl=0){
 #' @export
 #' @importFrom rcdk get.smiles smiles.flavors
 #' @importFrom rJava .jcall
-iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=T){
+iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=TRUE){
 
   if(!silent){
     cat("Valid SMILES output options include:\n\n")
@@ -88,7 +86,7 @@ iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=T){
 #' @title Get formal charge from iatomcontainer
 #' @description This function takes iatomcontainer object and returns the formal charge.
 #' @param iatoms list of rcdk iatomcontainers
-#' @param silent suppress warnings?, Default: T
+#' @param silent suppress warnings?, Default: TRUE
 #' @return Character vector of formal charges per iatomcontainer.
 #' @seealso
 #'  \code{\link[rcdk]{get.total.formal.charge}}
@@ -97,7 +95,7 @@ iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=T){
 #' @export
 #' @importFrom rcdk get.total.formal.charge
 #' @importFrom rJava .jcall
-iatom.to.charge <- function(iatoms, silent=T){
+iatom.to.charge <- function(iatoms, silent=TRUE){
 
   new.charges <- sapply(iatoms, function(mol, silent){
     ch=0
@@ -118,7 +116,7 @@ iatom.to.charge <- function(iatoms, silent=T){
 #' @title Get molecular formula from iatomcontainer
 #' @description This function takes iatomcontainer object and returns the molecular formula.
 #' @param iatoms list of rcdk iatomcontainers
-#' @param silent suppress warnings?, Default: T
+#' @param silent suppress warnings?, Default: TRUE
 #' @return Character vector of formulas per iatomcontainer.
 #' @seealso
 #'  \code{\link[rcdk]{get.mol2formula}}
@@ -127,7 +125,7 @@ iatom.to.charge <- function(iatoms, silent=T){
 #' @export
 #' @importFrom rcdk get.mol2formula
 #' @importFrom rJava .jcall
-iatom.to.formula <- function(iatoms, silent=T){
+iatom.to.formula <- function(iatoms, silent=TRUE){
 
   new.formulas <- sapply(iatoms, function(mol,silent){
     form = NULL
@@ -241,7 +239,7 @@ cleanDB <- function(db.formatted, cl, silent, blocksize, smitype='Canonical'){
 #' @param dbname Which database do you want to build? Options: chebi,maconda,kegg,bloodexposome,dimedb,expoexplorer, foodb, drugbank, lipidmaps, massbank, metabolights, metacyc, phenolexplorer, respect, wikidata, wikipathways, t3db, vmh, hmdb, smpdb, lmdb, ymdb, ecmdb, bmdb, rmdb, stoff, nanpdb, mcdb, mvoc, pamdb
 #' @param custom_csv_path PARAM_DESCRIPTION, Default: NULL
 #' @param smitype Which SMILES format do you want?, Default: 'Canonical'
-#' @param silent Suppress warnings?, Default: T
+#' @param silent Suppress warnings?, Default: TRUE
 #' @param cl parallel::makeCluster object for multithreading, Default: 0
 #' @return Nothing, writes SQLite database to 'outfolder'.
 #' @seealso
@@ -253,7 +251,7 @@ cleanDB <- function(db.formatted, cl, silent, blocksize, smitype='Canonical'){
 #' @importFrom RSQLite dbExecute
 #' @importFrom DBI dbDisconnect
 buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
-                        smitype = "Canonical", silent=T, cl=0){
+                        smitype = "Canonical", silent=TRUE, cl=0){
 
   removeDB(outfolder, paste0(dbname,".db"))
   conn <- openBaseDB(outfolder, paste0(dbname,".db"))
@@ -290,7 +288,7 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
                            mvoc = build.mVOC(outfolder),
                            pamdb = build.PAMDB(outfolder))
   }else{
-    db.formatted.all <- list(db = data.table::fread(custom_csv_path, header=T),
+    db.formatted.all <- list(db = data.table::fread(custom_csv_path, header=TRUE),
                              version = Sys.time())
   }
 
@@ -301,9 +299,6 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
 
   db.formatted <- data.table::as.data.table(db.formatted.all$db)
   db.formatted <- data.frame(lapply(db.formatted, as.character), stringsAsFactors=FALSE)
-
-  #options(java.home="C:\\Program Files\\Java\\jre1.8.0_221/") # windows...
-
   db.final <- data.table::as.data.table(cleanDB(db.formatted,
                                    cl = cl,
                                    silent = silent,

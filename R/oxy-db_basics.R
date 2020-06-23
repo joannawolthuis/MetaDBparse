@@ -48,7 +48,7 @@ removeDB <- function(outfolder, dbname){
 #' @export
 #' @importFrom DBI dbWriteTable
 writeDB <- function(conn, table, tblname){
-  DBI::dbWriteTable(conn, tblname, table, append=T)
+  DBI::dbWriteTable(conn, tblname, table, append=TRUE)
 }
 
 #' @title Adjusted sdfStream version for databases that store their compounds in SDF format
@@ -160,11 +160,9 @@ sdfStream.joanna <- function (input, output, append = FALSE, fct, Nlines = 10000
 #' @param item object to check
 #' @return TRUE or FALSE
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  is.empty(NA)
 #'  }
-#' }
 #' @rdname is.empty
 #' @export
 is.empty <- function(item){

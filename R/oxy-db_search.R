@@ -35,7 +35,7 @@ showAllBase <- function(outfolder, base.dbname){
 #' @param base.dbname Which base database do you want to retrieve info from? (without .db suffix)
 #' @param ppm Parts per million accepted error range
 #' @param ext.dbname Name of extended database (without .db suffix), Default: 'extended'
-#' @param append Use this when searching muiltiple base databases, so only one result table is created, Default: F
+#' @param append Use this when searching muiltiple base databases, so only one result table is created, Default: FALSE
 #' @return Data table with match results
 #' @seealso
 #'  \code{\link[RSQLite]{SQLite}}
@@ -51,7 +51,7 @@ showAllBase <- function(outfolder, base.dbname){
 searchMZ <- function(mzs, ionmodes, outfolder,
                      base.dbname, ppm,
                      ext.dbname="extended",
-                     append=F){
+                     append=FALSE){
 
   # connect to extended DB
   conn <- RSQLite::dbConnect(RSQLite::SQLite(), file.path(outfolder, paste0(ext.dbname, ".db")))
@@ -115,7 +115,7 @@ searchMZ <- function(mzs, ionmodes, outfolder,
     dbpath = file.path(outfolder, paste0(db, ".db"))
     try({
       DBI::dbExecute(conn, gsubfn::fn$paste("DETACH base"))
-    },silent=T)
+    },silent=TRUE)
     query = gsubfn::fn$paste("ATTACH '$dbpath' AS base")
     RSQLite::dbExecute(conn, query)
 
@@ -276,7 +276,7 @@ searchCMMR <- function (cmm_url = "http://ceumass.eps.uspceu.es/mediator/api/v3/
     }
     pb <- progress::progress_bar$new(format = "  Parsing database search results [:bar] :percent in :elapsed",
                                      total = length(json_file) - 1, clear = FALSE, width = 100)
-    df <- data.table::rbindlist(json_file,fill=T)
+    df <- data.table::rbindlist(json_file,fill=TRUE)
     return(df)
   }
   else {

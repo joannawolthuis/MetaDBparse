@@ -121,7 +121,7 @@ filterFormula = function(formulas, rules=c("senior", "lewis", "hc", "chnops", "n
 
   ch_nops_chnops_rows <- lapply(1:nrow(deconstructed), function(i){
     row = deconstructed[i,]
-    res= data.table::data.table(hc = F, chnops = F, nops = F)
+    res= data.table::data.table(hc = FALSE, chnops = FALSE, nops = FALSE)
     # T4, V4, X4, X4, Y4 -> H/C N/C	O/C	P/C	S/C
     # chnops
     #IF(AND(T4>=0.2,T4<=3,V4>=0,V4<=2,W4>=0,W4<=1.2,X4>=0,X4<=0.32,Y4>=0,Y4<=0.65),"YES","NO")
@@ -217,7 +217,7 @@ revertAdduct <- function(formula, add_name, adduct_table=adducts){
 #' @param rules Which golden rules to apply?, Default: c("senior", "lewis", "hc", "chnops", "nops")
 #' @param elements Which elements to consider?, Default: c("C", "H", "N", "O", "P", "S")
 #' @param search Check the found formulas on PubChem or ChemSpider?, Default: c("PubChem", "ChemSpider")
-#' @param detailed Look up details like description etc. if hit found? Makes things slower!, Default: T
+#' @param detailed Look up details like description etc. if hit found? Makes things slower!, Default: TRUE
 #' @param calc_adducts Which adducts to consider?, Default: adducts[Ion_mode == mode, ]$Name
 #' @return Table of found matches and associated info
 #' @seealso
@@ -233,7 +233,7 @@ getPredicted <- function(mz,
                          rules = c("senior", "lewis", "hc", "chnops", "nops"),
                          elements = c("C","H","N","O","P","S"),
                          search= c("PubChem", "ChemSpider"),
-                         detailed = T,
+                         detailed = TRUE,
                          calc_adducts = adducts[Ion_mode == mode,]$Name){
 
   cat("
@@ -303,7 +303,7 @@ getPredicted <- function(mz,
 
       flattenlist = function(x){
         morelists <- sapply(x, function(xprime) class(xprime)[1]=="list")
-        out <- c(x[!morelists], unlist(x[morelists], recursive=FALSE, use.names = T))
+        out <- c(x[!morelists], unlist(x[morelists], recursive=FALSE, use.names = TRUE))
         if(sum(morelists)){
           Recall(out)
         }else{
@@ -322,7 +322,7 @@ getPredicted <- function(mz,
 
     unique(tbl)
   })
-  total_tbl <- data.table::rbindlist(per_adduct_results[sapply(per_adduct_results, function(x)nrow(x) > 0)], fill=T)
+  total_tbl <- data.table::rbindlist(per_adduct_results[sapply(per_adduct_results, function(x)nrow(x) > 0)], fill=TRUE)
   total_tbl
  }
 
@@ -331,12 +331,12 @@ getPredicted <- function(mz,
 #' @param formulas Character vector of formulas to check
 #' @param search Which databases to check?, Default: c("PubChem", "ChemSpider")
 #' @param apikey API key for ChemSpider
-#' @param detailed Find detailed results? Not just the compound name, but other associated info?, Default: F
+#' @param detailed Find detailed results? Not just the compound name, but other associated info?, Default: FALSE
 #' @return Data table with match results.
 #' @examples
 #' \dontrun{
 #' if(interactive()){
-#'  hits = searchFormulaWeb(c("C6H12O6"), "PubChem", detailed = T)
+#'  hits = searchFormulaWeb(c("C6H12O6"), "PubChem", detailed = TRUE)
 #'  }
 #' }
 #' @seealso
@@ -365,7 +365,7 @@ getPredicted <- function(mz,
 searchFormulaWeb <- function(formulas,
                              search = c("pubchem", "chemspider", "knapsack", "supernatural2"),
                              apikey = "sp1pysTkYyC0wSETdkWjEeEK8eiXXFuG",
-                             detailed = T){
+                             detailed = TRUE){
 
   if(length(search)>0){
     i = 0
@@ -432,15 +432,15 @@ searchFormulaWeb <- function(formulas,
                      })
                      db.frag
                    })
-                   rows = data.table::rbindlist(rows, fill=T)
+                   rows = data.table::rbindlist(rows, fill=TRUE)
                  }
                  rows
                })
-               data.table::rbindlist(rows, fill=T)
+               data.table::rbindlist(rows, fill=TRUE)
              },
              knapsack = {
                print("Searching knapsack...")
-               options(stringsAsFactors = F)
+               options(stringsAsFactors = FALSE)
                rows = pbapply::pblapply(formulas, function(formula){
                  url = gsubfn::fn$paste("http://www.knapsackfamily.com/knapsack_core/result.php?sname=formula&word=$formula")
                  print(url)
@@ -450,7 +450,7 @@ searchFormulaWeb <- function(formulas,
                                                structure = NA,
                                                description = description,
                                                source = "magicball")
-                 res = XML::readHTMLTable(url,header = T,)[[1]]
+                 res = XML::readHTMLTable(url,header = TRUE,)[[1]]
                  res.firstrow = colnames(res)
                  if(!is.null(res.firstrow)){
                    colnames(res) <- c("c_id", "cas_id", "metabolite",
@@ -464,7 +464,7 @@ searchFormulaWeb <- function(formulas,
                    if(detailed){
                      rows.detailed = pbapply::pblapply(uniques[!is.na(uniques)], function(id){
                        url = gsubfn::fn$paste("http://www.knapsackfamily.com/knapsack_core/information.php?word=$id")
-                       tbl = XML::readHTMLTable(url,header = T,)[[1]]
+                       tbl = XML::readHTMLTable(url,header = TRUE,)[[1]]
                        flipped = t(tbl)
                        colnames(flipped) <- flipped[1,]
                        flipped = as.data.frame(flipped[-1,])
@@ -479,7 +479,7 @@ searchFormulaWeb <- function(formulas,
                    rows
                  }
                })
-               data.table::rbindlist(rows, fill=T)
+               data.table::rbindlist(rows, fill=TRUE)
              },
              pubchem = {
                print("Searching PubChem...")
@@ -493,7 +493,7 @@ searchFormulaWeb <- function(formulas,
                                                source = "magicball")
 
                  try({
-                   pc_res <- jsonlite::read_json(url,simplifyVector = T)
+                   pc_res <- jsonlite::read_json(url,simplifyVector = TRUE)
                    ids <- pc_res$IdentifierList$CID
                    rows$description <- paste0("PubChem found these IDs: ",
                                               paste0(ids, collapse = ", "))
@@ -503,7 +503,7 @@ searchFormulaWeb <- function(formulas,
                  })
                  rows
                })
-               data.table::rbindlist(rows, fill=T)
+               data.table::rbindlist(rows, fill=TRUE)
              },
              chemspider = {
                print("Searching ChemSpider...")
@@ -561,13 +561,13 @@ searchFormulaWeb <- function(formulas,
                        }
                      }
                    })
-                   data.table::rbindlist(res_rows, fill = T)
+                   data.table::rbindlist(res_rows, fill = TRUE)
                  }
                })
-               data.table::rbindlist(rows, fill = T)
+               data.table::rbindlist(rows, fill = TRUE)
              })
     })
-    fin = data.table::rbindlist(list_per_website,fill=T)
+    fin = data.table::rbindlist(list_per_website,fill=TRUE)
     if(nrow(fin) > 0){
       fin$identifier <- as.character(fin$identifier)
       fin$structure <- sapply(fin$structure, function(smi) if(is.na(smi)) "" else smi)
@@ -617,7 +617,7 @@ chemspiderInfo <- function(ids,
                     body = post_body)
     json = rawToChar(r$content)
     parsed = jsonlite::parse_json(json)[[1]]
-    json_table = rbindlist(parsed, fill=T)
+    json_table = rbindlist(parsed, fill=TRUE)
     data.table::data.table(name = json_table$commonName,
                            structure = json_table$smiles,
                            identifier = json_table$id,
@@ -628,10 +628,10 @@ chemspiderInfo <- function(ids,
                                                 "Mentioned in PubMed ", json_table$pubMedCount, " times. ",
                                                 "RSC count: ", json_table$rscCount, "."))
   })
-  rbindlist(row.blocks, fill=T)
+  rbindlist(row.blocks, fill=TRUE)
 }
 
-#lmdb = lmdb[, lapply(.SD, function(x) textclean::replace_non_ascii(x, remove.nonconverted = T))]
+#lmdb = lmdb[, lapply(.SD, function(x) textclean::replace_non_ascii(x, remove.nonconverted = TRUE))]
 
 #' @title Find additional info on a PubChem ID.
 #' @description Takes PubChem ID and finds name, formula, smiles, charge
@@ -656,7 +656,7 @@ pubChemInfo <- function(ids, maxn=30){
                         "/property/MolecularFormula,CanonicalSMILES,Charge/JSON")
 
     struct_res <- jsonlite::fromJSON(url_struct,
-                                     simplifyVector = T)
+                                     simplifyVector = TRUE)
 
     # CHECK IF ORIGINAL CHARGE IS ZERO
 
@@ -676,7 +676,7 @@ pubChemInfo <- function(ids, maxn=30){
     try({
 
       desc_res <- jsonlite::fromJSON(url_desc,
-                                     simplifyVector = T)
+                                     simplifyVector = TRUE)
 
       descs <- as.data.table(desc_res$InformationList$Information)
 
@@ -689,7 +689,7 @@ pubChemInfo <- function(ids, maxn=30){
       descs.adj$Description <- gsub(descs.adj$Description,
                                     pattern = "</?a(|\\s+[^>]+)>",
                                     replacement = "",
-                                    perl = T)
+                                    perl = TRUE)
 
       if(any(descs.adj$Description == "")){
         descs.adj[Description == ""]$Description <- c("No further description available")
@@ -712,7 +712,7 @@ pubChemInfo <- function(ids, maxn=30){
 
     try({
       synonyms <- jsonlite::fromJSON(url_syn,
-                                     simplifyVector = T)
+                                     simplifyVector = TRUE)
       syn.adj = synonyms$InformationList$Information
     })
 
@@ -739,7 +739,7 @@ pubChemInfo <- function(ids, maxn=30){
         row[,-"Synonym"]
 
       })
-      tbl.renamed <- data.table::rbindlist(rows.renamed, fill=T)
+      tbl.renamed <- data.table::rbindlist(rows.renamed, fill=TRUE)
     }else{
       tbl.renamed <- rows
     }
@@ -757,9 +757,9 @@ pubChemInfo <- function(ids, maxn=30){
   })
 
   res <- chunk.row.list[sapply(chunk.row.list, function(x){
-    returnme = F
+    returnme = FALSE
     try({if(nrow(x)>0){
-      returnme=T}})
+      returnme=TRUE}})
     returnme
   })]
   data.table::rbindlist(res)

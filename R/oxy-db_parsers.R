@@ -3,11 +3,9 @@
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.MCDB(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[RCurl]{getURL}}
@@ -27,20 +25,23 @@
 #' @importFrom stringr str_match
 build.MCDB <- function(outfolder){ # WORKS
 
-  options(stringsAsFactors = F)
+  oldpar = options()
+  options(stringsAsFactors = FALSE)
+  on.exit(options(oldpar))
+
   file.url <- "http://www.mcdb.ca/system/downloads/current/milk_metabolites.zip"
   base.loc <- file.path(outfolder, "mcdb_source")
-  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
   zip.file <- file.path(base.loc, "MCDB.zip")
-  utils::download.file(file.url, zip.file,mode = "wb",cacheOK = T)
+  utils::download.file(file.url, zip.file,mode = "wb",cacheOK = TRUE)
   utils::unzip(zip.file, exdir = base.loc)
 
   input = file.path(base.loc, "milk_metabolites.xml")
   header = readLines(input,n = 10)
-  version = trimws(gsub(grep(pattern = "<version", header, value = T),
+  version = trimws(gsub(grep(pattern = "<version", header, value = TRUE),
                         pattern = "<\\/?version>",
                         replacement = ""))
-  date = trimws(gsub(grep(pattern = "update_date", header, value = T),
+  date = trimws(gsub(grep(pattern = "update_date", header, value = TRUE),
                      pattern = "<\\/?update_date>",
                      replacement = ""))
 
@@ -51,7 +52,8 @@ build.MCDB <- function(outfolder){ # WORKS
                                    pattern = ",",
                                    replacement="")))
 
-  db.formatted <- data.frame(
+  envir = environment()
+  envir$db.formatted <- data.frame(
     compoundname = rep(NA, n),
     baseformula = rep(NA, n),
     identifier = rep(NA, n),
@@ -60,8 +62,8 @@ build.MCDB <- function(outfolder){ # WORKS
     description = rep("", n)
   )
 
-  idx = 1 # which metabolite are we on
-  pb <- pbapply::startpb(min = idx, max = n)
+  envir$idx = 1 # which metabolite are we on
+  envir$pb <- pbapply::startpb(min = envir$idx, max = n)
 
   # FOR WINDOWS
   sysinf <- Sys.info()
@@ -84,15 +86,15 @@ build.MCDB <- function(outfolder){ # WORKS
     con = base::file(input, "r")
     while (TRUE) {
 
-      line = readLines(con, n = 1,skipNul = T)
+      line = readLines(con, n = 1,skipNul = TRUE)
 
       if (length(line) == 0){
         break
       }
 
       if(line == "</metabolite>"){
-        idx <<- idx+1
-        pbapply::setpb(pb, idx)
+        envir$idx <- envir$idx+1
+        pbapply::setpb(envir$pb, envir$idx)
         acc = "primary"
         nm = "primary"
         desc = "primary"
@@ -103,64 +105,61 @@ build.MCDB <- function(outfolder){ # WORKS
       switch(tag,
              accession = {
                if(acc == "primary"){
-                 db.formatted[idx,]$identifier <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+                 envir$db.formatted[envir$idx,]$identifier <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
                  acc <- "secondary"
                }
              },
              name = {
                if(nm == "primary"){
-                 db.formatted[idx,]$compoundname <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+                 envir$db.formatted[envir$idx,]$compoundname <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
                  nm = "secondary"
                }
              },
              smiles = {
-               db.formatted[idx,]$structure <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+               envir$db.formatted[envir$idx,]$structure <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
              },
              description = {
                if(desc == "primary"){
-                 db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description,
+                 envir$db.formatted[envir$idx,]$description <- paste0(envir$db.formatted[envir$idx,]$description,
                                                           " HMDB: ",
                                                           trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
                  desc = "secondary"
                }
              },
              cs_description = {
-               db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description,
+               envir$db.formatted[envir$idx,]$description <- paste0(envir$db.formatted[envir$idx,]$description,
                                                         "From ChemSpider: ",
                                                         trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
              },
              chemical_formula = {
-               db.formatted[idx,]$baseformula <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+               envir$db.formatted[envir$idx,]$baseformula <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
              })
     }
     close(con)
   }else{
-    metabolite = function(currNode){
-      if(idx %% 1000 == 0){
-        pbapply::setpb(pb, idx)
+    metabolite = function(currNode, currEnvir=envir){
+      if(currEnvir$idx %% 1000 == 0){
+        pbapply::setpb(currEnvir$pb, currEnvir$idx)
       }
-
-      currNode <<- currNode
-
-      db.formatted[idx, "compoundname"] <<- XML::xmlValue(currNode[['name']])
-      db.formatted[idx, "identifier"] <<- XML::xmlValue(currNode[['accession']])
-      db.formatted[idx, "baseformula"] <<- XML::xmlValue(currNode[['chemical_formula']])
-      db.formatted[idx, "structure"] <<- XML::xmlValue(currNode[['smiles']])
-      db.formatted[idx, "description"] <<- paste(XML::xmlValue(currNode[['description']])
+      currEnvir$db.formatted[currEnvir$idx, "compoundname"] <- XML::xmlValue(currNode[['name']])
+      currEnvir$db.formatted[currEnvir$idx, "identifier"] <- XML::xmlValue(currNode[['accession']])
+      currEnvir$db.formatted[currEnvir$idx, "baseformula"] <- XML::xmlValue(currNode[['chemical_formula']])
+      currEnvir$db.formatted[currEnvir$idx, "structure"] <- XML::xmlValue(currNode[['smiles']])
+      currEnvir$db.formatted[currEnvir$idx, "description"] <- paste(XML::xmlValue(currNode[['description']])
       )
       x <- currNode[['predicted_properties']]
       properties <- currNode[['predicted_properties']]
-      db.formatted[idx, "charge"] <<- stringr::str_match(XML::xmlValue(properties),
+      currEnvir$db.formatted[currEnvir$idx, "charge"] <- stringr::str_match(XML::xmlValue(properties),
                                                          pattern = "formal_charge([+|\\-]\\d*|\\d*)")[,2]
 
-      idx <<- idx + 1
+      currEnvir$idx <- currEnvir$idx + 1
     }
 
     XML::xmlEventParse(input,
                        branches = list(metabolite = metabolite),
-                       replaceEntities=T)
+                       replaceEntities=TRUE)
   }
-  list(db = db.formatted, version = version)
+  list(db = envir$db.formatted, version = version)
 }
 
 #' @title Build HMDB
@@ -168,11 +167,9 @@ build.MCDB <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.HMDB(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[RCurl]{getURL}}
@@ -192,21 +189,23 @@ build.MCDB <- function(outfolder){ # WORKS
 #' @importFrom stringr str_match
 build.HMDB <- function(outfolder){ # WORKS
 
-  options(stringsAsFactors = F)
+  oldpar = options()
+  options(stringsAsFactors = FALSE)
+  on.exit(options(oldpar))
 
   file.url <- "http://www.hmdb.ca/system/downloads/current/hmdb_metabolites.zip"
   base.loc <- file.path(outfolder, "hmdb_source")
-  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
   zip.file <- file.path(base.loc, "HMDB.zip")
-  utils::download.file(file.url, zip.file,mode = "wb",cacheOK = T)
+  utils::download.file(file.url, zip.file,mode = "wb",cacheOK = TRUE)
   utils::unzip(zip.file, exdir = base.loc)
   input = file.path(base.loc, "hmdb_metabolites.xml")
 
   header = readLines(input,n = 10)
-  version = trimws(gsub(grep(pattern = "<version", header, value = T),
+  version = trimws(gsub(grep(pattern = "<version", header, value = TRUE),
                      pattern = "<\\/?version>",
                      replacement = ""))
-  date = trimws(gsub(grep(pattern = "update_date", header, value = T),
+  date = trimws(gsub(grep(pattern = "update_date", header, value = TRUE),
                         pattern = "<\\/?update_date>",
                         replacement = ""))
 
@@ -217,7 +216,9 @@ build.HMDB <- function(outfolder){ # WORKS
                                    pattern = ",",
                                    replacement="")))
 
-  db.formatted <- data.frame(
+  envir = environment()
+
+  envir$db.formatted <- data.frame(
     compoundname = rep(NA, n),
     baseformula = rep(NA, n),
     identifier = rep(NA, n),
@@ -226,8 +227,8 @@ build.HMDB <- function(outfolder){ # WORKS
     description = rep("", n)
   )
 
-  idx = 1 # which metabolite are we on
-  pb <- pbapply::startpb(min = idx, max = n)
+  envir$idx = 1 # which metabolite are we on
+  envir$pb <- pbapply::startpb(min = 1, max = n)
 
   # FOR WINDOWS
   sysinf <- Sys.info()
@@ -250,56 +251,56 @@ build.HMDB <- function(outfolder){ # WORKS
     con = base::file(input, "r")
     while (TRUE) {
 
-      line = readLines(con, n = 1,skipNul = T)
+      line = readLines(con, n = 1,skipNul = TRUE)
 
       if (length(line) == 0){
         break
       }
 
       if(line == "</metabolite>"){
-        idx = idx + 1
-        if(idx %% 100 == 0){
-          pbapply::setpb(pb, idx)
+        envir$idx = envir$idx + 1
+        if(envir$idx %% 100 == 0){
+          pbapply::setpb(envir$pb, envir$idx)
         }
         acc = "primary"
         nm = "primary"
         desc = "primary"
       }
 
-      if(idx >= 2){
+      if(envir$idx >= 2){
         tag = stringr::str_match(line, pattern = "<(.*?)>")[,2]
 
         switch(tag,
                accession = {
                  if(acc == "primary"){
-                   db.formatted[idx,]$identifier <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+                   envir$db.formatted[envir$idx,]$identifier <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
                    acc <- "secondary"
                  }
                },
                name = {
                  if(nm == "primary"){
-                   db.formatted[idx,]$compoundname <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+                   envir$db.formatted[envir$idx,]$compoundname <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
                    nm = "secondary"
                  }
                },
                smiles = {
-                 db.formatted[idx,]$structure <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+                 envir$db.formatted[envir$idx,]$structure <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
                },
                description = {
                  if(desc == "primary"){
-                   db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description,
+                   envir$db.formatted[envir$idx,]$description <- paste0(envir$db.formatted[envir$idx,]$description,
                                                             " HMDB: ",
                                                             trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
                    desc = "secondary"
                  }
                },
                cs_description = {
-                 db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description,
+                 envir$db.formatted[envir$idx,]$description <- paste0(envir$db.formatted[envir$idx,]$description,
                                                           "From ChemSpider: ",
                                                           trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
                },
                chemical_formula = {
-                 db.formatted[idx,]$baseformula <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+                 envir$db.formatted[envir$idx,]$baseformula <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
                })
       }
 
@@ -307,36 +308,36 @@ build.HMDB <- function(outfolder){ # WORKS
     }
     close(con)
   }else{
-    metabolite = function(currNode){
 
-      if(idx %% 1000 == 0){
-        pbapply::setpb(pb, idx)
+    metabolite = function(currNode, currEnvir=envir){
+
+      if(envir$idx %% 1000 == 0){
+        pbapply::setpb(currEnvir$pb, currEnvir$idx)
       }
 
-      currNode <<- currNode
-
-      db.formatted[idx, "compoundname"] <<- XML::xmlValue(currNode[['name']])
-      db.formatted[idx, "identifier"] <<- XML::xmlValue(currNode[['accession']])
-      db.formatted[idx, "baseformula"] <<- XML::xmlValue(currNode[['chemical_formula']])
-      db.formatted[idx, "structure"] <<- XML::xmlValue(currNode[['smiles']])
-      db.formatted[idx, "description"] <<- paste("HMDB:",
+      currEnvir$db.formatted[currEnvir$idx, "compoundname"] <- XML::xmlValue(currNode[['name']])
+      currEnvir$db.formatted[currEnvir$idx, "identifier"] <- XML::xmlValue(currNode[['accession']])
+      currEnvir$db.formatted[currEnvir$idx, "baseformula"] <- XML::xmlValue(currNode[['chemical_formula']])
+      currEnvir$db.formatted[currEnvir$idx, "structure"] <- XML::xmlValue(currNode[['smiles']])
+      currEnvir$db.formatted[currEnvir$idx, "description"] <- paste("HMDB:",
                                                  XML::xmlValue(currNode[['cs_description']]),
                                                  "CHEMSPIDER:",
                                                  XML::xmlValue(currNode[['description']])
       )
       x <- currNode[['predicted_properties']]
       properties <- currNode[['predicted_properties']]
-      db.formatted[idx, "charge"] <<- stringr::str_match(XML::xmlValue(properties),
+      currEnvir$db.formatted[currEnvir$idx, "charge"] <- stringr::str_match(XML::xmlValue(properties),
                                                          pattern = "formal_charge([+|\\-]\\d*|\\d*)")[,2]
 
-      idx <<- idx + 1
+      currEnvir$idx <- currEnvir$idx + 1
     }
 
     XML::xmlEventParse(input,
                        branches = list(metabolite = metabolite),
-                       replaceEntities=T)
+                       replaceEntities = TRUE)
   }
-  list(db = db.formatted, version = version)
+  list(db = envir$db.formatted,
+       version = version)
 }
 
 #' @title Build METACYC
@@ -345,11 +346,9 @@ build.HMDB <- function(outfolder){ # WORKS
 #' @return data table with parsed database
 #' @details Requires account creation! Then download SmartTable from 'https://trmetacyc.org/group?id=biocyc17-31223-3787684059' as 'All_compounds_of_MetaCyc.txt' and save in the databases/metacyc_source folder.
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.METACYC(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
@@ -402,8 +401,8 @@ build.METACYC <- function(outfolder){ # WORKS
     pw <- pw[pw != " // "]
     pw <- gsub(pw, pattern = "&", replacement="")
     pw <- gsub(pw, pattern = ";", replacement="")
-    res <- gsub(pw, pattern = "<(i|\\/i)>", replacement = "",perl = T)
-    res <- gsub(pw, pattern = "<((i|\\/i)|sub)>|\\/|\\|", replacement = "",perl = T)
+    res <- gsub(pw, pattern = "<(i|\\/i)>", replacement = "",perl = TRUE)
+    res <- gsub(pw, pattern = "<((i|\\/i)|sub)>|\\/|\\|", replacement = "",perl = TRUE)
     paste0(res, collapse=" --- ")
   })
 
@@ -424,11 +423,9 @@ build.METACYC <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.CHEBI(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[utils]{download.file}}
@@ -687,11 +684,9 @@ build.CHEBI <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.FOODB(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{untar}}
 #'  \code{\link[RCurl]{getURL}}
@@ -707,7 +702,7 @@ build.FOODB <- function(outfolder){ # WORKS
   # TODO: make sure that it automatically grabs the most recent CSV?
   file.url <- "https://foodb.ca/public/system/downloads/foodb_2020_4_7_csv.tar.gz"
   base.loc <- file.path(outfolder, "foodb_source")
-  if(dir.exists(base.loc))(unlink(base.loc,recursive = T)); dir.create(base.loc, recursive = T);
+  if(dir.exists(base.loc))(unlink(base.loc,recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
   zip.file <- file.path(base.loc, "foodb.tar.gz")
   utils::download.file(file.url, zip.file, mode = 'wb', method = 'libcurl')
   utils::untar(normalizePath(zip.file), exdir = normalizePath(base.loc))
@@ -738,11 +733,9 @@ build.FOODB <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.WIKIDATA(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[WikidataQueryServiceR]{query_wikidata}}
 #'  \code{\link[data.table]{as.data.table}}
@@ -866,11 +859,9 @@ build.WIKIDATA <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.RESPECT(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[RCurl]{getURL}}
@@ -888,7 +879,7 @@ build.RESPECT <- function(outfolder){ # WORKS
   file.url <- "http://spectra.psc.riken.jp/menta.cgi/static/respect/respect.zip"
 
   base.loc <- file.path(outfolder, "respect_source")
-  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
   zip.file <- file.path(base.loc, "respect.zip")
   utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(normalizePath(zip.file), exdir = (base.loc))
@@ -899,12 +890,12 @@ build.RESPECT <- function(outfolder){ # WORKS
   date = version
 
   cpd_files <- list.files(base.loc,
-                          full.names = T)
+                          full.names = TRUE)
 
   db_rows <- pbapply::pblapply(cpd_files, function(fn){
     row = data.table::data.table()
     try({
-      lines <- readLines(fn,skipNul = T, n = 100)
+      lines <- readLines(fn,skipNul = TRUE, n = 100)
       split.lines <- sapply(lines, strsplit, ": ")
       names(split.lines) <- sapply(split.lines, function(x) x[1])
       split.lines <- lapply(split.lines, function(x) x[2:length(x)])
@@ -921,7 +912,7 @@ build.RESPECT <- function(outfolder){ # WORKS
     row
   })
 
-  db.formatted <- data.table::rbindlist(db_rows[!is.na(db_rows)],fill = T)
+  db.formatted <- data.table::rbindlist(db_rows[!is.na(db_rows)],fill = TRUE)
   db.formatted <- unique(db.formatted[!is.na(baseformula),])
   db.formatted <- aggregate(db.formatted, by = list(db.formatted$compoundname), FUN = function(x) paste0(unique(x), collapse="/"))
   db.formatted <- db.formatted[,-1]
@@ -938,11 +929,9 @@ build.RESPECT <- function(outfolder){ # WORKS
 #' @param conn Connection to extended database (MaConDa writes directly to there due to anomalous adducts)
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.MACONDA(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[stringr]{str_match}}
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
@@ -967,7 +956,7 @@ build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
 
   base.loc <- file.path(outfolder, "maconda_source")
 
-  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
   zip.file <- file.path(base.loc, "maconda.zip")
 
   theurl <- paste0(readLines("https://www.maconda.bham.ac.uk/downloads.php"),collapse="")
@@ -1008,7 +997,7 @@ build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
 
   db.base$structure[has.inchi] <- smiles
 
-  db.final <- cleanDB(db.base, cl=0, silent=F, blocksize=400)
+  db.final <- cleanDB(db.base, cl=0, silent=FALSE, blocksize=400)
 
   #write to base db
   writeDB(conn, data.table::data.table(date = Sys.Date(),
@@ -1075,9 +1064,9 @@ build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
       print("maconda is already in here!")
       return(NA)
     }
-    RSQLite::dbWriteTable(full.conn, "adducts", adduct_table_maconda[Name %in% new_adducts], append=T)
+    RSQLite::dbWriteTable(full.conn, "adducts", adduct_table_maconda[Name %in% new_adducts], append=TRUE)
   }else{
-    RSQLite::dbWriteTable(full.conn, "adducts", adduct_table_maconda, overwrite=T)
+    RSQLite::dbWriteTable(full.conn, "adducts", adduct_table_maconda, overwrite=TRUE)
   }
 
   if(first.db | length(new_adducts) > 0){
@@ -1123,8 +1112,8 @@ build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
   maconda.extended = unique(meta.table[,-"structure"])
 
   # map SMILES to smile_id
-  RSQLite::dbWriteTable(full.conn, "extended", maconda.extended, append=T)
-  RSQLite::dbWriteTable(full.conn, "structures", mapper, append=T)
+  RSQLite::dbWriteTable(full.conn, "extended", maconda.extended, append=TRUE)
+  RSQLite::dbWriteTable(full.conn, "structures", mapper, append=TRUE)
 
   RSQLite::dbDisconnect(full.conn)
 }
@@ -1134,11 +1123,9 @@ build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.T3DB(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[RCurl]{getURL}}
@@ -1155,7 +1142,7 @@ build.T3DB <- function(outfolder){ # WORKS
   file.url <- "http://www.t3db.ca/system/downloads/current/toxins.csv.zip"
   # ----
   base.loc <- file.path(outfolder, "t3db_source")
-  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
   zip.file <- file.path(base.loc, "T3DB.zip")
   utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
@@ -1164,7 +1151,7 @@ build.T3DB <- function(outfolder){ # WORKS
   version = stringr::str_match(theurl, pattern = "T3DB Version <strong>(...)")[,2]
   date = Sys.Date()
 
-  db.formatted <- data.table::fread(file.path(base.loc, "toxins.csv"), fill=T)
+  db.formatted <- data.table::fread(file.path(base.loc, "toxins.csv"), fill=TRUE)
 
   db.formatted <- data.table::data.table(
     compoundname = db.formatted$Name,
@@ -1184,18 +1171,15 @@ build.T3DB <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.HSDB(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[pbapply]{pboptions}},\code{\link[pbapply]{pbapply}}
 #'  \code{\link[XML]{xmlTreeParse}}
 #'  \code{\link[webchem]{cir_query}}
 #' @rdname build.HSDB
-#' @export
 #' @importFrom utils download.file unzip
 #' @importFrom pbapply startpb pbsapply
 #' @importFrom XML xmlTreeParse
@@ -1204,12 +1188,12 @@ build.T3DB <- function(outfolder){ # WORKS
 build.HSDB <- function(outfolder){ # NEEDS WORK
   file.url = "ftp://ftp.nlm.nih.gov/nlmdata/.hsdblease/hsdb.xml.20190528.zip"
   base.loc <- file.path(outfolder, "hsdb_source")
-  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
   zip.file <- file.path(base.loc, "HSDB.zip")
   utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
 
-  input = list.files(base.loc, pattern = "\\.xml",full.names = T)
+  input = list.files(base.loc, pattern = "\\.xml",full.names = TRUE)
   theurl <- getURL("https://toxnet.nlm.nih.gov/help/hsdbcasrn.html",.opts = list(ssl.verifypeer = FALSE) )
 
   n = str_count(as.character(theurl), pattern = "cgi-bin")
@@ -1231,19 +1215,20 @@ build.HSDB <- function(outfolder){ # NEEDS WORK
   i=1
 
   db.formatted <- data.table::data.table(
-    compoundname = xmlApply(parsed[[1]]$children$hsdb, function(x) xmlValue(x['NameOfSubstance'][[1]])),
-    baseformula = xmlApply(parsed[[1]]$children$hsdb, function(x) xmlValue(x['mf'][[1]])),
-    identifier = xmlApply(parsed[[1]]$children$hsdb, function(x) xmlValue(x['DOCNO'][[1]]))
+    compoundname = XML::xmlApply(parsed[[1]]$children$hsdb, function(x) xmlValue(x['NameOfSubstance'][[1]])),
+    baseformula = XML::xmlApply(parsed[[1]]$children$hsdb, function(x) xmlValue(x['mf'][[1]])),
+    identifier = XML::xmlApply(parsed[[1]]$children$hsdb, function(x) xmlValue(x['DOCNO'][[1]]))
   )
+
   parsed[[1]]$children$hsdb[[i]]
   parsed[[1]]$children$hsdb[[i]]['mf'][1]
   parsed[[1]]$children$hsdb[[i]]['ocpp']
   parsed[[1]]$children$hsdb[[i]]['sy']
   parsed[[1]]$children$hsdb[[i]]['mf']
 
-  identifier = xmlValue(parsed[[1]]$children$hsdb[[i]]['CASRegistryNumber']$CASRegistryNumber)
+  identifier = XML::xmlValue(parsed[[1]]$children$hsdb[[i]]['CASRegistryNumber']$CASRegistryNumber)
 
-  cas_ids <- xmlApply(parsed[[1]]$children$hsdb, function(x) xmlValue(x['CASRegistryNumber'][[1]]))
+  cas_ids <- XML::xmlApply(parsed[[1]]$children$hsdb, function(x) xmlValue(x['CASRegistryNumber'][[1]]))
 
   smiles = pbapply::pbsapply(cas_ids, function(id) webchem::cir_query(id, representation = "smiles", resolver = NULL,
                                                                       first = FALSE)[[1]])
@@ -1257,11 +1242,9 @@ build.HSDB <- function(outfolder){ # NEEDS WORK
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.BLOODEXPOSOME(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[openxlsx]{read.xlsx}}
@@ -1285,7 +1268,7 @@ build.BLOODEXPOSOME <- function(outfolder){ # WORKS
   version = "1.0"
   date = Sys.Date()
 
-  db.full <- openxlsx::read.xlsx(excel.file, sheet = 1, colNames=T, startRow = 3)
+  db.full <- openxlsx::read.xlsx(excel.file, sheet = 1, colNames=TRUE, startRow = 3)
 
   print("getting iupac names from missing compound names...")
   new.names <- pbapply::pbsapply(db.full[which(sapply(db.full$Compound.Name, is.empty)),]$PubChem.CID, function(cid){
@@ -1316,11 +1299,9 @@ build.BLOODEXPOSOME <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.EXPOSOMEEXPLORER(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[stringr]{str_match}}
@@ -1341,7 +1322,7 @@ build.EXPOSOMEEXPLORER <- function(outfolder){ # WORKS
 
   base.loc <- file.path(outfolder, "expoexplorer_source")
 
-  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
   zip.file <- file.path(base.loc, "expoexpo_comp.zip")
   utils::download.file(file.url, zip.file,mode = "wb")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
@@ -1388,7 +1369,7 @@ build.EXPOSOMEEXPLORER <- function(outfolder){ # WORKS
   df <- corr.table[,c("Excretion ID", "Pasted")]
   aggr = aggregate( Pasted ~ `Excretion ID`, df, function(x) toString(paste(unique(x),collapse = " ")))
 
-  final.table <- merge(db.formatted, aggr, by.x = "identifier", by.y = "Excretion ID", all.x=T)
+  final.table <- merge(db.formatted, aggr, by.x = "identifier", by.y = "Excretion ID", all.x=TRUE)
 
   final.table$description <- pbapply::pbsapply(1:nrow(final.table), function(i){
     row = final.table[i,]
@@ -1408,11 +1389,9 @@ build.EXPOSOMEEXPLORER <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.SMPDB(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[RCurl]{getURL}}
@@ -1446,10 +1425,10 @@ build.SMPDB <- function(outfolder){ # OK I THINK
   date = dates[nrow(dates),2]
   date = as.Date(date, format = "%B%d,%Y")
 
-  smpdb.paths <- list.files(path = base.loc, pattern = "\\.csv$", full.names = T)
+  smpdb.paths <- list.files(path = base.loc, pattern = "\\.csv$", full.names = TRUE)
 
   subtables <- pbapply::pblapply(smpdb.paths, data.table::fread)
-  smpdb.tab <- data.table::rbindlist(subtables, fill = T)
+  smpdb.tab <- data.table::rbindlist(subtables, fill = TRUE)
 
   db.formatted <- data.table::data.table(compoundname = smpdb.tab$`Metabolite Name`,
                                          description = paste0(smpdb.tab$`Pathway Name`,
@@ -1473,11 +1452,9 @@ build.SMPDB <- function(outfolder){ # OK I THINK
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.KEGG(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[pbapply]{pbapply}}
 #'  \code{\link[KEGGREST]{keggFind}},\code{\link[KEGGREST]{keggGet}}
@@ -1548,13 +1525,13 @@ build.KEGG <- function(outfolder){ # WORKS
     #mols = Rcpi::getMolFromKEGG(batch, parallel = 1)
     bigmol = KEGGREST::keggGet(batch, "mol")
     mols = strsplit(x = paste0("\n \n \n",bigmol), split = "\\$\\$\\$\\$\n")[[1]]
-    fps = normalizePath(file.path(base.loc, paste0(stringr::str_match(mols, pattern = "<ENTRY>\ncpd:(.*)\n")[,2], ".mol")),mustWork = F)
+    fps = normalizePath(file.path(base.loc, paste0(stringr::str_match(mols, pattern = "<ENTRY>\ncpd:(.*)\n")[,2], ".mol")),mustWork = FALSE)
     sapply(1:length(mols), function(i) writeLines(text = mols[[i]],
                                                   con = fps[i]))
     fps
   })
 
-  fns = list.files(base.loc,full.names = T)
+  fns = list.files(base.loc,full.names = TRUE)
 
   smiles.rows = pbapply::pblapply(fns, function(fn){
     smiles=NA
@@ -1590,11 +1567,9 @@ build.KEGG <- function(outfolder){ # WORKS
 #' @return data table with parsed database
 #' @details Requires account creation! Then please download the full XML database from the website and place in databases/drugbank_source folder. Create it if it doesn't exist yet please!
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.DRUGBANK(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[utils]{unzip}}
 #'  \code{\link[stringr]{str_match}}
@@ -1635,7 +1610,7 @@ build.DRUGBANK <- function(outfolder){  # WORKS
 
   input = file.path(base.loc, "full database.xml")
   header = readLines(input, n = 10)
-  hasInfo = grep(x = header, pattern = "version", value = T, perl = T)[2]
+  hasInfo = grep(x = header, pattern = "version", value = TRUE, perl = TRUE)[2]
   version = stringr::str_match(string = hasInfo, pattern = "version=\"(.*)\" exported")[,2]
 
   # theurl = "https://www.drugbank.ca/releases/latest"
@@ -1644,12 +1619,14 @@ build.DRUGBANK <- function(outfolder){  # WORKS
   # version = header$Version
 
   theurl <- RCurl::getURL("https://www.drugbank.ca/stats",.opts = list(ssl.verifypeer = FALSE) )
-  tables <- XML::readHTMLTable(theurl,header = F)
+  tables <- XML::readHTMLTable(theurl,header = FALSE)
   stats =  data.table::as.data.table(tables[[1]])
   colnames(stats) <- c("Description", "Count")
   n = as.numeric(as.character(gsub(x = stats[Description == "Total Number of Drugs"]$Count, pattern = ",", replacement="")))
 
-  db.formatted <- data.frame(
+  envir = environment()
+
+  envir$db.formatted <- data.frame(
     compoundname = rep(NA, n),
     baseformula = rep(NA, n),
     identifier = rep(NA, n),
@@ -1658,19 +1635,17 @@ build.DRUGBANK <- function(outfolder){  # WORKS
     description = rep(NA, n)
   )
 
-  pb <- pbapply::startpb(min = 0, max = n)
+  envir$pb <- pbapply::startpb(min = 0, max = n)
 
-  idx <- 0
+  envir$idx <- 0
 
-  metabolite = function(currNode){
+  metabolite = function(currNode, currEnvir=envir){
 
-    if(idx %% 10 == 0){
-      pbapply::setpb(pb, idx)
+    if(currEnvir$idx %% 10 == 0){
+      pbapply::setpb(currEnvir$pb, currEnvir$idx)
     }
 
-    idx <<- idx + 1
-
-    currNode <<- currNode
+    currEnvir$idx <- currEnvir$idx + 1
 
     properties <- currNode[['calculated-properties']]
 
@@ -1717,16 +1692,16 @@ build.DRUGBANK <- function(outfolder){  # WORKS
       return(NULL)
     }
 
-    db.formatted[idx, "compoundname"] <<- XML::xmlValue(currNode[['name']])
-    db.formatted[idx, "identifier"] <<- XML::xmlValue(currNode[['drugbank-id']])
-    db.formatted[idx, "baseformula"] <<- proplist[[which.form]][['value']]
-    db.formatted[idx, "structure"] <<- if(length(which.struc) > 0){
+    currEnvir$db.formatted[currEnvir$idx, "compoundname"] <- XML::xmlValue(currNode[['name']])
+    currEnvir$db.formatted[currEnvir$idx, "identifier"] <- XML::xmlValue(currNode[['drugbank-id']])
+    currEnvir$db.formatted[currEnvir$idx, "baseformula"] <- proplist[[which.form]][['value']]
+    currEnvir$db.formatted[currEnvir$idx, "structure"] <- if(length(which.struc) > 0){
       proplist[[which.struc]][['value']]
     }else{
       ""
     }
-    db.formatted[idx, "description"] <<- XML::xmlValue(currNode[['description']])
-    db.formatted[idx, "charge"] <<- if(length(which.charge) > 0){
+    currEnvir$db.formatted[currEnvir$idx, "description"] <- XML::xmlValue(currNode[['description']])
+    currEnvir$db.formatted[currEnvir$idx, "charge"] <- if(length(which.charge) > 0){
       proplist[[which.charge]][['value']]
     }else{
       0
@@ -1736,11 +1711,11 @@ build.DRUGBANK <- function(outfolder){  # WORKS
   res = XML::xmlEventParse(file = input, branches =
                              list("drug" = metabolite, "drugbank-metabolite-id-value" = print))
 
-  db.formatted <- db.formatted[-1,]
+  envir$db.formatted <- envir$db.formatted[-1,]
 
   # - - -
 
-  list(db = db.formatted, version = version)
+  list(db = envir$db.formatted, version = version)
 
 }
 
@@ -1749,11 +1724,9 @@ build.DRUGBANK <- function(outfolder){  # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.LIPIDMAPS(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[zip]{unzip}}
@@ -1793,14 +1766,14 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
   version = Sys.Date()
   sdf.path <- list.files(base.loc,
                          pattern = "sdf",
-                         full.names = T,
-                         recursive = T)
+                         full.names = TRUE,
+                         recursive = TRUE)
 
   desc <- function(sdfset){
     mat <- NULL
-    #last_sdf <<- sdfset
+    #last_sdf <- sdfset
     db <- data.table::as.data.table(ChemmineR::datablock2ma(datablocklist=ChemmineR::datablock(sdfset)))
-    #last_db <<- db
+    #last_db <- db
     mat = as.matrix(data.table::data.table(
       identifier = as.character(db$LM_ID),
       compoundname = sapply(1:nrow(db), function(i) if(!is.empty(db$NAME[i])) db$NAME[i] else db$SYSTEMATIC_NAME[i]),
@@ -1823,9 +1796,9 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
                                                     "lipidmaps_parsed.csv"),
                    append=FALSE,
                    fct=desc,
-                   silent = T)
+                   silent = TRUE)
 
-  db.base <- data.table::fread(file.path(base.loc, "lipidmaps_parsed.csv"), fill = T, header=T)
+  db.base <- data.table::fread(file.path(base.loc, "lipidmaps_parsed.csv"), fill = TRUE, header=TRUE)
 
   db.base$charge <- c(NA)
 
@@ -1846,12 +1819,12 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
 
   db.base$description <- pbapply::pbsapply(1:nrow(db.base), function(i){
     row = db.base[i,]
-    matching = stringi::stri_detect_fixed(row$identifier,conv_tbl$catcode,fixed=T)
+    matching = stringi::stri_detect_fixed(row$identifier,conv_tbl$catcode,fixed=TRUE)
     paste0(row$description, ". ", "In class(es):", tolower(paste(conv_tbl$catdesc[matching], collapse=", ")))
   })
 
   # - - - - - - - - - - - - - - - -
-  db.formatted <- db.base[,-1,with=F]
+  db.formatted <- db.base[,-1,with=FALSE]
 
   list(db = db.formatted, version = version)
 
@@ -1862,11 +1835,9 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.METABOLIGHTS(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[XML]{xmlToList}}
@@ -1942,7 +1913,7 @@ build.METABOLIGHTS <- function(outfolder){
                                    charge = info$charge,
                                    structure = info$smiles
       )
-    }, silent = T)
+    }, silent = TRUE)
     res
   })
 
@@ -1959,7 +1930,7 @@ build.METABOLIGHTS <- function(outfolder){
   })
 
   db.formatted <- data.table::rbindlist(db.rows.final,
-                                        use.names = T)
+                                        use.names = TRUE)
 
   list(db = db.formatted, version = version)
 
@@ -1970,11 +1941,9 @@ build.METABOLIGHTS <- function(outfolder){
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.DIMEDB(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[pbapply]{pbapply}}
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
@@ -2038,11 +2007,9 @@ build.DIMEDB <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.VMH(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
@@ -2136,11 +2103,9 @@ build.VMH <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.PHENOLEXPLORER(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
@@ -2230,11 +2195,9 @@ build.PHENOLEXPLORER <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.MASSBANK(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[stringr]{str_match}}
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
@@ -2255,14 +2218,14 @@ build.MASSBANK <- function(outfolder){ # WORKS
 
   file.url <- "https://github.com/MassBank/MassBank-data/archive/master.zip"
   base.loc <- file.path(outfolder, "massbank_source")
-  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
   zip.file <- file.path(base.loc, "massbank.zip")
   utils::download.file(file.url, zip.file,mode = "wb", method='libcurl')
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
   cpd_files <- list.files(base.loc,
                           pattern = ".txt$",
-                          full.names = T,
-                          recursive = T)
+                          full.names = TRUE,
+                          recursive = TRUE)
 
   # - - - - - - - - - - - - - - -
 
@@ -2313,11 +2276,9 @@ build.MASSBANK <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.BMDB(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
@@ -2335,32 +2296,37 @@ build.MASSBANK <- function(outfolder){ # WORKS
 #' @importFrom XML xmlValue xmlEventParse
 build.BMDB <- function(outfolder){
 
+  oldpar = options()
+  options(stringsAsFactors = FALSE)
+  on.exit(options(oldpar))
+
   theurl = "http://www.bovinedb.ca/about"
   header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
   version = stringr::str_match(header,
                                pattern = "BMDB Version <strong>(\\d.\\d)")[,2]
 
-  options(stringsAsFactors = F)
   file.url <- "http://www.bovinedb.ca/system/downloads/current/bmdb_metabolites.zip"
   base.loc <- file.path(outfolder, "bmdb_source")
-  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
   zip.file <- file.path(base.loc, "BMDB.zip")
-  utils::download.file(file.url, zip.file,mode = "wb",cacheOK = T)
+  utils::download.file(file.url, zip.file,mode = "wb",cacheOK = TRUE)
   utils::unzip(zip.file, exdir = base.loc)
 
   input = file.path(base.loc, "bmdb_metabolites.xml")
   header = readLines(input,n = 10)
-  version = trimws(gsub(grep(pattern = "<version", header, value = T),
+  version = trimws(gsub(grep(pattern = "<version", header, value = TRUE),
                         pattern = "<\\/?version>",
                         replacement = ""))
-  date = trimws(gsub(grep(pattern = "update_date", header, value = T),
+  date = trimws(gsub(grep(pattern = "update_date", header, value = TRUE),
                      pattern = "<\\/?update_date>",
                      replacement = ""))
 
   theurl <- RCurl::getURL("http://www.bovinedb.ca/metabolites",.opts = list(ssl.verifypeer = FALSE) )
   n = as.numeric(stringr::str_match_all(theurl, "of <.+?>(.*?)<.+?>")[[1]][1,2])
 
-  db.formatted <- data.frame(
+  envir = environment()
+
+  envir$db.formatted <- data.frame(
     compoundname = rep(NA, n),
     baseformula = rep(NA, n),
     identifier = rep(NA, n),
@@ -2369,8 +2335,8 @@ build.BMDB <- function(outfolder){
     description = rep("", n)
   )
 
-  idx = 1 # which metabolite are we on
-  pb <- pbapply::startpb(min = idx, max = n)
+  envir$idx = 1 # which metabolite are we on
+  envir$pb <- pbapply::startpb(min = 1, max = n)
 
   # FOR WINDOWS
   sysinf <- Sys.info()
@@ -2393,15 +2359,15 @@ build.BMDB <- function(outfolder){
     con = base::file(input, "r")
     while (TRUE) {
 
-      line = readLines(con, n = 1,skipNul = T)
+      line = readLines(con, n = 1,skipNul = TRUE)
 
       if (length(line) == 0){
         break
       }
 
       if(line == "</metabolite>"){
-        idx <<- idx+1
-        pbapply::setpb(pb, idx)
+        envir$idx <- envir$idx+1
+        pbapply::setpb(envir$pb, envir$idx)
         acc = "primary"
         nm = "primary"
         desc = "primary"
@@ -2412,70 +2378,68 @@ build.BMDB <- function(outfolder){
       switch(tag,
              accession = {
                if(acc == "primary"){
-                 db.formatted[idx,]$identifier <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+                 envir$db.formatted[envir$idx,]$identifier <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
                  acc <- "secondary"
                }
              },
              name = {
                if(nm == "primary"){
-                 db.formatted[idx,]$compoundname <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+                 envir$db.formatted[envir$idx,]$compoundname <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
                  nm = "secondary"
                }
              },
              smiles = {
-               db.formatted[idx,]$structure <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+               envir$db.formatted[envir$idx,]$structure <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
              },
              description = {
                if(desc == "primary"){
-                 db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description,
+                 envir$db.formatted[envir$idx,]$description <- paste0(envir$db.formatted[envir$idx,]$description,
                                                           " HMDB: ",
                                                           trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
                  desc = "secondary"
                }
              },
              cs_description = {
-               db.formatted[idx,]$description <- paste0(db.formatted[idx,]$description,
+               envir$db.formatted[envir$idx,]$description <- paste0(envir$db.formatted[envir$idx,]$description,
                                                         "From ChemSpider: ",
                                                         trimws(gsub(line, pattern = "(<.*?>)", replacement="")))
              },
              chemical_formula = {
-               db.formatted[idx,]$baseformula <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
+               envir$db.formatted[envir$idx,]$baseformula <- trimws(gsub(line, pattern = "(<.*?>)", replacement=""))
              })
     }
     close(con)
   }else{
-    metabolite = function(currNode){
-      if(idx %% 1000 == 0){
-        pbapply::setpb(pb, idx)
+    metabolite = function(currNode, currEnvir=envir){
+      if(currEnvir$idx %% 1000 == 0){
+        pbapply::setpb(currEnvir$pb, currEnvir$idx)
       }
 
-      currNode <<- currNode
-
-      db.formatted[idx, "compoundname"] <<- XML::xmlValue(currNode[['name']])
-      db.formatted[idx, "identifier"] <<- XML::xmlValue(currNode[['accession']])
-      db.formatted[idx, "baseformula"] <<- XML::xmlValue(currNode[['chemical_formula']])
-      db.formatted[idx, "structure"] <<- XML::xmlValue(currNode[['smiles']])
-      db.formatted[idx, "description"] <<- paste(XML::xmlValue(currNode[['description']])
+      currEnvir$db.formatted[currEnvir$idx, "compoundname"] <- XML::xmlValue(currNode[['name']])
+      currEnvir$db.formatted[currEnvir$idx, "identifier"] <- XML::xmlValue(currNode[['accession']])
+      currEnvir$db.formatted[currEnvir$idx, "baseformula"] <- XML::xmlValue(currNode[['chemical_formula']])
+      currEnvir$db.formatted[currEnvir$idx, "structure"] <- XML::xmlValue(currNode[['smiles']])
+      currEnvir$db.formatted[currEnvir$idx, "description"] <- paste(XML::xmlValue(currNode[['description']])
       )
       x <- currNode[['predicted_properties']]
       properties <- currNode[['predicted_properties']]
-      db.formatted[idx, "charge"] <<- stringr::str_match(XML::xmlValue(properties),
+      currEnvir$db.formatted[currEnvir$idx, "charge"] <- stringr::str_match(XML::xmlValue(properties),
                                                          pattern = "formal_charge([+|\\-]\\d*|\\d*)")[,2]
 
-      idx <<- idx + 1
+      currEnvir$idx <- currEnvir$idx + 1
     }
 
     XML::xmlEventParse(input,
                        branches = list(metabolite = metabolite),
-                       replaceEntities=T)
+                       replaceEntities=TRUE)
   }
-  list(db = db.formatted, version = version)
+  list(db = envir$db.formatted, version = version)
 #
 #   file.url = "http://www.cowmetdb.ca/public/downloads/current/metabocards.gz"
 #   base.loc <- file.path(outfolder, "bmdb_source")
-#   if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
+#   if(!dir.exists(base.loc)) dir.create(base.loc, recursive = TRUE)
 #   gz.file <- file.path(base.loc, "bmdb.gz")
-#   utils::download.file(file.url, gz.file,mode = "wb", cacheOK = T)
+#   utils::download.file(file.url, gz.file,mode = "wb", cacheOK = TRUE)
 #   zz = gzfile(gz.file, 'rt')
 #   dat = readLines(zz)
 #   dat.pasted = paste0(dat, collapse = ";")
@@ -2510,11 +2474,9 @@ build.BMDB <- function(outfolder){
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.RMDB(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[stringr]{str_split}},\code{\link[stringr]{str_extract}},\code{\link[stringr]{str_match}}
@@ -2530,9 +2492,9 @@ build.RMDB <- function(outfolder){
   file.url = "http://www.rumendb.ca/public/downloads/current/metabocards.gz"
   base.loc <- file.path(outfolder, "rmdb_source")
   version = Sys.Date()
-  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
+  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = TRUE)
   gz.file <- file.path(base.loc, "rmdb.gz")
-  utils::download.file(file.url, gz.file,mode = "wb", cacheOK = T)
+  utils::download.file(file.url, gz.file,mode = "wb", cacheOK = TRUE)
   zz = gzfile(gz.file,'rt')
   dat = readLines(zz)
   dat.pasted = paste0(dat, collapse = ";")
@@ -2567,11 +2529,9 @@ build.RMDB <- function(outfolder){
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.ECMDB(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
@@ -2594,9 +2554,9 @@ build.ECMDB <- function(outfolder){
 
   file.url = "http://ecmdb.ca/download/ecmdb.json.zip"
   base.loc <- file.path(outfolder, "ecmdb_source")
-  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
+  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = TRUE)
   zip.file <- file.path(base.loc, "ecmdb.zip")
-  utils::download.file(file.url, zip.file,mode = "wb", cacheOK = T)
+  utils::download.file(file.url, zip.file,mode = "wb", cacheOK = TRUE)
   utils::unzip(zip.file, exdir = base.loc)
   json = file.path(base.loc, "ecmdb.json")
   json.rows = RJSONIO::fromJSON(json)
@@ -2619,11 +2579,9 @@ build.ECMDB <- function(outfolder){
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.LMDB(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
@@ -2632,50 +2590,6 @@ build.ECMDB <- function(outfolder){
 #' @importFrom RCurl getURL
 #' @importFrom stringr str_match
 build.LMDB <- function(outfolder){
-  # file.url = "http://lmdb.ca/system/downloads/current/structures.zip"
-  # base.loc <- file.path(outfolder, "lmdb_source")
-  # if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
-  # zip.file <- file.path(base.loc, "lmdb.zip")
-  # utils::download.file(file.url, zip.file,mode = "wb", cacheOK = T)
-  # utils::unzip(zip.file, exdir = base.loc)
-  # sdf.path <- list.files(base.loc,
-  #                        pattern = "sdf$",
-  #                        full.names = T,
-  #                        recursive = T)
-  #
-  # desc <- function(sdfset){
-  #   mat <- NULL
-  #   db <- data.table::as.data.table(ChemmineR::datablock2ma(datablocklist=ChemmineR::datablock(sdfset)))
-  #   info = data.table::data.table(identifier = db$DATABASE_ID,
-  #                                 compoundname = db$GENERIC_NAME,
-  #                                 structure = db$SMILES,
-  #                                 baseformula = db$JCHEM_FORMULA,
-  #                                 description = paste0("Synonyms: ", db$SYNONYMS))
-  #   info
-  # }
-  #
-  # out.csv = file.path(base.loc,
-  #                     "lmdb_parsed.csv")
-  # if(file.exists(out.csv)){
-  #   file.remove(out.csv)
-  # }
-  #
-  # sdfStream.joanna(input=sdf.path, output=out.csv,
-  #                  append=FALSE,
-  #                  fct=desc,
-  #                  silent = T)
-  #db.struct <- data.table::fread(file.path(base.loc, "lmdb_parsed.csv"), fill = T, header=T)
-  # - lmdb is only available as seperate file here -
-  #
-  #   lmdb <- XML::xmlParse("~/MetaDBparse/inst/files/lmdb.xml")
-  #   xmldf <- data.table::as.data.table(XML::xmlToDataFrame(nodes = XML::getNodeSet(lmdb, "//row")))
-  # db.extra.info <- data.table::as.data.table(xmldf[, .(identifier = lmdb_id, description)])
-  # lmdb <- xmldf[, .(identifier = lmdb_id,
-  #                   compoundname = name,
-  #                   baseformula = moldb_formula,
-  #                   structure = moldb_smiles,
-  #                   description = description,
-  #                   charge = c(0))]
   theurl = "http://lmdb.ca/"
   header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
   version = stringr::str_match(header,
@@ -2683,12 +2597,6 @@ build.LMDB <- function(outfolder){
 
   data(lmdb, package = "MetaDBparse",envir = environment())
 
-  # descs = data.table::fread("~/Downloads/lmdb_descriptions.csv", header=T)
-  # descs <- data.table::data.table(identifier = c(colnames(descs)[1], descs[,1][[1]]),
-  #                                  description = c(colnames(descs)[2], descs[,2][[1]]))
-  # db.a = db.formatted[ , -c("description")]
-  # lmdb = merge(db.a, descs)
-  #lmdb <- db.final
   db.formatted <- lmdb
 
   list(db = db.formatted, version = version)
@@ -2700,11 +2608,9 @@ build.LMDB <- function(outfolder){
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.YMDB(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{fread}},\code{\link[data.table]{rbindlist}}
@@ -2724,9 +2630,9 @@ build.LMDB <- function(outfolder){
 build.YMDB <- function(outfolder){
   file.url = "http://www.ymdb.ca/system/downloads/current/ymdb.json.zip"
   base.loc <- file.path(outfolder, "ymdb_source")
-  if(dir.exists(base.loc))(unlink(base.loc, recursive = T)); dir.create(base.loc, recursive = T);
+  if(dir.exists(base.loc))(unlink(base.loc, recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
   zip.file <- file.path(base.loc, "ymdb.zip")
-  utils::download.file(file.url, zip.file,mode = "wb", cacheOK = T)
+  utils::download.file(file.url, zip.file,mode = "wb", cacheOK = TRUE)
   utils::unzip(zip.file, exdir = base.loc)
   json = file.path(base.loc, "ymdb.json")
   line = readLines(json)[[1]]
@@ -2744,13 +2650,13 @@ build.YMDB <- function(outfolder){
     )
   sdf.url = "http://www.ymdb.ca/system/downloads/current/ymdb.sdf.zip"
   zip.file <- file.path(base.loc, "ymdb_sdf.zip")
-  utils::download.file(sdf.url, zip.file,mode = "wb",cacheOK = T)
+  utils::download.file(sdf.url, zip.file,mode = "wb",cacheOK = TRUE)
   utils::unzip(zip.file, exdir = base.loc)
 
   sdf.path <- list.files(base.loc,
                          pattern = "sdf$",
-                         full.names = T,
-                         recursive = T)
+                         full.names = TRUE,
+                         recursive = TRUE)
 
   desc <- function(sdfset){
     mat <- NULL
@@ -2772,10 +2678,10 @@ build.YMDB <- function(outfolder){
   sdfStream.joanna(input=sdf.path, output=out.csv,
                    append=FALSE,
                    fct=desc,
-                   silent = T)
+                   silent = TRUE)
 
-  db.struct <- data.table::fread(file.path(base.loc, "ymdb_parsed.csv"), fill = T, header=T)
-  db.merged <- merge(db.partial, db.struct, by = "identifier", all.y = T)
+  db.struct <- data.table::fread(file.path(base.loc, "ymdb_parsed.csv"), fill = TRUE, header=TRUE)
+  db.merged <- merge(db.partial, db.struct, by = "identifier", all.y = TRUE)
   db.rows <- pbapply::pblapply(1:nrow(db.merged), function(i){
     row = db.merged[i,]
     data.table::data.table(identifier = row$identifier,
@@ -2800,11 +2706,9 @@ build.YMDB <- function(outfolder){
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.PAMDB(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[data.table]{as.data.table}}
@@ -2821,9 +2725,9 @@ build.YMDB <- function(outfolder){
 build.PAMDB <- function(outfolder){
   file.url = "http://pseudomonas.umaryland.edu/PaDl/PaMet.xlsx"
   base.loc <- file.path(outfolder, "pamdb_source")
-  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
+  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = TRUE)
   xlsx.file <- file.path(base.loc, "pamdb.xlsx")
-  utils::download.file(file.url, xlsx.file, mode = "wb", cacheOK = T)
+  utils::download.file(file.url, xlsx.file, mode = "wb", cacheOK = TRUE)
   db.base = data.table::as.data.table(readxl::read_excel(xlsx.file,sheet = 1))
   db.formatted <- data.table::data.table(identifier = db.base$MetID,
                                          compoundname = db.base$Name,
@@ -2844,11 +2748,9 @@ build.PAMDB <- function(outfolder){
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.mVOC(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[XML]{getNodeSet}},\code{\link[XML]{xmlAttrs}},\code{\link[XML]{readHTMLTable}}
 #'  \code{\link[pbapply]{pbapply}}
@@ -2927,11 +2829,9 @@ build.mVOC <- function(outfolder){
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.NANPDB(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[data.table]{fread}}
@@ -2942,9 +2842,9 @@ build.mVOC <- function(outfolder){
 build.NANPDB <- function(outfolder){
   file.url = "http://african-compounds.org/nanpdb/downloads/smiles/"
   base.loc <- file.path(outfolder, "nanpdb_source")
-  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
+  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = TRUE)
   smi.file <- file.path(base.loc, "nanpdb.smi")
-  utils::download.file(file.url, smi.file, mode = "wb", cacheOK = T)
+  utils::download.file(file.url, smi.file, mode = "wb", cacheOK = TRUE)
   db.base = data.table::fread(smi.file, sep = "\t")
   db.formatted = db.base[, .(identifier = V2, structure = V1, compoundname = V3)]
   db.formatted$charge = c(0)
@@ -2960,11 +2860,9 @@ build.NANPDB <- function(outfolder){
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' \dontrun{
 #' if(interactive()){
 #'  database <- build.STOFF(tempdir())
 #'  }
-#' }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[data.table]{as.data.table}}
@@ -2977,9 +2875,9 @@ build.NANPDB <- function(outfolder){
 build.STOFF <- function(outfolder){
   file.url = "http://www.lfu.bayern.de/stoffident/stoffident-static-content/html/download/SI_Content.zip"
   base.loc <- file.path(outfolder, "stoff_source")
-  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = T)
+  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = TRUE)
   zip.file <- file.path(base.loc, "stoff.zip")
-  utils::download.file(file.url, zip.file, mode = "wb", cacheOK = T)
+  utils::download.file(file.url, zip.file, mode = "wb", cacheOK = TRUE)
   # - - - - - - - - - - - - - - - - - - - - - - - - -
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
   excel.file = file.path(base.loc, "SI_Content.xls")
@@ -3005,7 +2903,7 @@ build.STOFF <- function(outfolder){
 #   doc <- XML::htmlParse(content)
 #
 #   n <- {
-#     lineWithCount <- as.character(grep(content, pattern="CreatePageviewTag", value=T))
+#     lineWithCount <- as.character(grep(content, pattern="CreatePageviewTag", value=TRUE))
 #     as.numeric(stringr::str_match(string = lineWithCount,
 #                        pattern="\\d+")[,1])
 #   }
@@ -3039,7 +2937,7 @@ build.STOFF <- function(outfolder){
 #         name <- html2txt(gsub(l[[1]], pattern="<.*?>", replacement=""))
 #         formula = stringr::str_match(str = grep(l,
 #                                                  pattern = "Empirical Formula",
-#                                                  value=T),
+#                                                  value=TRUE),
 #                                       pattern = "Empirical Formula.*?<span.*?>(.*?)<\\/span>")[,2]
 #         formula = gsub(formula, pattern = "<\\/?SUB>", replacement = "")
 #         formula = gsub(formula, pattern = "<SUP>", replacement = "[")

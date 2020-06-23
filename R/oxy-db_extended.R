@@ -53,7 +53,7 @@ countAdductRuleMatches <- function(iatoms, adduct_rules){
       if(curr != "Nch"){
         all_matches = list(mapping=list(a=c(1:10)))
         try({
-          rcdk::matches(query = query, target = iatom, T)
+          rcdk::matches(query = query, target = iatom, TRUE)
         })
       }else{
         rcdk::get.total.formal.charge(iatom)
@@ -76,7 +76,7 @@ countAdductRuleMatches <- function(iatoms, adduct_rules){
 #' @description Sometimes multiple rules apply - this function checks if they all apply as noted in the rule table.
 #' @param adduct_rule_scores Scores from countAdductRuleMatches.
 #' @param adduct_table Adduct tablle
-#' @return Table with T/F for each structure and adduct
+#' @return Table with TRUE/FALSE for each structure and adduct
 #' @seealso
 #'  \code{\link[data.table]{as.data.table}}
 #' @rdname checkAdductRule
@@ -363,7 +363,7 @@ buildExtDB <- function(outfolder,
     to.do = RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge
                                             FROM tmp.base")
     to.do$struct_id <- c(NA)
-    adduct_only = F
+    adduct_only = FALSE
   }else{
     #print(RSQLite::dbGetQuery(full.conn, "SELECT * FROM structures LIMIT 20"))
     #print(RSQLite::dbGetQuery(full.conn, "SELECT DISTINCT baseformula, structure, charge FROM tmp.base LIMIT 20"))
@@ -374,7 +374,7 @@ buildExtDB <- function(outfolder,
                                             WHERE str.smiles IS NULL")
     # if none, check for new adducts
     if(length(new_adducts) > 0){
-      adduct_only = if(nrow(to.do )== 0) T else F
+      adduct_only = if(nrow(to.do )== 0) TRUE else FALSE
       # and adjust adduct list
       if(adduct_only){
         print(paste0("New adducts: ", paste0(new_adducts, collapse = ",")))
@@ -385,7 +385,7 @@ buildExtDB <- function(outfolder,
         adduct_table <- data.table::as.data.table(adduct_table)[Name %in% new_adducts,]
       }
     }else{
-      adduct_only = F
+      adduct_only = FALSE
     }
   }
 
@@ -409,7 +409,7 @@ buildExtDB <- function(outfolder,
   if(adduct_only){
     print("Getting structure IDs...")
     mapper_now <- unique(mapper[,-"struct_id"])
-    DBI::dbWriteTable(full.conn, "mapper", mapper_now, overwrite=T)
+    DBI::dbWriteTable(full.conn, "mapper", mapper_now, overwrite=TRUE)
     mapper_filled <- data.table::as.data.table(RSQLite::dbGetQuery(full.conn, "SELECT * FROM structures s JOIN mapper m ON s.smiles = m.smiles"))
     mapper <- mapper_filled[,c("struct_id", "smiles", "baseformula", "charge")]
   }
@@ -422,7 +422,7 @@ buildExtDB <- function(outfolder,
 
   tempdir = file.path(outfolder, paste0(ext.dbname, "_inprogress"))
   if(dir.exists(tempdir)){
-    unlink(tempdir,recursive = T)
+    unlink(tempdir,recursive = TRUE)
   }
 
   dir.create(tempdir)
@@ -516,11 +516,11 @@ buildExtDB <- function(outfolder,
 
         formula_plus_iso <- merge(adducted, isotable,
                                   by = c("final", "final.charge"),
-                                  allow.cartesian = T)
+                                  allow.cartesian = TRUE)
         adducted.plus.isotopes <- merge(adducted, formula_plus_iso,
                                         by=c("baseformula", "charge", "adducted",
                                              "final.charge", "final", "structure"),
-                                        allow.cartesian = T)
+                                        allow.cartesian = TRUE)
 
         # ==== MAKE FINAL TABLE ====
         meta.table <- data.table::data.table(fullmz = adducted.plus.isotopes$fullmz,
@@ -547,10 +547,10 @@ buildExtDB <- function(outfolder,
                                      "finalcharge",
                                      "fullmz","adduct","isoprevalence")],
                          file=tmpfiles.ext[i],
-                         append=F)
+                         append=FALSE)
       data.table::fwrite(structs,
                          file = tmpfiles.struct[i],
-                         append=F)
+                         append=FALSE)
     }
 
     #RSQLite::dbExecute(full.conn, "PRAGMA wal_checkpoint(TRUNCATE)")
@@ -567,9 +567,9 @@ buildExtDB <- function(outfolder,
     try({
       extended_csv = data.table::fread(tmpfiles.ext[i])
       structures_csv = data.table::fread(tmpfiles.struct[i])
-      RSQLite::dbWriteTable(full.conn, "extended", extended_csv, append=T)
+      RSQLite::dbWriteTable(full.conn, "extended", extended_csv, append=TRUE)
       if(!adduct_only){
-        RSQLite::dbWriteTable(full.conn, "structures", structures_csv, append=T)
+        RSQLite::dbWriteTable(full.conn, "structures", structures_csv, append=TRUE)
       }
     })
     RSQLite::dbDisconnect(full.conn)
@@ -589,7 +589,7 @@ buildExtDB <- function(outfolder,
 
   RSQLite::dbWriteTable(full.conn,
                         "adducts",
-                        as.data.frame(adduct_tbl_named),overwrite=T)
+                        as.data.frame(adduct_tbl_named),overwrite=TRUE)
 
   RSQLite::dbDisconnect(full.conn)
 
