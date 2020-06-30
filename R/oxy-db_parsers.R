@@ -1,3 +1,8 @@
+.onLoad <- function(libname, pkgname) {
+  data("adduct_rules", "adducts", package=pkgname, envir=parent.env(environment()))
+  data("isotopes", package="enviPat", envir=parent.env(environment()))
+  }
+
 #' @title Build MCDB
 #' @description Parses the MCDB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
@@ -24,6 +29,8 @@
 #' @importFrom base file
 #' @importFrom stringr str_match
 build.MCDB <- function(outfolder){ # WORKS
+
+  Description <- NULL
 
   oldpar = options()
   options(stringsAsFactors = FALSE)
@@ -189,6 +196,7 @@ build.MCDB <- function(outfolder){ # WORKS
 #' @importFrom stringr str_match
 build.HMDB <- function(outfolder){ # WORKS
 
+  Description <- DESCRIPTION <-  NULL
   oldpar = options()
   options(stringsAsFactors = FALSE)
   on.exit(options(oldpar))
@@ -345,10 +353,6 @@ build.HMDB <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @details Requires account creation! Then download SmartTable from 'https://trmetacyc.org/group?id=biocyc17-31223-3787684059' as 'All_compounds_of_MetaCyc.txt' and save in the databases/metacyc_source folder.
-#' @examples
-#' if(interactive()){
-#'  database <- build.METACYC(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
@@ -370,13 +374,7 @@ build.METACYC <- function(outfolder){ # WORKS
   source.file = file.path(base.loc, "All_compounds_of_MetaCyc.txt")
   if(!file.exists(source.file)){
     msg = "Please download SmartTable from 'https://trmetacyc.org/group?id=biocyc17-31223-3787684059' as 'All_compounds_of_MetaCyc.txt' and save in the databases/metacyc_source folder."
-    if("MetaboShiny" %in% (.packages())){
-      try({
-        metshiAlert(msg)
-      })
-    }else{
-      message(msg)
-    }
+    message(msg)
     return(NULL)
   }
 
@@ -436,6 +434,8 @@ build.METACYC <- function(outfolder){ # WORKS
 #' @importFrom utils download.file
 #' @importFrom data.table as.data.table
 build.CHEBI <- function(outfolder){ # WORKS
+  # avoid data table NOTEs
+  DEFINITION <- FORMULA <- ID <- CHARGE <- STRUCTURE <- NULL
   db.full <- {
     release = "latest"
     woAssociations = FALSE
@@ -876,6 +876,9 @@ build.WIKIDATA <- function(outfolder){ # WORKS
 #' @importFrom pbapply pblapply
 #' @importFrom data.table data.table rbindlist
 build.RESPECT <- function(outfolder){ # WORKS
+
+  baseformula <- NULL
+
   file.url <- "http://spectra.psc.riken.jp/menta.cgi/static/respect/respect.zip"
 
   base.loc <- file.path(outfolder, "respect_source")
@@ -951,6 +954,8 @@ build.RESPECT <- function(outfolder){ # WORKS
 #' @importFrom DBI dbDisconnect
 #' @importFrom gsubfn fn
 build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
+
+  Name <- NULL
 
   file.url = "https://www.maconda.bham.ac.uk/downloads/MaConDa__v1_0__csv.zip"
 
@@ -1194,7 +1199,7 @@ build.HSDB <- function(outfolder){ # NEEDS WORK
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
 
   input = list.files(base.loc, pattern = "\\.xml",full.names = TRUE)
-  theurl <- getURL("https://toxnet.nlm.nih.gov/help/hsdbcasrn.html",.opts = list(ssl.verifypeer = FALSE) )
+  theurl <- RCurl::getURL("https://toxnet.nlm.nih.gov/help/hsdbcasrn.html",.opts = list(ssl.verifypeer = FALSE) )
 
   n = str_count(as.character(theurl), pattern = "cgi-bin")
 
@@ -1406,6 +1411,9 @@ build.EXPOSOMEEXPLORER <- function(outfolder){ # WORKS
 #' @importFrom pbapply pblapply
 #' @importFrom data.table fread rbindlist data.table
 build.SMPDB <- function(outfolder){ # OK I THINK
+
+  . <- description <- compoundname <- baseformula <- identifier <- NULL
+
   file.url <- "http://smpdb.ca/downloads/smpdb_metabolites.csv.zip"
   # ----
   base.loc <- file.path(outfolder, "smpdb_source")
@@ -1566,10 +1574,6 @@ build.KEGG <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @details Requires account creation! Then please download the full XML database from the website and place in databases/drugbank_source folder. Create it if it doesn't exist yet please!
-#' @examples
-#' if(interactive()){
-#'  database <- build.DRUGBANK(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[utils]{unzip}}
 #'  \code{\link[stringr]{str_match}}
@@ -1586,6 +1590,10 @@ build.KEGG <- function(outfolder){ # WORKS
 #' @importFrom data.table as.data.table
 #' @importFrom pbapply startpb setpb
 build.DRUGBANK <- function(outfolder){  # WORKS
+
+  # avoid data table NOTE
+  Description <- NULL
+
   base.loc <- file.path(outfolder, "drugbank_source")
   if(!dir.exists(base.loc)) dir.create(base.loc)
 
@@ -1593,13 +1601,7 @@ build.DRUGBANK <- function(outfolder){  # WORKS
 
   if(length(list.files(base.loc)) == 0){
     msg = "Please create a DrugBank account to download the database: https://www.drugbank.ca/releases/latest. Save the .xml.zip file in the databases/drugbank_source folder."
-    if("MetaboShiny" %in% (.packages())){
-      try({
-        metshiAlert(msg)
-      })
-    }else{
-      message(msg)
-    }
+    message(msg)
     return(NULL)
   }
 
@@ -1853,6 +1855,8 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
 #' @importFrom jsonlite read_json
 build.METABOLIGHTS <- function(outfolder){
 
+  identifier <- study <- NULL
+
   file.url = "ftp://ftp.ebi.ac.uk/pub/databases/metabolights/eb-eye/eb-eye_metabolights_complete.xml"
 
   # ----
@@ -1900,7 +1904,7 @@ build.METABOLIGHTS <- function(outfolder){
 
   ids = unique(overview$identifier)
 
-  db.rows <- pbapply::pblapply(ids, cl=cl, FUN=function(id){
+  db.rows <- pbapply::pblapply(ids, cl=0, FUN=function(id){
     url <- paste0("https://www.ebi.ac.uk/metabolights/webservice/beta/compound/", id)
     res = data.table::data.table()
     try({
@@ -2120,6 +2124,9 @@ build.VMH <- function(outfolder){ # WORKS
 #' @importFrom openxlsx read.xlsx
 #' @importFrom data.table fread data.table
 build.PHENOLEXPLORER <- function(outfolder){ # WORKS
+
+  . <- description <- NULL
+
   file.urls = paste0(
     "http://phenol-explorer.eu/system/downloads/current/",
     c("composition-data.xlsx.zip",
@@ -2211,6 +2218,7 @@ build.PHENOLEXPLORER <- function(outfolder){ # WORKS
 #' @importFrom data.table data.table rbindlist
 build.MASSBANK <- function(outfolder){ # WORKS
 
+  baseformula <- NULL
   theurl = "https://massbank.eu/MassBank/"
   header = paste0(readLines(theurl), collapse=" ")
   version = stringr::str_match(header,
@@ -2574,6 +2582,18 @@ build.ECMDB <- function(outfolder){
 
 }
 
+#' @title LMDB
+#' @description LMDB database, included with permission from the DB creators.
+"lmdb"
+
+#' @title Adduct table
+#' @description Table with all adducts included by default in MetaDBparse.
+"adducts"
+
+#' @title Adduct rule table
+#' @description Table with all adduct rules included by default in MetaDBparse.
+"adduct_rules"
+
 #' @title Build LMDB
 #' @description Parses the LMDB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
@@ -2590,6 +2610,9 @@ build.ECMDB <- function(outfolder){
 #' @importFrom RCurl getURL
 #' @importFrom stringr str_match
 build.LMDB <- function(outfolder){
+
+  lmdb <- NULL
+
   theurl = "http://lmdb.ca/"
   header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
   version = stringr::str_match(header,
@@ -2840,6 +2863,8 @@ build.mVOC <- function(outfolder){
 #' @importFrom utils download.file
 #' @importFrom data.table fread
 build.NANPDB <- function(outfolder){
+
+  . <- V2 <- V1 <- V3 <- NULL
   file.url = "http://african-compounds.org/nanpdb/downloads/smiles/"
   base.loc <- file.path(outfolder, "nanpdb_source")
   if(!dir.exists(base.loc)) dir.create(base.loc, recursive = TRUE)
@@ -2873,6 +2898,9 @@ build.NANPDB <- function(outfolder){
 #' @importFrom data.table as.data.table
 #' @importFrom readxl read_excel
 build.STOFF <- function(outfolder){
+
+  . <- Name <- Formula <- SMILES <- `Additional Names` <- Index <- compoundname <- NULL
+
   file.url = "http://www.lfu.bayern.de/stoffident/stoffident-static-content/html/download/SI_Content.zip"
   base.loc <- file.path(outfolder, "stoff_source")
   if(!dir.exists(base.loc)) dir.create(base.loc, recursive = TRUE)

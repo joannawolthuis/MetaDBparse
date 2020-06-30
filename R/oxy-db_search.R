@@ -158,6 +158,7 @@ searchMZ <- function(mzs, ionmodes, outfolder,
 #' @title Find matches based on molecular formula
 #' @description Goes through database of choice (base database) and retrieves hits that have the  molecular formula of interest.
 #' @param formula Molecular formula (should be checked by enviPat::check_chemform first!)
+#' @param charge Charge of formula
 #' @param outfolder Which folder are your databases stored in?
 #' @param base.dbname Base database name (without .db suffix)
 #' @return Data table with compounds with this molecular formula and the other available information
@@ -168,7 +169,7 @@ searchMZ <- function(mzs, ionmodes, outfolder,
 #' @export
 #' @importFrom RSQLite dbConnect SQLite dbExecute dbWriteTable dbGetQuery
 #' @importFrom data.table data.table rbindlist
-searchFormula <- function(formula, outfolder, base.dbname){
+searchFormula <- function(formula, charge, outfolder, base.dbname){
   table.per.db <- lapply(base.dbname, function(db){
     conn <- RSQLite::dbConnect(RSQLite::SQLite(), file.path(outfolder, paste0(db,".db"))) # change this to proper var later
 
@@ -292,6 +293,7 @@ searchCMMR <- function (cmm_url = "http://ceumass.eps.uspceu.es/mediator/api/v3/
 #' @param adducts Which adducts will you consider (for cmmr only)
 #' @param ppm Allowed error margin in parts per million, Default: 2
 #' @param which_db Which online database do you want to search?, Default: 'cmmr'
+#' @param apikey ChemSpider API key. Only required if searching in ChemSpider.
 #' @return Table with match information
 #' @seealso
 #'  \code{\link[pbapply]{pbapply}}

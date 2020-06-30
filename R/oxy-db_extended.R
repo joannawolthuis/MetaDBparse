@@ -1,3 +1,7 @@
+#' @title Weights of all isotopes of all elemnts used
+#' @description Sourced from 'enviPat' package
+"isotopes"
+
 #' @title Remove structures where isotope generation failed.
 #' @description Sometimes if a run crashes, or a structure is bugged somehow, it is still registered as 'done' in the extended database and cannot be redone. This function removes these structures. Warning: slow!
 #' @param outfolder Which folder are your databases in?
@@ -85,6 +89,8 @@ countAdductRuleMatches <- function(iatoms, adduct_rules){
 checkAdductRule <- function(adduct_rule_scores,
                             adduct_table){
 
+  ..left_val <- NULL
+
   adduct.qualify.cols = lapply(1:nrow(adduct_table), function(i){
     row <- adduct_table[i,]
     name <- row$Name
@@ -131,6 +137,9 @@ checkAdductRule <- function(adduct_rule_scores,
 #' @importFrom enviPat check_chemform mergeform check_ded subform multiform
 #' @importFrom data.table data.table
 doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
+
+  Name <- final.charge <- NULL
+
   row = adduct_table[Name == query_adduct,]
   name <- row$Name
   ion_mode <- row$Ion_mode
@@ -302,7 +311,9 @@ buildExtDB <- function(outfolder,
                        adduct_rules = adduct_rules,
                        silent = silent,
                        use.rules = TRUE){
-  # A
+
+  Name <- charge <- ..add <- NULL
+
   outfolder <- normalizePath(outfolder)
 
   print(paste("Will calculate adducts + isotopes for the",

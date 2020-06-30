@@ -163,6 +163,7 @@ iatom.to.formula <- function(iatoms, silent=TRUE){
 #' @importFrom enviPat check_chemform
 #' @importFrom data.table rbindlist
 cleanDB <- function(db.formatted, cl, silent, blocksize, smitype='Canonical'){
+
   blocks = split(1:nrow(db.formatted), ceiling(seq_along(1:nrow(db.formatted))/blocksize))
 
   if(is.list(cl)){

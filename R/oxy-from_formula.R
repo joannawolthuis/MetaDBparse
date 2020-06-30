@@ -16,6 +16,9 @@
 #' @importFrom data.table data.table
 getFormula <- function(mz, add_name, adducts, ppm, elements = c("C","H","N","O","P","S")
 ){
+
+  Name <- NULL
+
   def.ele = elements
   row <- adducts[Name == add_name]
   add.ele <- if(!is.na(row$AddEx)){
@@ -171,6 +174,8 @@ filterFormula = function(formulas, rules=c("senior", "lewis", "hc", "chnops", "n
 #' @importFrom enviPat check_ded subform mergeform multiform
 revertAdduct <- function(formula, add_name, adduct_table=adducts){
 
+  Name <- NULL
+
   # C4H19N4S1Na1         C1H8N1.5S0.5    [2M+ACN+Na]1+  100
 
   row = adduct_table[Name == add_name]
@@ -235,6 +240,8 @@ getPredicted <- function(mz,
                          search= c("PubChem", "ChemSpider"),
                          detailed = TRUE,
                          calc_adducts = adducts[Ion_mode == mode,]$Name){
+
+  Name <- Ion_mode <- fullformula <- NULL
 
   cat("
       _...._
@@ -366,6 +373,8 @@ searchFormulaWeb <- function(formulas,
                              search = c("pubchem", "chemspider", "knapsack", "supernatural2"),
                              apikey = "sp1pysTkYyC0wSETdkWjEeEK8eiXXFuG",
                              detailed = TRUE){
+
+  V1 <- V2 <- . <- c_id <- metabolite <- organism <- NULL
 
   if(length(search)>0){
     i = 0
@@ -645,6 +654,9 @@ chemspiderInfo <- function(ids,
 #' @importFrom jsonlite fromJSON
 #' @importFrom data.table rbindlist
 pubChemInfo <- function(ids, maxn=30){
+
+  Title <- Description <- CID <- NULL
+
   # structural info
   split.ids = split(ids,
                     ceiling(seq_along(ids) / maxn))
