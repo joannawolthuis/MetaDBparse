@@ -6,12 +6,6 @@
 #' @param base.dbname Which base database do you want to explore? (exclude .db suffix)
 #' @return Data table with whole database.
 #' @details This may be quite memory consuming for larger databases!!
-#' @examples
-#' \dontrun{
-#' if(interactive()){
-#'  full_database <- showAllBase(outfolder, database_name)
-#'  }
-#' }
 #' @seealso
 #'  \code{\link[RSQLite]{SQLite}}
 #' @rdname showAllBase

@@ -341,11 +341,7 @@ getPredicted <- function(mz,
 #' @param detailed Find detailed results? Not just the compound name, but other associated info?, Default: FALSE
 #' @return Data table with match results.
 #' @examples
-#' \dontrun{
-#' if(interactive()){
-#'  hits = searchFormulaWeb(c("C6H12O6"), "PubChem", detailed = TRUE)
-#'  }
-#' }
+#'  hits = searchFormulaWeb(c("C6H12O6"), search="pubchem", detailed = TRUE)
 #' @seealso
 #'  \code{\link[pbapply]{pbapply}}
 #'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{rbindlist}}
@@ -436,8 +432,13 @@ searchFormulaWeb <- function(formulas,
                        db.frag = data.table::rbindlist(rows)
                        db.frag$identifier = identifiers
                        db.frag$structure = smiles
-                       keep = which(enviPat::check_chemform(isotopes, db.frag$baseformula)$new_formula == formula)
-                       db.frag[keep,]
+                       if(nrow(db.frag) > 0){
+                         keep = which(enviPat::check_chemform(isotopes, as.character(db.frag$baseformula))$new_formula == formula)
+                         db.frag[keep,]
+                       }else{
+                         data.table::data.table()
+                       }
+
                      })
                      db.frag
                    })
@@ -449,10 +450,13 @@ searchFormulaWeb <- function(formulas,
              },
              knapsack = {
                print("Searching knapsack...")
+
+               oldpar = options()
                options(stringsAsFactors = FALSE)
+               on.exit(options(oldpar))
+
                rows = pbapply::pblapply(formulas, function(formula){
                  url = gsubfn::fn$paste("http://www.knapsackfamily.com/knapsack_core/result.php?sname=formula&word=$formula")
-                 print(url)
                  description = "No hits for this predicted formula."
                  rows = data.table::data.table(name = formula,
                                                baseformula = formula,
@@ -468,11 +472,11 @@ searchFormulaWeb <- function(formulas,
                    res.aggr = unique(res[, .(identifier = c_id, compoundname = metabolite, baseformula = formula, source = "knapsack",
                                              description = paste0("Found in organisms: ", paste0(organism, collapse = ", "))),by=c_id])
                    res.aggr = res.aggr[,-"c_id"]
-                   uniques = unique(res.aggr$c_id)
-
+                   uniques = unique(res.aggr$identifier)
                    if(detailed){
                      rows.detailed = pbapply::pblapply(uniques[!is.na(uniques)], function(id){
                        url = gsubfn::fn$paste("http://www.knapsackfamily.com/knapsack_core/information.php?word=$id")
+                       print(url)
                        tbl = XML::readHTMLTable(url,header = TRUE,)[[1]]
                        flipped = t(tbl)
                        colnames(flipped) <- flipped[1,]
@@ -663,7 +667,7 @@ pubChemInfo <- function(ids, maxn=30){
 
   chunk.row.list <- lapply(split.ids, function(idgroup){
 
-    url_struct = paste0("https://pubchem.ncbi.outnlm.nih.gov/rest/pug/compound/cid/",
+    url_struct = paste0("https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/",
                         paste0(idgroup, collapse=","),
                         "/property/MolecularFormula,CanonicalSMILES,Charge/JSON")
 
@@ -747,7 +751,7 @@ pubChemInfo <- function(ids, maxn=30){
                                          paste0(if(length(desc.names) > 0) c(old.name, desc.names) else old.name, collapse="; "),
                                          ". "),
                                   row$description)
-        row <- as.data.table(row)
+        row <- data.table::as.data.table(row)
         row[,-"Synonym"]
 
       })
@@ -756,13 +760,13 @@ pubChemInfo <- function(ids, maxn=30){
       tbl.renamed <- rows
     }
 
-    tbl.fin <- as.data.table(tbl.renamed)
+    tbl.fin <- data.table::as.data.table(tbl.renamed)
 
     tbl.fin$source <- c("pubchem")
 
     # - - - return rows - - -
 
-    result <- tbl.fin[,c("name", "baseformula", "structure", "description", "source")]
+    result <- tbl.fin[,c("name", "baseformula", "structure", "description", "source", "identifier")]
     result[,"%iso"] <- c(100)
     result
 

@@ -5,9 +5,7 @@
 #' @param cl parallel::makeCluster object for multithreading, Default: 0
 #' @return iatom containers for use in rcdk package
 #' @examples
-#' if(interactive()){
 #'  smiles.to.iatom(c('OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O'))
-#'  }
 #' @seealso
 #'  \code{\link[rJava]{jcall}}
 #' @rdname smiles.to.iatom
@@ -242,6 +240,7 @@ cleanDB <- function(db.formatted, cl, silent, blocksize, smitype='Canonical'){
 #' @param smitype Which SMILES format do you want?, Default: 'Canonical'
 #' @param silent Suppress warnings?, Default: TRUE
 #' @param cl parallel::makeCluster object for multithreading, Default: 0
+#' @param apikey ChemSpider API key (needed for LIPID MAPS)
 #' @return Nothing, writes SQLite database to 'outfolder'.
 #' @seealso
 #'  \code{\link[data.table]{fread}},\code{\link[data.table]{as.data.table}}
@@ -252,21 +251,21 @@ cleanDB <- function(db.formatted, cl, silent, blocksize, smitype='Canonical'){
 #' @importFrom RSQLite dbExecute
 #' @importFrom DBI dbDisconnect
 buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
-                        smitype = "Canonical", silent=TRUE, cl=0){
+                        smitype = "Canonical", silent=TRUE, cl=0, apikey){
 
   removeDB(outfolder, paste0(dbname,".db"))
   conn <- openBaseDB(outfolder, paste0(dbname,".db"))
   if(is.null(custom_csv_path)){
     db.formatted.all <- switch(dbname,
                            chebi = build.CHEBI(outfolder),
-                           maconda = build.MACONDA(outfolder, conn),
+                           maconda = build.MACONDA(outfolder, conn, apikey),
                            kegg = build.KEGG(outfolder),
                            bloodexposome = build.BLOODEXPOSOME(outfolder),
                            dimedb = build.DIMEDB(outfolder),
                            expoexplorer = build.EXPOSOMEEXPLORER(outfolder),
                            foodb = build.FOODB(outfolder),
                            drugbank = build.DRUGBANK(outfolder),
-                           lipidmaps = build.LIPIDMAPS(outfolder),
+                           lipidmaps = build.LIPIDMAPS(outfolder, apikey),
                            massbank = build.MASSBANK(outfolder),
                            metabolights = build.METABOLIGHTS(outfolder),
                            metacyc = build.METACYC(outfolder),

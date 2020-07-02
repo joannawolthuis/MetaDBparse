@@ -8,9 +8,7 @@
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.MCDB(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[RCurl]{getURL}}
@@ -174,9 +172,7 @@ build.MCDB <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.HMDB(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[RCurl]{getURL}}
@@ -424,9 +420,7 @@ build.METACYC <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.CHEBI(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[utils]{download.file}}
@@ -687,9 +681,7 @@ build.CHEBI <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.FOODB(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{untar}}
 #'  \code{\link[RCurl]{getURL}}
@@ -736,9 +728,7 @@ build.FOODB <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.WIKIDATA(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[WikidataQueryServiceR]{query_wikidata}}
 #'  \code{\link[data.table]{as.data.table}}
@@ -862,9 +852,7 @@ build.WIKIDATA <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.RESPECT(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[RCurl]{getURL}}
@@ -933,11 +921,10 @@ build.RESPECT <- function(outfolder){ # WORKS
 #' @description Parses MACONDA, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
 #' @param conn Connection to extended database (MaConDa writes directly to there due to anomalous adducts)
+#' @param apikey ChemSpider API key
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.MACONDA(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[stringr]{str_match}}
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
@@ -956,7 +943,7 @@ build.RESPECT <- function(outfolder){ # WORKS
 #' @importFrom RSQLite dbExecute dbConnect SQLite dbGetQuery dbWriteTable dbDisconnect
 #' @importFrom DBI dbDisconnect
 #' @importFrom gsubfn fn
-build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
+build.MACONDA <- function(outfolder, conn, apikey){ # NEEDS SPECIAL FUNCTIONALITY
 
   Name <- NULL
 
@@ -984,7 +971,7 @@ build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
 
   has.inchi <- which(base.table$std_inchi != "")
   inchis <- base.table$std_inchi[has.inchi]
-  smiles = pbapply::pbsapply(inchis, function(x) webchem::cs_convert(x,from="inchi", to="smiles"))
+  smiles = pbapply::pbsapply(inchis, function(x) webchem::cs_convert(x,from="inchi", to="smiles", apikey=apikey))
 
   charges <- gsub(base.table$ion_form, pattern = ".*\\]", replacement = "")
   no.info <- which(charges == "")
@@ -1131,9 +1118,7 @@ build.MACONDA <- function(outfolder, conn){ # NEEDS SPECIAL FUNCTIONALITY
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.T3DB(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[RCurl]{getURL}}
@@ -1179,9 +1164,7 @@ build.T3DB <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.HSDB(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[pbapply]{pboptions}},\code{\link[pbapply]{pbapply}}
@@ -1250,9 +1233,7 @@ build.HSDB <- function(outfolder){ # NEEDS WORK
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.BLOODEXPOSOME(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[openxlsx]{read.xlsx}}
@@ -1307,9 +1288,7 @@ build.BLOODEXPOSOME <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.EXPOSOMEEXPLORER(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[stringr]{str_match}}
@@ -1397,9 +1376,7 @@ build.EXPOSOMEEXPLORER <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.SMPDB(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[RCurl]{getURL}}
@@ -1463,9 +1440,7 @@ build.SMPDB <- function(outfolder){ # OK I THINK
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.KEGG(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[pbapply]{pbapply}}
 #'  \code{\link[KEGGREST]{keggFind}},\code{\link[KEGGREST]{keggGet}}
@@ -1727,11 +1702,10 @@ build.DRUGBANK <- function(outfolder){  # WORKS
 #' @title Build LIPID MAPS
 #' @description Parses the LIPID MAPS DB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param apikey ChemSpider API key
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.LIPIDMAPS(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[zip]{unzip}}
@@ -1755,7 +1729,7 @@ build.DRUGBANK <- function(outfolder){  # WORKS
 #' @importFrom stringr str_match_all str_match
 #' @importFrom pbapply pblapply pbsapply
 #' @importFrom stringi stri_detect_fixed
-build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking)
+build.LIPIDMAPS <- function(outfolder, apikey){ # WORKS (description needs some tweaking)
 
   file.url = "https://www.lipidmaps.org/files/?file=LMSD_20191002&ext=sdf.zip"
 
@@ -1779,12 +1753,11 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
     #last_sdf <- sdfset
     db <- data.table::as.data.table(ChemmineR::datablock2ma(datablocklist=ChemmineR::datablock(sdfset)))
     #last_db <- db
-    mat = as.matrix(data.table::data.table(
+    mat = data.table::data.table(
       identifier = as.character(db$LM_ID),
       compoundname = sapply(1:nrow(db), function(i) if(!is.empty(db$NAME[i])) db$NAME[i] else db$SYSTEMATIC_NAME[i]),
       baseformula = as.character(db$FORMULA),
-      structure = sapply(1:nrow(db), function(i) if(!is.empty(db$SMILES[i])) db$SMILES[i] else webchem::cs_convert(db$INCHI[i],
-                                                                                                                   from="inchi", to="smiles")),
+      structure = sapply(1:nrow(db), function(i) if(!is.empty(db$SMILES[i])) db$SMILES[i] else db$INCHI[i]),
       description = sapply(1:nrow(db), function(i){
         string=""
         db$SYSTEMATIC_NAME
@@ -1793,8 +1766,20 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
         if(is.empty(string)) string <- "Unknown"
         trimws(string)
       })
-    ))
-    mat
+    )
+
+    #noC = grep("C", mat$structure,value = T,invert = T)
+    #if(length(noC) > 0) print(noC)
+    empty.smiles = which(sapply(mat$structure, is.empty))
+    if(length(empty.smiles) > 0){
+      print(mat$structure[empty.smiles])
+      mat$structure[empty.smiles] <- webchem::cs_convert(mat$structure[empty.smiles],
+                                                         from="inchi",
+                                                         to="smiles",
+                                                         apikey = apikey)
+    }
+
+    as.matrix(mat)
   }
 
   sdfStream.joanna(input=sdf.path, output=file.path(base.loc,
@@ -1840,9 +1825,7 @@ build.LIPIDMAPS <- function(outfolder){ # WORKS (description needs some tweaking
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.METABOLIGHTS(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[XML]{xmlToList}}
@@ -1948,9 +1931,7 @@ build.METABOLIGHTS <- function(outfolder){
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.DIMEDB(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[pbapply]{pbapply}}
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
@@ -2014,9 +1995,7 @@ build.DIMEDB <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.VMH(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
@@ -2110,9 +2089,7 @@ build.VMH <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.PHENOLEXPLORER(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
@@ -2205,9 +2182,7 @@ build.PHENOLEXPLORER <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.MASSBANK(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[stringr]{str_match}}
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
@@ -2287,9 +2262,7 @@ build.MASSBANK <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.BMDB(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
@@ -2485,9 +2458,7 @@ build.BMDB <- function(outfolder){
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.RMDB(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[stringr]{str_split}},\code{\link[stringr]{str_extract}},\code{\link[stringr]{str_match}}
@@ -2540,9 +2511,7 @@ build.RMDB <- function(outfolder){
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.ECMDB(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
@@ -2602,9 +2571,7 @@ build.ECMDB <- function(outfolder){
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.LMDB(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
@@ -2634,9 +2601,7 @@ build.LMDB <- function(outfolder){
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.YMDB(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{fread}},\code{\link[data.table]{rbindlist}}
@@ -2732,9 +2697,7 @@ build.YMDB <- function(outfolder){
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.PAMDB(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[data.table]{as.data.table}}
@@ -2774,9 +2737,7 @@ build.PAMDB <- function(outfolder){
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.mVOC(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[XML]{getNodeSet}},\code{\link[XML]{xmlAttrs}},\code{\link[XML]{readHTMLTable}}
 #'  \code{\link[pbapply]{pbapply}}
@@ -2855,9 +2816,7 @@ build.mVOC <- function(outfolder){
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.NANPDB(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[data.table]{fread}}
@@ -2888,9 +2847,7 @@ build.NANPDB <- function(outfolder){
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @examples
-#' if(interactive()){
 #'  database <- build.STOFF(tempdir())
-#'  }
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[data.table]{as.data.table}}
