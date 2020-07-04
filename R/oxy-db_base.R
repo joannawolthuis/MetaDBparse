@@ -14,20 +14,23 @@
 #' @importFrom rJava .jcall
 smiles.to.iatom <- function(smiles, silent=TRUE, cl=0){
   iatoms <- sapply(smiles, function(x, silent){
-    mol=NULL
-    try({
-      mol = NULL
+    fun = function(){
+      mol=NULL
       try({
-        mol = rcdk::parse.smiles(x)[[1]]
-      })
-      if(is.null(mol)){
-        mol = rcdk::parse.smiles(x,kekulise = FALSE)[[1]]
-      }
-      rcdk::do.aromaticity(mol)
-      rcdk::do.typing(mol)
-      rcdk::do.isotopes(mol)
-    }, silent=silent)
-    mol
+        mol = NULL
+        try({
+          mol = rcdk::parse.smiles(x)[[1]]
+        })
+        if(is.null(mol)){
+          mol = rcdk::parse.smiles(x,kekulise = FALSE)[[1]]
+        }
+        rcdk::do.aromaticity(mol)
+        rcdk::do.typing(mol)
+        rcdk::do.isotopes(mol)
+      }, silent=silent)
+      mol
+    }
+    if(silent) suppressWarnings(fun()) else fun()
   },silent=silent)
 
   try({
@@ -66,11 +69,14 @@ iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=TRUE){
   }
 
   new.smiles <- sapply(iatoms, function(mol, silent){
-    smi = ""
-    try({
-      smi <- if(is.null(mol)) smi = "" else rcdk::get.smiles(mol, flavor = rcdk::smiles.flavors(smitype))
-    }, silent=silent)
-    smi
+    fun = function(){
+      smi = ""
+      try({
+        smi <- if(is.null(mol)) smi = "" else rcdk::get.smiles(molecule = mol, flavor = rcdk::smiles.flavors(smitype))
+      }, silent=silent)
+      smi
+    }
+    if(silent) suppressWarnings(fun()) else fun()
   },silent=silent)
 
   try({
@@ -96,11 +102,14 @@ iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=TRUE){
 iatom.to.charge <- function(iatoms, silent=TRUE){
 
   new.charges <- sapply(iatoms, function(mol, silent){
-    ch=0
+    fun = function(){
+      ch=0
     try({
       ch = rcdk::get.total.formal.charge(mol = mol)
     }, silent=silent)
     ch
+    }
+    if(silent) suppressWarnings(fun()) else fun()
   },silent=silent)
 
   try({
@@ -126,11 +135,15 @@ iatom.to.charge <- function(iatoms, silent=TRUE){
 iatom.to.formula <- function(iatoms, silent=TRUE){
 
   new.formulas <- sapply(iatoms, function(mol,silent){
-    form = NULL
+    fun = function(){
+      form = NULL
     try({
-      form = rcdk::get.mol2formula(mol)@string
+      form = rcdk::get.mol2formula(molecule = mol)@string
     }, silent=silent)
     form[[1]]
+    }
+    if(silent) suppressWarnings(fun()) else fun()
+
   },silent=silent)
 
   try({
@@ -300,9 +313,9 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
   db.formatted <- data.table::as.data.table(db.formatted.all$db)
   db.formatted <- data.frame(lapply(db.formatted, as.character), stringsAsFactors=FALSE)
   db.final <- data.table::as.data.table(cleanDB(db.formatted,
-                                   cl = cl,
-                                   silent = silent,
-                                   blocksize=400))
+                                                cl = cl,
+                                                silent = silent,
+                                                blocksize = 400))
 
   db.final <- db.final[, lapply(.SD, as.character)]
 

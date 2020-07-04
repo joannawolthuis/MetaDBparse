@@ -939,7 +939,6 @@ build.RESPECT <- function(outfolder){ # WORKS
 #' @importFrom utils download.file unzip
 #' @importFrom data.table fread data.table
 #' @importFrom pbapply pbsapply
-#' @importFrom webchem cs_convert
 #' @importFrom RSQLite dbExecute dbConnect SQLite dbGetQuery dbWriteTable dbDisconnect
 #' @importFrom DBI dbDisconnect
 #' @importFrom gsubfn fn
@@ -959,7 +958,10 @@ build.MACONDA <- function(outfolder, conn, apikey){ # NEEDS SPECIAL FUNCTIONALIT
   version = gsub(version, pattern="\\.", replacement = "-")
   date = Sys.Date()
 
-  utils::download.file(file.url, zip.file,mode = "wb",extra = "-k", method = "auto")
+  utils::download.file(file.url, zip.file,
+                       mode = "wb",
+                       extra = "-k",
+                       method = "auto")
 
   utils::unzip(normalizePath(zip.file),files = "MaConDa__v1_0__extensive.csv",exdir = normalizePath(base.loc))
 
@@ -971,7 +973,12 @@ build.MACONDA <- function(outfolder, conn, apikey){ # NEEDS SPECIAL FUNCTIONALIT
 
   has.inchi <- which(base.table$std_inchi != "")
   inchis <- base.table$std_inchi[has.inchi]
-  smiles = pbapply::pbsapply(inchis, function(x) webchem::cs_convert(x,from="inchi", to="smiles", apikey=apikey))
+
+  smiles = pbapply::pbsapply(inchis, function(x){
+    url = gsubfn::fn$paste('https://cactus.nci.nih.gov/chemical/structure/$x/smiles')
+    Sys.sleep(0.1)
+    RCurl::getURL(url)}
+    )
 
   charges <- gsub(base.table$ion_form, pattern = ".*\\]", replacement = "")
   no.info <- which(charges == "")
@@ -988,13 +995,20 @@ build.MACONDA <- function(outfolder, conn, apikey){ # NEEDS SPECIAL FUNCTIONALIT
                                     baseformula = base.table$formula,
                                     identifier=base.table$id,
                                     charge=charges,
-                                    structure=c(NA))
+                                    structure=paste0("[", base.table$formula, "]", charges))
 
-  db.base$structure[has.inchi] <- smiles
+  success = !grepl("404", smiles)
+  db.base$structure[has.inchi[success]] <- smiles[success]
 
-  db.final <- cleanDB(db.base, cl=0, silent=FALSE, blocksize=400)
+  db.final <- cleanDB(db.base,
+                      cl=0,
+                      silent=T,
+                      blocksize=400)
 
   #write to base db
+  dbpath = file.path(outfolder, "maconda.db")
+  if(file.exists(dbpath)) file.remove(dbpath)
+  conn <- openBaseDB(outfolder, "maconda.db")
   writeDB(conn, data.table::data.table(date = Sys.Date(),
                                        version = version),
           "metadata")
@@ -1711,7 +1725,6 @@ build.DRUGBANK <- function(outfolder){  # WORKS
 #'  \code{\link[zip]{unzip}}
 #'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{fread}},\code{\link[data.table]{rbindlist}}
 #'  \code{\link[ChemmineR]{datablock2ma}},\code{\link[ChemmineR]{datablock}}
-#'  \code{\link[webchem]{cs_convert}}
 #'  \code{\link[xml2]{read_xml}}
 #'  \code{\link[rvest]{html_nodes}},\code{\link[rvest]{html_text}}
 #'  \code{\link[stringr]{str_match}}
@@ -1723,7 +1736,6 @@ build.DRUGBANK <- function(outfolder){  # WORKS
 #' @importFrom zip unzip
 #' @importFrom data.table as.data.table data.table fread rbindlist
 #' @importFrom ChemmineR datablock2ma datablock
-#' @importFrom webchem cs_convert
 #' @importFrom xml2 read_html
 #' @importFrom rvest html_nodes html_text
 #' @importFrom stringr str_match_all str_match
@@ -1773,10 +1785,12 @@ build.LIPIDMAPS <- function(outfolder, apikey){ # WORKS (description needs some 
     empty.smiles = which(sapply(mat$structure, is.empty))
     if(length(empty.smiles) > 0){
       print(mat$structure[empty.smiles])
-      mat$structure[empty.smiles] <- webchem::cs_convert(mat$structure[empty.smiles],
-                                                         from="inchi",
-                                                         to="smiles",
-                                                         apikey = apikey)
+      mat$structure[empty.smiles] <- pbapply::pbsapply(mat$structure[empty.smiles],
+                                                       function(x){
+                                                         url = gsubfn::fn$paste("https://cactus.nci.nih.gov/chemical/structure/$x/smiles")
+                                                         Sys.sleep(0.1)
+                                                         RCurl::getURL(url)
+                                                       })
     }
 
     as.matrix(mat)
@@ -1788,7 +1802,8 @@ build.LIPIDMAPS <- function(outfolder, apikey){ # WORKS (description needs some 
                    fct=desc,
                    silent = TRUE)
 
-  db.base <- data.table::fread(file.path(base.loc, "lipidmaps_parsed.csv"), fill = TRUE, header=TRUE)
+  db.base <- data.table::fread(file.path(base.loc,
+                                         "lipidmaps_parsed.csv"), fill = TRUE, header=TRUE)
 
   db.base$charge <- c(NA)
 

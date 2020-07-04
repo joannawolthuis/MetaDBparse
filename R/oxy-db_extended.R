@@ -60,7 +60,7 @@ countAdductRuleMatches <- function(iatoms, adduct_rules){
           rcdk::matches(query = query, target = iatom, TRUE)
         })
       }else{
-        rcdk::get.total.formal.charge(iatom)
+        rcdk::get.total.formal.charge(mol = iatom)
       }
     })
     if(curr != "Nch"){
