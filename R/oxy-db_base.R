@@ -14,23 +14,24 @@
 #' @importFrom rJava .jcall
 smiles.to.iatom <- function(smiles, silent=TRUE, cl=0){
   iatoms <- sapply(smiles, function(x, silent){
-    fun = function(){
       mol=NULL
       try({
-        mol = NULL
-        try({
-          mol = rcdk::parse.smiles(x)[[1]]
-        })
-        if(is.null(mol)){
-          mol = rcdk::parse.smiles(x,kekulise = FALSE)[[1]]
+        fun = function(){
+          mol = NULL
+          try({
+            mol = rcdk::parse.smiles(x)[[1]]
+          })
+          if(is.null(mol)){
+            mol = rcdk::parse.smiles(x,kekulise = FALSE)[[1]]
+          }
+          rcdk::do.aromaticity(mol)
+          rcdk::do.typing(mol)
+          rcdk::do.isotopes(mol)
+          mol
         }
-        rcdk::do.aromaticity(mol)
-        rcdk::do.typing(mol)
-        rcdk::do.isotopes(mol)
+        mol <- if(silent) suppressWarnings(fun()) else fun()
       }, silent=silent)
       mol
-    }
-    if(silent) suppressWarnings(fun()) else fun()
   },silent=silent)
 
   try({
@@ -69,14 +70,12 @@ iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=TRUE){
   }
 
   new.smiles <- sapply(iatoms, function(mol, silent){
-    fun = function(){
       smi = ""
       try({
-        smi <- if(is.null(mol)) smi = "" else rcdk::get.smiles(molecule = mol, flavor = rcdk::smiles.flavors(smitype))
-      }, silent=silent)
+        fun = function() if(is.null(mol)) "" else rcdk::get.smiles(molecule = mol, flavor = rcdk::smiles.flavors(smitype))
+        smi <- if(silent) suppressWarnings(fun()) else fun()
+          }, silent=silent)
       smi
-    }
-    if(silent) suppressWarnings(fun()) else fun()
   },silent=silent)
 
   try({
@@ -102,14 +101,12 @@ iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=TRUE){
 iatom.to.charge <- function(iatoms, silent=TRUE){
 
   new.charges <- sapply(iatoms, function(mol, silent){
-    fun = function(){
       ch=0
     try({
-      ch = rcdk::get.total.formal.charge(mol = mol)
+      fun = function() rcdk::get.total.formal.charge(mol = mol)
+      ch = if(silent) suppressWarnings(fun()) else fun()
     }, silent=silent)
     ch
-    }
-    if(silent) suppressWarnings(fun()) else fun()
   },silent=silent)
 
   try({
@@ -135,15 +132,12 @@ iatom.to.charge <- function(iatoms, silent=TRUE){
 iatom.to.formula <- function(iatoms, silent=TRUE){
 
   new.formulas <- sapply(iatoms, function(mol,silent){
-    fun = function(){
-      form = NULL
+    form = list(a = NULL)
     try({
-      form = rcdk::get.mol2formula(molecule = mol)@string
+      fun = function() rcdk::get.mol2formula(molecule = mol)@string
+      form = if(silent) suppressWarnings(fun()) else fun()
     }, silent=silent)
     form[[1]]
-    }
-    if(silent) suppressWarnings(fun()) else fun()
-
   },silent=silent)
 
   try({
@@ -173,7 +167,7 @@ iatom.to.formula <- function(iatoms, silent=TRUE){
 #' @importFrom pbapply pblapply
 #' @importFrom enviPat check_chemform
 #' @importFrom data.table rbindlist
-cleanDB <- function(db.formatted, cl, silent, blocksize, smitype='Canonical'){
+cleanDB <- function(db.formatted, cl, silent=T, blocksize, smitype='Canonical'){
 
   blocks = split(1:nrow(db.formatted), ceiling(seq_along(1:nrow(db.formatted))/blocksize))
 
@@ -218,7 +212,7 @@ cleanDB <- function(db.formatted, cl, silent, blocksize, smitype='Canonical'){
       valid.struct = valid.struct[-null.or.na]
     }
 
-    print(head(db.removed.invalid))
+    print(db.removed.invalid)
 
     checked <- enviPat::check_chemform(isotopes,
                                        chemforms = as.character(db.removed.invalid$baseformula))
@@ -307,14 +301,11 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
 
   if(dbname == "maconda") return(NA)
 
-  print(db.formatted.all$version)
-  print(head(db.formatted.all$db))
-
   db.formatted <- data.table::as.data.table(db.formatted.all$db)
   db.formatted <- data.frame(lapply(db.formatted, as.character), stringsAsFactors=FALSE)
   db.final <- data.table::as.data.table(cleanDB(db.formatted,
                                                 cl = cl,
-                                                silent = silent,
+                                                silent = T,#silent,
                                                 blocksize = 400))
 
   db.final <- db.final[, lapply(.SD, as.character)]
