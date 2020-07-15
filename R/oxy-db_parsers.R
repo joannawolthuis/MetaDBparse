@@ -730,7 +730,7 @@ build.PHARMGKB <- function(outfolder){ # WORKS
                                                                 paste(x, get(x), sep=": ")),
                                                                 sep=", ")),
                                         identifier = `PharmGKB Accession Id`,
-                                        structure = toupper(SMILES))])
+                                        structure = SMILES)])
   db.formatted$description <- gsub("\",", " - ", db.formatted$description)
   db.formatted$description <- gsub("\"", "", db.formatted$description)
   db.formatted$description <- gsub(" (,*[\\w| ]+: [0|,|No]+)|([\\w| ]+: [0|No]*$)|^([\\w| ]+: [0|,|No]+)", "",
@@ -748,7 +748,6 @@ build.PHARMGKB <- function(outfolder){ # WORKS
                             "baseformula","identifier",
                             "charge","structure")],
        version = version)
-  return(db.formatted)
   }
 
 # build.WORKBENCH <- function(){
