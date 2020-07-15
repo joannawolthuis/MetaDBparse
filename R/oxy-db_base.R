@@ -293,7 +293,8 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
                            nanpdb = build.NANPDB(outfolder),
                            mcdb = build.MCDB(outfolder),
                            mvoc = build.mVOC(outfolder),
-                           pamdb = build.PAMDB(outfolder))
+                           pamdb = build.PAMDB(outfolder),
+                           pharmgkb = build.PHARMGKB(outfolder))
   }else{
     db.formatted.all <- list(db = data.table::fread(custom_csv_path, header=TRUE),
                              version = Sys.time())
