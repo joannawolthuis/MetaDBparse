@@ -212,8 +212,6 @@ cleanDB <- function(db.formatted, cl, silent=T, blocksize, smitype='Canonical'){
       valid.struct = valid.struct[-null.or.na]
     }
 
-    print(db.removed.invalid)
-
     checked <- enviPat::check_chemform(isotopes,
                                        chemforms = as.character(db.removed.invalid$baseformula))
 
