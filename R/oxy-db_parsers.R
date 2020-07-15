@@ -676,6 +676,88 @@ build.CHEBI <- function(outfolder){ # WORKS
   list(db = db.formatted, version = version)
 }
 
+#' @title Build PharmGKB
+#' @description Parses PharmGKB drugs and chemicals (drug metabolites, etc.), returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
+#' @param outfolder Which folder to save temp files to?
+#' @return data table with parsed database
+#' @examples
+#'  database <- build.PHARMGKB(tempdir())
+#' @seealso
+#'  \code{\link[utils]{download.file}},\code{\link[utils]{untar}}
+#'  \code{\link[RCurl]{getURL}}
+#'  \code{\link[stringr]{str_match}}
+#'  \code{\link[data.table]{fread}}
+#' @rdname build.FOODB
+#' @export
+#' @importFrom utils download.file untar
+#' @importFrom RCurl getURL
+#' @importFrom stringr str_match
+#' @importFrom data.table fread data.table
+build.PHARMGKB <- function(outfolder){ # WORKS
+  SMILES <- `PharmGKB Accession Id` <- Name <- NULL
+
+   # TODO: make sure that it automatically grabs the most recent CSV?
+  file.url <- "https://s3.pgkb.org/data/drugs.zip"
+
+  base.loc <- file.path(outfolder, "pharmgkb_source")
+  if(dir.exists(base.loc))(unlink(base.loc,recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
+  zip.file <- file.path(base.loc, "drugs.zip")
+  utils::download.file(file.url, zip.file, mode = 'wb', method = "auto")
+  utils::untar(normalizePath(zip.file), exdir = normalizePath(base.loc))
+  drug.db <- data.table::fread(file.path(base.loc, "drugs.tsv"), quote = "")
+  drug.db <- drug.db[SMILES != ""]
+
+  file.url = "https://s3.pgkb.org/data/chemicals.zip"
+    zip.file <- file.path(base.loc, "chemicals.zip")
+  utils::download.file(file.url, zip.file, mode = 'wb', method = "auto")
+  utils::untar(normalizePath(zip.file), exdir = normalizePath(base.loc))
+  chem.db <- data.table::fread(file.path(base.loc, "chemicals.tsv"), quote = "")
+  chem.db <- chem.db[SMILES != ""]
+
+  both.db <- data.table::rbindlist(list(drug.db, chem.db))
+  cols <- c("Generic Names", "Trade Names",
+            "Brand Mixtures", "Type",
+            "Dosing Guideline",
+            "Clinical Annotation Count",  "Variant Annotation Count", "Pathway Count",
+            "VIP Count", "Dosing Guideline Sources",
+            "Top Clinical Annotation Level", "Top FDA Label Testing Level",
+            "Top Any Drug Label Testing Level", "Label Has Dosing Info",
+            "Has Rx Annotation")
+
+  db.formatted <- unique(both.db[, list(compoundname = Name,
+                                        description = do.call(paste,
+                                                              c(lapply(cols, function(x)
+                                                                paste(x, get(x), sep=": ")),
+                                                                sep=", ")),
+                                        identifier = `PharmGKB Accession Id`,
+                                        structure = toupper(SMILES))])
+  db.formatted$description <- gsub("\",", " - ", db.formatted$description)
+  db.formatted$description <- gsub("\"", "", db.formatted$description)
+  db.formatted$description <- gsub(" (,*[\\w| ]+: [0|,|No]+)|([\\w| ]+: [0|No]*$)|^([\\w| ]+: [0|,|No]+)", "",
+                                   db.formatted$description, perl = T)
+  db.formatted$description <- gsub("^ |,$", "", db.formatted$description, perl = T)
+  # - - - - -
+
+  db.formatted$baseformula <- c(NA)
+  db.formatted$charge <- c(0)
+
+  date = Sys.Date()
+  version = Sys.Date()
+
+  list(db = db.formatted[,c("compoundname","description",
+                            "baseformula","identifier",
+                            "charge","structure")],
+       version = version)
+  return(db.formatted)
+  }
+
+# build.WORKBENCH <- function(){
+#   study.url = "https://www.metabolomicsworkbench.org/rest/study/study_id/ST/summary"
+#   studies = jsonlite::read_json(study.url)
+#   study.ids <- sapply(studies, function(x) x$study_id)
+#   # get metabolites for study
+# }
+
 #' @title Build FOODB
 #' @description Parses the FOODB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?

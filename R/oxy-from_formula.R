@@ -288,7 +288,7 @@ getPredicted <- function(mz,
                                         add_name,
                                         adduct_table = adducts)
       if(is.na(theor_orig_formula)){
-        return(data.table())
+        return(data.table::data.table())
       }else{
         data.table::data.table(query_mz = c(mz),
                                name = theor_orig_formula,
@@ -418,7 +418,7 @@ searchFormulaWeb <- function(formulas,
                            tbl = data.table::as.data.table(tbl)
                            data.table::data.table(
                              compoundname = gsub(tbl[V1 == "Name",V2], pattern = "[^\x01-\x7F]+.-", replacement = ""),
-                             description = paste0("Toxicity class: ", tbl[V1 == "Tox-class",V2]),
+                             description = paste0("Toxicity class (1-6): ", tbl[V1 == "Tox-class",V2]),
                              baseformula = tbl[V1 == "Formula",V2],
                              identifier = "???",
                              charge = tbl[V1 == "Charge",V2],
@@ -476,7 +476,6 @@ searchFormulaWeb <- function(formulas,
                    if(detailed){
                      rows.detailed = pbapply::pblapply(uniques[!is.na(uniques)], function(id){
                        url = gsubfn::fn$paste("http://www.knapsackfamily.com/knapsack_core/information.php?word=$id")
-                       print(url)
                        tbl = XML::readHTMLTable(url,header = TRUE,)[[1]]
                        flipped = t(tbl)
                        colnames(flipped) <- flipped[1,]
@@ -499,7 +498,7 @@ searchFormulaWeb <- function(formulas,
                rows = pbapply::pblapply(formulas, function(formula){
                  url = paste0("https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/fastformula/", formula, "/cids/JSON")
                  description = "No hits for this predicted formula."
-                 rows = data.table::data.table(name = formula,
+                 rows = data.table::data.table(compoundname = formula,
                                                baseformula = formula,
                                                structure = NA,
                                                description = description,
@@ -538,6 +537,12 @@ searchFormulaWeb <- function(formulas,
                                  httr::add_headers('apikey' = apikey),
                                  body = post_body,
                                  httr::content_type("application/json"), encode="raw")
+
+                 if(r$status_code == 429){
+                   print("Too many requests for your API key...")
+                   return(data.table::data.table())
+                 }
+
                  qid <- RJSONIO::fromJSON(httr::content(r, "text", encoding = "UTF-8"))
                  done_url = gsubfn::fn$paste("https://api.rsc.org/compounds/v1/filter/formula/batch/$qid/status")
                  res_url = gsubfn::fn$paste("https://api.rsc.org/compounds/v1/filter/formula/batch/$qid/results")
@@ -548,7 +553,7 @@ searchFormulaWeb <- function(formulas,
                    res_rows <- lapply(results[[1]], function(l){
                      if(length(l$results) == 0){
                        description = "No hits for this predicted formula."
-                       data.table::data.table(name = l$formula,
+                       data.table::data.table(compoundname = l$formula,
                                               baseformula = l$formula,
                                               structure = NA,
                                               description = description,
@@ -565,7 +570,7 @@ searchFormulaWeb <- function(formulas,
                          res$baseformula <- c(l$formula)
                          res
                        }else{
-                         data.table::data.table(name = l$formula,
+                         data.table::data.table(compoundname = l$formula,
                                                 baseformula = l$formula,
                                                 structure = NA,
                                                 `%iso` = c(100),
@@ -630,8 +635,8 @@ chemspiderInfo <- function(ids,
                     body = post_body)
     json = rawToChar(r$content)
     parsed = jsonlite::parse_json(json)[[1]]
-    json_table = rbindlist(parsed, fill=TRUE)
-    data.table::data.table(name = json_table$commonName,
+    json_table = data.table::rbindlist(parsed, fill=TRUE)
+    data.table::data.table(compoundname = json_table$commonName,
                            structure = json_table$smiles,
                            identifier = json_table$id,
                            `%iso` = c(100),
@@ -641,7 +646,7 @@ chemspiderInfo <- function(ids,
                                                 "Mentioned in PubMed ", json_table$pubMedCount, " times. ",
                                                 "RSC count: ", json_table$rscCount, "."))
   })
-  rbindlist(row.blocks, fill=TRUE)
+  data.table::rbindlist(row.blocks, fill=TRUE)
 }
 
 #lmdb = lmdb[, lapply(.SD, function(x) textclean::replace_non_ascii(x, remove.nonconverted = TRUE))]
@@ -699,7 +704,7 @@ pubChemInfo <- function(ids, maxn=30){
       if("Description" %in% colnames(descs)){
         descs.adj <- descs[, list(name = Title[!is.na(Title)], Description = paste(Description[!is.na(Description)], collapse=" ")), by = CID]
       }else{
-        descs.adj <- descs[, list(name = Title[!is.na(Title)], Description = c("No further description available")), by = CID]
+        descs.adj <- descs[, list(name = Title[!is.na(Title)], Description = c("No further description available. ")), by = CID]
       }
 
       descs.adj$Description <- gsub(descs.adj$Description,
@@ -708,17 +713,16 @@ pubChemInfo <- function(ids, maxn=30){
                                     perl = TRUE)
 
       if(any(descs.adj$Description == "")){
-        descs.adj[Description == ""]$Description <- c("No further description available")
+        descs.adj[Description == ""]$Description <- c("No further description available. ")
       }
 
       rows <- unique(merge(rows, descs.adj, by.x="CID", by.y="CID"))
-
     })
 
     if(is.null(rows)) return(NULL)
     if(nrow(rows) == 0) return(NULL)
 
-    colnames(rows) <- c("identifier", "baseformula", "structure", "name","description")
+    colnames(rows) <- c("identifier", "baseformula", "structure", "charge", "compoundname","description")
 
     url_syn = paste0("https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/",
                      paste0(idgroup, collapse=","),
@@ -737,20 +741,20 @@ pubChemInfo <- function(ids, maxn=30){
       rows.renamed <- lapply(1:nrow(rows.adj), function(i){
         row = rows.adj[i,]
         synonyms = row$Synonym[[1]]
-        old.name <- row$name
+        old.name <- row$compoundname
         new.name <- synonyms[1]
 
         if(is.null(new.name)) new.name <- old.name
 
         desc.names <- synonyms[-1]
 
-        row$name <- new.name
+        row$compoundname <- new.name
 
         row$description <- paste0(paste0("PubChem(", row$identifier, "). ",
+                                         row$description,
                                          "Other names: ",
                                          paste0(if(length(desc.names) > 0) c(old.name, desc.names) else old.name, collapse="; "),
-                                         ". "),
-                                  row$description)
+                                         ". "))
         row <- data.table::as.data.table(row)
         row[,-"Synonym"]
 
@@ -766,7 +770,7 @@ pubChemInfo <- function(ids, maxn=30){
 
     # - - - return rows - - -
 
-    result <- tbl.fin[,c("name", "baseformula", "structure", "description", "source", "identifier")]
+    result <- tbl.fin[,c("compoundname", "baseformula", "structure", "description", "source", "identifier")]
     result[,"%iso"] <- c(100)
     result
 

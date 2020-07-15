@@ -249,9 +249,9 @@ searchCMMR <- function (cmm_url = "http://ceumass.eps.uspceu.es/mediator/api/v3/
                                                                                     positive = "[\"M+H\", \"M+2H\", \"M+Na\", \"M+K\", \"M+NH4\", \"M+H-H2O\"]",
                                                                                     negative = "[\"M-H\", \"M+Cl\", \"M+FA-H\", \"M-H-H2O\"]"),
                         tolerance = 10, tolerance_mode = "ppm", unique_mz)
-  {
+{
   body <- cmmr::create_batch_body(metabolites_type, databases, masses_mode,
-                            ion_mode, adducts, tolerance, tolerance_mode, unique_mz)
+                                  ion_mode, adducts, tolerance, tolerance_mode, unique_mz)
   if (cmm_url == "http://ceumass.eps.uspceu.es/mediator/api/v3/batch") {
     cat("Using the CEU Mass Mediator server API.\n")
   }
@@ -310,35 +310,38 @@ searchMZonline <- function(mz=178.1219,
                                  tolerance = ppm,
                                  tolerance_mode = 'ppm',
                                  unique_mz = mz)
-            if(typeof(results) == "character"){
-              data.table::data.table()
-            }else{
-              base.table = data.table::data.table(name = results$name,
-                           baseformula = results$formula,
-                           adduct = results$adduct,
-                           `%iso` = c(100),
-                           fullformula = c(NA),
-                           finalcharge = c(NA),
-                           dppm = results$error_ppm,
-                           identifier = results$identifier,
-                           description = c(""),
-                           structure = results$inChiKey,
-                           query_mz = results$EM)
-              has.inchi <- which(!is.na(base.table$structure))
-              if(length(has.inchi) >0){
-                inchis <- base.table$structure[has.inchi]
-                if(!is.null(apikey)){
-                  inchi = pbapply::pbsapply(inchis, function(x) webchem::cs_convert(x, from = "inchikey", to = "inchi", apikey = apikey))
-                  smiles = pbapply::pbsapply(inchi, function(x) webchem::cs_convert(x, from = "inchi", to = "smiles", apikey = apikey))
-                  base.table$structure[has.inchi] <- smiles
-                  base.table$structure[!has.inchi] <- c("")
-                }
-
-              }else{
-                base.table$structure <- c("")
-              }
-              return(base.table)
-            }
+           if(typeof(results) == "character"){
+             data.table::data.table()
+           }else{
+             base.table = data.table::data.table(name = results$name,
+                                                 baseformula = results$formula,
+                                                 adduct = results$adduct,
+                                                 `%iso` = c(100),
+                                                 fullformula = c(NA),
+                                                 finalcharge = c(NA),
+                                                 dppm = results$error_ppm,
+                                                 identifier = results$identifier,
+                                                 description = c(""),
+                                                 structure = results$inChiKey,
+                                                 query_mz = results$EM)
+             has.inchi <- which(!is.na(base.table$structure))
+             if(length(has.inchi) >0){
+               inchis <- base.table$structure[has.inchi]
+               smiles = pbapply::pbsapply(inchis, function(x){
+                 url = gsubfn::fn$paste('https://cactus.nci.nih.gov/chemical/structure/$x/smiles')
+                 Sys.sleep(0.1)
+                 RCurl::getURL(url)}
+               )
+               valid.smiles = !grepl("Page not found", smiles)
+               has.newline <- grep("\n", smiles)
+               smiles[has.newline] <- sapply(stringr::str_split(smiles[has.newline], "\n"), function(x) x[[1]])
+               base.table$structure[!has.inchi] <- c("")
+               base.table$structure[has.inchi[valid.smiles]] <- smiles[valid.smiles]
+             }else{
+               base.table$structure <- c("")
+             }
+             return(base.table)
+           }
          })
 }
 
