@@ -193,6 +193,7 @@ revertAdduct <- function(formula, add_name, adduct_table=adducts){
   }
 
   # remove multiplic
+  row$xM <- as.numeric(row$xM)
   if(row$xM > 1 & row$xM != ""){
     demultiplied = enviPat::multiform(formula, 1/row$xM)
     if(!grepl(demultiplied, pattern="\\.")){
@@ -291,7 +292,7 @@ getPredicted <- function(mz,
         return(data.table::data.table())
       }else{
         data.table::data.table(query_mz = c(mz),
-                               name = theor_orig_formula,
+                               compoundname = theor_orig_formula,
                                baseformula = theor_orig_formula,
                                fullformula = new_formula,
                                basecharge = c(0),
@@ -382,9 +383,10 @@ searchFormulaWeb <- function(formulas,
              supernatural2 = {
                print("Searching SUPER NATURAL II...")
                rows = pbapply::pblapply(formulas, function(formula){
-                 rows = data.table::data.table(name = formula,
+                 rows = data.table::data.table(compoundname = formula,
                                                baseformula = formula,
-                                               structure = NA,
+                                               structure = paste0("[", formula, "]0"),
+                                               source = "magicball",
                                                description = "No hits for this predicted formula.")
                  # get molecular weight appoximately
                  molwt = enviPat::check_chemform(isotopes, formula)$monoisotopic_mass
@@ -458,9 +460,9 @@ searchFormulaWeb <- function(formulas,
                rows = pbapply::pblapply(formulas, function(formula){
                  url = gsubfn::fn$paste("http://www.knapsackfamily.com/knapsack_core/result.php?sname=formula&word=$formula")
                  description = "No hits for this predicted formula."
-                 rows = data.table::data.table(name = formula,
+                 rows = data.table::data.table(compoundname = formula,
                                                baseformula = formula,
-                                               structure = NA,
+                                               structure = paste0("[", formula, "]0"),
                                                description = description,
                                                source = "magicball")
                  res = XML::readHTMLTable(url,header = TRUE,)[[1]]
@@ -500,7 +502,7 @@ searchFormulaWeb <- function(formulas,
                  description = "No hits for this predicted formula."
                  rows = data.table::data.table(compoundname = formula,
                                                baseformula = formula,
-                                               structure = NA,
+                                               structure = paste0("[", formula, "]0"),
                                                description = description,
                                                source = "magicball")
 
@@ -509,6 +511,7 @@ searchFormulaWeb <- function(formulas,
                    ids <- pc_res$IdentifierList$CID
                    rows$description <- paste0("PubChem found these IDs: ",
                                               paste0(ids, collapse = ", "))
+                   rows$source = c("pubchem")
                    if(detailed){
                      rows = pubChemInfo(ids)
                    }
@@ -555,7 +558,7 @@ searchFormulaWeb <- function(formulas,
                        description = "No hits for this predicted formula."
                        data.table::data.table(compoundname = l$formula,
                                               baseformula = l$formula,
-                                              structure = NA,
+                                              structure = paste0("[", l$formula, "]0"),
                                               description = description,
                                               source = "magicball")
                      }else{
@@ -563,16 +566,14 @@ searchFormulaWeb <- function(formulas,
                        description <- paste0("ChemSpider found these IDs: ",
                                              pastedIds)
                        if(detailed){
-                         print("...")
                          res = chemspiderInfo(l$results,
                                               apikey=apikey)
-                         print("!")
                          res$baseformula <- c(l$formula)
                          res
                        }else{
                          data.table::data.table(compoundname = l$formula,
                                                 baseformula = l$formula,
-                                                structure = NA,
+                                                structure = paste0("[", l$formula, "]0"),
                                                 `%iso` = c(100),
                                                 description = description,
                                                 source = "chemspider")

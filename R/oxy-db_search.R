@@ -14,7 +14,7 @@
 showAllBase <- function(outfolder, base.dbname){
   conn <- RSQLite::dbConnect(RSQLite::SQLite(), file.path(outfolder, paste0(base.dbname,".db"))) # change this to proper var later
   # --- browse ---
-  result <- RSQLite::dbGetQuery(conn, "SELECT DISTINCT compoundname as name, baseformula as formula, structure as structure, description as description, charge as charge FROM base")
+  result <- RSQLite::dbGetQuery(conn, "SELECT DISTINCT compoundname, baseformula as formula, structure as structure, description as description, charge as charge FROM base")
   RSQLite::dbDisconnect(conn)
   # --- result ---
   result
@@ -84,8 +84,7 @@ searchMZ <- function(mzs, ionmodes, outfolder,
   # query
   RSQLite::dbExecute(conn, 'DROP TABLE IF EXISTS unfiltered')
 
-  query = "CREATE TABLE unfiltered AS
-                            SELECT DISTINCT
+  query = "CREATE TABLE unfiltered AS SELECT DISTINCT
                             cpd.adduct as adduct,
                             cpd.isoprevalence as isoprevalence,
                             cpd.fullformula,
@@ -114,7 +113,7 @@ searchMZ <- function(mzs, ionmodes, outfolder,
     RSQLite::dbExecute(conn, query)
 
     query = strwrap("SELECT
-                  b.compoundname as name,
+                  b.compoundname,
                   b.baseformula,
                   u.adduct,
                   u.isoprevalence as perciso,
@@ -171,7 +170,7 @@ searchFormula <- function(formula, charge, outfolder, base.dbname){
                                                 charge TEXT)")
     RSQLite::dbWriteTable(conn, data.table::data.table(formula = formula,
                                                        charge = charge))
-    res = RSQLite::dbGetQuery(conn, "SELECT DISTINCT compoundname as name,
+    res = RSQLite::dbGetQuery(conn, "SELECT DISTINCT compoundname,
                                                      baseformula as formula,
                                                      identifier,
                                                      description,
@@ -313,7 +312,7 @@ searchMZonline <- function(mz=178.1219,
            if(typeof(results) == "character"){
              data.table::data.table()
            }else{
-             base.table = data.table::data.table(name = results$name,
+             base.table = data.table::data.table(compoundname = results$name,
                                                  baseformula = results$formula,
                                                  adduct = results$adduct,
                                                  `%iso` = c(100),
