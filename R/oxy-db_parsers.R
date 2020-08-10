@@ -6,9 +6,8 @@
 #' @title Build MCDB
 #' @description Parses the MCDB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.MCDB(tempdir())
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[RCurl]{getURL}}
@@ -19,6 +18,8 @@
 #'  \code{\link[stringr]{str_match}}
 #' @rdname build.MCDB
 #' @export
+#' @examples
+#' build.MCDB(outfolder = tempdir(), testMode = TRUE)
 #' @importFrom utils download.file unzip
 #' @importFrom RCurl getURL
 #' @importFrom XML readHTMLTable xmlValue xmlEventParse
@@ -26,7 +27,9 @@
 #' @importFrom pbapply startpb setpb
 #' @importFrom base file
 #' @importFrom stringr str_match
-build.MCDB <- function(outfolder){ # WORKS
+#' @examples
+#' build.MCDB(outfolder=tempdir(), testMode=TRUE)
+build.MCDB <- function(outfolder, testMode=FALSE){ # WORKS
 
   Description <- NULL
 
@@ -57,6 +60,8 @@ build.MCDB <- function(outfolder){ # WORKS
                                    pattern = ",",
                                    replacement="")))
 
+  if(testMode) n = 10
+
   envir = environment()
   envir$db.formatted <- data.frame(
     compoundname = rep(NA, n),
@@ -68,7 +73,8 @@ build.MCDB <- function(outfolder){ # WORKS
   )
 
   envir$idx = 1 # which metabolite are we on
-  envir$pb <- pbapply::startpb(min = envir$idx, max = n)
+  envir$maxn = n
+  envir$pb <- pbapply::startpb(min = envir$idx, max = envir$maxn)
 
   # FOR WINDOWS
   sysinf <- Sys.info()
@@ -93,7 +99,7 @@ build.MCDB <- function(outfolder){ # WORKS
 
       line = readLines(con, n = 1,skipNul = TRUE)
 
-      if (length(line) == 0){
+      if (length(line) == 0 | envir$idx == envir$maxn){
         break
       }
 
@@ -146,6 +152,7 @@ build.MCDB <- function(outfolder){ # WORKS
       if(currEnvir$idx %% 1000 == 0){
         pbapply::setpb(currEnvir$pb, currEnvir$idx)
       }
+      if(currEnvir$idx == currEnvir$maxn) return()
       currEnvir$db.formatted[currEnvir$idx, "compoundname"] <- XML::xmlValue(currNode[['name']])
       currEnvir$db.formatted[currEnvir$idx, "identifier"] <- XML::xmlValue(currNode[['accession']])
       currEnvir$db.formatted[currEnvir$idx, "baseformula"] <- XML::xmlValue(currNode[['chemical_formula']])
@@ -170,9 +177,8 @@ build.MCDB <- function(outfolder){ # WORKS
 #' @title Build HMDB
 #' @description Parses the HMDB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.HMDB(tempdir())
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[RCurl]{getURL}}
@@ -190,7 +196,9 @@ build.MCDB <- function(outfolder){ # WORKS
 #' @importFrom pbapply startpb setpb
 #' @importFrom base file
 #' @importFrom stringr str_match
-build.HMDB <- function(outfolder){ # WORKS
+#' @examples
+#' build.HMDB(outfolder=tempdir(), testMode=TRUE)
+build.HMDB <- function(outfolder, testMode=FALSE){ # WORKS
 
   Description <- DESCRIPTION <-  NULL
   oldpar = options()
@@ -223,6 +231,8 @@ build.HMDB <- function(outfolder){ # WORKS
                                    pattern = ",",
                                    replacement="")))
 
+  if(testMode) n = 10
+
   envir = environment()
 
   envir$db.formatted <- data.frame(
@@ -235,7 +245,8 @@ build.HMDB <- function(outfolder){ # WORKS
   )
 
   envir$idx = 1 # which metabolite are we on
-  envir$pb <- pbapply::startpb(min = 1, max = n)
+  envir$maxn = n
+  envir$pb <- pbapply::startpb(min = 1, max = envir$maxn)
 
   # FOR WINDOWS
   sysinf <- Sys.info()
@@ -260,7 +271,7 @@ build.HMDB <- function(outfolder){ # WORKS
 
       line = readLines(con, n = 1,skipNul = TRUE)
 
-      if (length(line) == 0){
+      if (length(line) == 0 | envir$idx == envir$maxn){
         break
       }
 
@@ -318,9 +329,11 @@ build.HMDB <- function(outfolder){ # WORKS
 
     metabolite = function(currNode, currEnvir=envir){
 
-      if(envir$idx %% 1000 == 0){
+      if(currEnvir$idx %% 1000 == 0){
         pbapply::setpb(currEnvir$pb, currEnvir$idx)
       }
+
+      if(currEnvir$idx == currEnvir$maxn) return()
 
       currEnvir$db.formatted[currEnvir$idx, "compoundname"] <- XML::xmlValue(currNode[['name']])
       currEnvir$db.formatted[currEnvir$idx, "identifier"] <- XML::xmlValue(currNode[['accession']])
@@ -419,8 +432,6 @@ build.METACYC <- function(outfolder){ # WORKS
 #' @description Parses CHEBI, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.CHEBI(tempdir())
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[utils]{download.file}}
@@ -430,6 +441,8 @@ build.METACYC <- function(outfolder){ # WORKS
 #' @importFrom RCurl getURL
 #' @importFrom utils download.file
 #' @importFrom data.table as.data.table
+#' @examples
+#' build.CHEBI(outfolder=tempdir())
 build.CHEBI <- function(outfolder){ # WORKS
   # avoid data table NOTEs
   DEFINITION <- FORMULA <- ID <- CHARGE <- STRUCTURE <- NULL
@@ -680,19 +693,19 @@ build.CHEBI <- function(outfolder){ # WORKS
 #' @description Parses PharmGKB drugs and chemicals (drug metabolites, etc.), returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.PHARMGKB(tempdir())
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{untar}}
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
 #'  \code{\link[data.table]{fread}}
-#' @rdname build.FOODB
+#' @rdname build.PHARMGKB
 #' @export
 #' @importFrom utils download.file untar
 #' @importFrom RCurl getURL
 #' @importFrom stringr str_match
 #' @importFrom data.table fread data.table
+#' @examples
+#' build.PHARMGKB(outfolder=tempdir())
 build.PHARMGKB <- function(outfolder){ # WORKS
   SMILES <- `PharmGKB Accession Id` <- Name <- NULL
 
@@ -734,8 +747,8 @@ build.PHARMGKB <- function(outfolder){ # WORKS
   db.formatted$description <- gsub("\",", " - ", db.formatted$description)
   db.formatted$description <- gsub("\"", "", db.formatted$description)
   db.formatted$description <- gsub(" (,*[\\w| ]+: [0|,|No]+)|([\\w| ]+: [0|No]*$)|^([\\w| ]+: [0|,|No]+)", "",
-                                   db.formatted$description, perl = T)
-  db.formatted$description <- gsub("^ |,$", "", db.formatted$description, perl = T)
+                                   db.formatted$description, perl = TRUE)
+  db.formatted$description <- gsub("^ |,$", "", db.formatted$description, perl = TRUE)
   # - - - - -
 
   db.formatted$baseformula <- c(NA)
@@ -761,8 +774,6 @@ build.PHARMGKB <- function(outfolder){ # WORKS
 #' @description Parses the FOODB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.FOODB(tempdir())
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{untar}}
 #'  \code{\link[RCurl]{getURL}}
@@ -774,8 +785,11 @@ build.PHARMGKB <- function(outfolder){ # WORKS
 #' @importFrom RCurl getURL
 #' @importFrom stringr str_match
 #' @importFrom data.table fread data.table
+#' @examples
+#' build.FOODB(outfolder=tempdir())
 build.FOODB <- function(outfolder){ # WORKS
   # TODO: make sure that it automatically grabs the most recent CSV?
+  . <- orig_health_effect_name <- compound_id <- NULL
   file.url <- "https://foodb.ca/public/system/downloads/foodb_2020_4_7_csv.tar.gz"
   base.loc <- file.path(outfolder, "foodb_source")
   if(dir.exists(base.loc))(unlink(base.loc,recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
@@ -789,15 +803,19 @@ build.FOODB <- function(outfolder){ # WORKS
   date = as.Date(date, format = "%B%e%Y")
   subdate = gsub(date, pattern = "-", replacement = "_")
 
-  base.table <- data.table::fread(file = file.path(base.loc, paste0("foodb_", subdate, "_csv"), "compounds.csv"))
-
-  db.formatted <- data.table::data.table(compoundname = base.table$name,
-                                         description = base.table$description,
-                                         baseformula = base.table$moldb_formula,
-                                         identifier= base.table$id,
-                                         charge= base.table$charge,
-                                         structure= base.table$moldb_smiles)
-
+  base.table <- data.table::fread(file = file.path(base.loc,paste0("foodb_",subdate,"_csv"),"Compound.csv"))
+  health <- data.table::fread(file = file.path(base.loc,paste0("foodb_",subdate,"_csv"),"CompoundsHealthEffect.csv"))
+  health_summ <- health[ , .(health_effect = list(orig_health_effect_name)), by = compound_id]
+  base.merged = merge(base.table, health_summ, by.x = "id", by.y = "compound_id", all.x = TRUE)
+  db.formatted <- data.table::data.table(compoundname = base.merged$name,
+                                         description = paste0(base.table$annotation_quality,
+                                                              " ASSOCIATED HEALTH EFFECTS:",
+                                                              base.merged$health_effect),
+                                         baseformula = c(NA),
+                                         identifier= base.merged$public_id,
+                                         charge= c(0),
+                                         structure= base.merged$cas_number)
+  db.formatted$description <- gsub("ASSOCIATED HEALTH EFFECTS:NULL", "", db.formatted$description)
   db.formatted <- unique(db.formatted)
 
   list(db = db.formatted, version = version)
@@ -807,9 +825,8 @@ build.FOODB <- function(outfolder){ # WORKS
 #' @title Build Wikidata
 #' @description Parses wikidata chemical compound database, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.WIKIDATA(tempdir())
 #' @seealso
 #'  \code{\link[WikidataQueryServiceR]{query_wikidata}}
 #'  \code{\link[data.table]{as.data.table}}
@@ -817,7 +834,9 @@ build.FOODB <- function(outfolder){ # WORKS
 #' @export
 #' @importFrom WikidataQueryServiceR query_wikidata
 #' @importFrom data.table as.data.table data.table
-build.WIKIDATA <- function(outfolder){ # WORKS
+#' @examples
+#' build.WIKIDATA(outfolder=tempdir(), testMode=TRUE)
+build.WIKIDATA <- function(outfolder, testMode=FALSE){ # WORKS
 
   date = Sys.Date()
   version = Sys.Date()
@@ -840,6 +859,7 @@ build.WIKIDATA <- function(outfolder){ # WORKS
                            ?chemical_compound wdt:P233 ?canonical_SMILES.
                            OPTIONAL {?chemical_compound wdt:P2868 ?role.}}'
 
+  if(testMode) sparql_query = paste(sparql_query, "LIMIT 10")
   db.1 <- WikidataQueryServiceR::query_wikidata(sparql_query,
                                                 format = "simple")
 
@@ -879,61 +899,102 @@ build.WIKIDATA <- function(outfolder){ # WORKS
 
 }
 
+#' @title Build WikiPathways
+#' @description Parses WikiPathways chemical compound database, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
+#' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
+#' @return data table with parsed database
+#' @seealso
+#'  \code{\link[SPARQL]{SPARQL}}
+#'  \code{\link[data.table]{as.data.table}}
+#'  \code{\link[RCurl]{getURL}}
+#'  \code{\link[rvest]{html_nodes}}
+#'  \code{\link[xml2]{read_html}}
+#' @rdname build.WIKIPATHWAYS
+#' @export
+#' @importFrom SPARQL SPARQL
+#' @importFrom RCurl getURL
+#' @importFrom RSQLite dbConnect dbWriteTable dbRemoveTable dbDisconnect
+#' @importFrom data.table as.data.table
+#' @importFrom xml2 read_html
+#' @importFrom rvest html_nodes
+#' @examples
+#' build.WIKIPATHWAYS(outfolder=tempdir(), testMode=TRUE)
 # RE-ENABLE AFTER TALKING TO EGON
-# build.WIKIPATHWAYS <- function(outfolder){
-#   chebi.loc <- file.path(outfolder, "chebi.db")
-#   # ---------------------------------------------------
-#   chebi <- SPARQL::SPARQL(url="http://sparql.wikipathways.org/",
-#                           query='prefix wp:      <http://vocabularies.wikipathways.org/wp#>
-#                                                    prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#>
-#                                                    prefix dcterms: <http://purl.org/dc/terms/>
-#                                                    prefix xsd:     <http://www.w3.org/2001/XMLSchema#>
-#                                                    PREFIX wdt: <http://www.wikidata.org/prop/direct/>
-#
-#                                                    select  ?mb
-#                                                    (group_concat(distinct str(?labelLit);separator=", ") as ?label )
-#                                                    ?idurl as ?csid
-#                                                    (group_concat(distinct ?pwTitle;separator=", ") as ?description)
-#                                                    ?pathway
-#                                                    where {
-#                                                    ?mb a wp:Metabolite ;
-#                                                    rdfs:label ?labelLit ;
-#                                                    wp:bdbChEBI ?idurl ;
-#                                                    dcterms:isPartOf ?pathway .
-#                                                    ?pathway a wp:Pathway ;
-#                                                    dc:title ?pwTitle .
-#                                                    FILTER (BOUND(?idurl))
-#                                                    }
-#                                                    GROUP BY ?mb ?wp ?idurl ?pathway')
-#   chebi.ids <- gsub(chebi$results$csid, pattern = ".*:|>", replacement = "")
-#   conn.chebi <- RSQLite::dbConnect(RSQLite::SQLite(), chebi.loc)
-#   chebi.join.table <- data.table::data.table(identifier = chebi.ids,
-#                                              description = chebi$results$description,
-#                                              widentifier = chebi$results$mb,
-#                                              pathway = chebi$results$pathway)
-#   RSQLite::dbWriteTable(conn.chebi, "wikipathways", chebi.join.table, overwrite=TRUE)
-#   db.formatted <- RSQLite::dbGetQuery(conn.chebi, "SELECT DISTINCT  b.compoundname,
-#                                                                b.identifier,
-#                                                                w.description,
-#                                                                b.baseformula,
-#                                                                b.charge,
-#                                                                b.structure
-#                                                                FROM base b
-#                                                                JOIN wikipathways w
-#                                                                ON b.identifier = w.identifier")
-#
-#   db.formatted$identifier <- gsub(db.formatted$identifier, pattern = "<|>", replacement = "")
-#   RSQLite::dbRemoveTable(conn.chebi, "wikipathways")
-#   RSQLite::dbDisconnect(conn.chebi)
-#   db.formatted
-# }
+build.WIKIPATHWAYS <- function(outfolder, testMode=FALSE){
+
+  . <- compoundname <- description <- NULL
+
+  chebi.loc <- file.path(outfolder, "chebi.db")
+  chebiExists = file.exists(chebi.loc)
+
+  if(!chebiExists){
+    print("Requires ChEBI. Building...")
+    build.CHEBI(outfolder)
+  }
+
+  # ---------------------------------------------------
+  chebi <- SPARQL::SPARQL(url="http://sparql.wikipathways.org/sparql",
+                          query='prefix wp: <http://vocabularies.wikipathways.org/wp#>
+                                                   prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#>
+                                                   prefix dcterms: <http://purl.org/dc/terms/>
+                                                   prefix xsd:     <http://www.w3.org/2001/XMLSchema#>
+                                                   PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+
+                                                   select  ?mb
+                                                   (group_concat(distinct str(?labelLit);separator=", ") as ?label )
+                                                   ?idurl as ?csid
+                                                   (group_concat(distinct ?pwTitle;separator=", ") as ?description)
+                                                   ?pathway
+                                                   where {
+                                                   ?mb a wp:Metabolite ;
+                                                   rdfs:label ?labelLit ;
+                                                   wp:bdbChEBI ?idurl ;
+                                                   dcterms:isPartOf ?pathway .
+                                                   ?pathway a wp:Pathway ;
+                                                   dc:title ?pwTitle .
+                                                   FILTER (BOUND(?idurl))
+                                                   }
+                                                   GROUP BY ?mb ?wp ?idurl ?pathway')
+
+  chebi.ids <- gsub(chebi$results$csid, pattern = ".*:|>", replacement = "")
+  conn.chebi <- RSQLite::dbConnect(RSQLite::SQLite(), chebi.loc)
+  chebi.join.table <- data.table::data.table(identifier = chebi.ids,
+                                             description = chebi$results$description,
+                                             widentifier = chebi$results$mb,
+                                             pathway = chebi$results$pathway)
+  RSQLite::dbWriteTable(conn.chebi, "wikipathways", chebi.join.table, overwrite=TRUE)
+  db.formatted <- RSQLite::dbGetQuery(conn.chebi, "SELECT DISTINCT  b.compoundname,
+                                                               b.identifier,
+                                                               w.description,
+                                                               b.baseformula,
+                                                               b.charge,
+                                                               b.structure
+                                                               FROM base b
+                                                               JOIN wikipathways w
+                                                               ON b.identifier = w.identifier")
+
+  db.formatted$identifier <- gsub(db.formatted$identifier, pattern = "<|>", replacement = "")
+  db.formatted <- data.table::as.data.table(db.formatted)
+  db.formatted = unique(db.formatted[ , .(compoundname = paste0(unique(compoundname), collapse=", "),
+                                          description = paste0("Found in pathways: ",paste0(unique(description), collapse=", "))),
+                            by = c("structure", "identifier", "charge")])
+
+  RSQLite::dbRemoveTable(conn.chebi, "wikipathways")
+  RSQLite::dbDisconnect(conn.chebi)
+  # ---
+  page = RCurl::getURL("https://www.wikipathways.org/index.php/WikiPathways")
+  ver = stringr::str_match(page, ">([\\w| ]*?) Release<")[,2]
+
+  list(db = db.formatted,
+       version = ver)
+}
 
 #' @title Build RESPECT
 #' @description Parses RESPECT, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.RESPECT(tempdir())
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[RCurl]{getURL}}
@@ -947,7 +1008,9 @@ build.WIKIDATA <- function(outfolder){ # WORKS
 #' @importFrom stringr str_match
 #' @importFrom pbapply pblapply
 #' @importFrom data.table data.table rbindlist
-build.RESPECT <- function(outfolder){ # WORKS
+#' @examples
+#' build.RESPECT(outfolder=tempdir(), testMode=TRUE)
+build.RESPECT <- function(outfolder, testMode=FALSE){ # WORKS
 
   baseformula <- NULL
 
@@ -1001,11 +1064,10 @@ build.RESPECT <- function(outfolder){ # WORKS
 #' @title Build MACONDA
 #' @description Parses MACONDA, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @param conn Connection to extended database (MaConDa writes directly to there due to anomalous adducts)
 #' @param apikey ChemSpider API key
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.MACONDA(tempdir())
 #' @seealso
 #'  \code{\link[stringr]{str_match}}
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
@@ -1023,7 +1085,9 @@ build.RESPECT <- function(outfolder){ # WORKS
 #' @importFrom RSQLite dbExecute dbConnect SQLite dbGetQuery dbWriteTable dbDisconnect
 #' @importFrom DBI dbDisconnect
 #' @importFrom gsubfn fn
-build.MACONDA <- function(outfolder, conn, apikey){ # NEEDS SPECIAL FUNCTIONALITY
+#' @examples
+#' build.MACONDA(outfolder=tempdir(), testMode=TRUE)
+build.MACONDA <- function(outfolder, testMode=FALSE, conn, apikey){ # NEEDS SPECIAL FUNCTIONALITY
 
   Name <- NULL
 
@@ -1083,7 +1147,7 @@ build.MACONDA <- function(outfolder, conn, apikey){ # NEEDS SPECIAL FUNCTIONALIT
 
   db.final <- cleanDB(db.base,
                       cl=0,
-                      silent=T,
+                      silent=TRUE,
                       blocksize=400)
 
   #write to base db
@@ -1156,6 +1220,7 @@ build.MACONDA <- function(outfolder, conn, apikey){ # NEEDS SPECIAL FUNCTIONALIT
     }
     RSQLite::dbWriteTable(full.conn, "adducts", adduct_table_maconda[Name %in% new_adducts], append=TRUE)
   }else{
+    new_adducts = c()
     RSQLite::dbWriteTable(full.conn, "adducts", adduct_table_maconda, overwrite=TRUE)
   }
 
@@ -1211,9 +1276,8 @@ build.MACONDA <- function(outfolder, conn, apikey){ # NEEDS SPECIAL FUNCTIONALIT
 #' @title Build T3DB
 #' @description Parses the T3DB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.T3DB(tempdir())
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[RCurl]{getURL}}
@@ -1225,7 +1289,9 @@ build.MACONDA <- function(outfolder, conn, apikey){ # NEEDS SPECIAL FUNCTIONALIT
 #' @importFrom RCurl getURL
 #' @importFrom stringr str_match
 #' @importFrom data.table fread data.table
-build.T3DB <- function(outfolder){ # WORKS
+#' @examples
+#' build.T3DB(outfolder=tempdir(), testMode=TRUE)
+build.T3DB <- function(outfolder, testMode=FALSE){ # WORKS
   # t3db
   file.url <- "http://www.t3db.ca/system/downloads/current/toxins.csv.zip"
   # ----
@@ -1251,84 +1317,81 @@ build.T3DB <- function(outfolder){ # WORKS
   )
 
   list(db = db.formatted, version = version)
-
 }
 
-#' @title Build HSDB (currently out of order)
-#' @description Parses the HSDB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
-#' @param outfolder Which folder to save temp files to?
-#' @return data table with parsed database
-#' @examples
-#'  database <- build.HSDB(tempdir())
-#' @seealso
-#'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
-#'  \code{\link[pbapply]{pboptions}},\code{\link[pbapply]{pbapply}}
-#'  \code{\link[XML]{xmlTreeParse}}
-#'  \code{\link[webchem]{cir_query}}
-#' @rdname build.HSDB
-#' @importFrom utils download.file unzip
-#' @importFrom pbapply startpb pbsapply
-#' @importFrom XML xmlTreeParse
-#' @importFrom data.table data.table
-#' @importFrom webchem cir_query
-build.HSDB <- function(outfolder){ # NEEDS WORK
-  file.url = "ftp://ftp.nlm.nih.gov/nlmdata/.hsdblease/hsdb.xml.20190528.zip"
-  base.loc <- file.path(outfolder, "hsdb_source")
-  if(dir.exists(base.loc))(unlink(base.loc, recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
-  zip.file <- file.path(base.loc, "HSDB.zip")
-  utils::download.file(file.url, zip.file,mode = "wb", method = "auto")
-  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
-
-  input = list.files(base.loc, pattern = "\\.xml",full.names = TRUE)
-  theurl <- RCurl::getURL("https://toxnet.nlm.nih.gov/help/hsdbcasrn.html",.opts = list(ssl.verifypeer = FALSE) )
-
-  n = str_count(as.character(theurl), pattern = "cgi-bin")
-
-  db.formatted <- data.frame(
-    compoundname = rep(NA, n),
-    baseformula = rep(NA, n),
-    identifier = rep(NA, n),
-    structure = rep(NA, n),
-    charge = rep(NA, n),
-    description = rep(NA, n)
-  )
-
-  pb <- pbapply::startpb(min = 0, max = n)
-
-  idx <- 0
-
-  parsed <- XML::xmlTreeParse(input)
-  i=1
-
-  db.formatted <- data.table::data.table(
-    compoundname = XML::xmlApply(parsed[[1]]$children$hsdb, function(x) xmlValue(x['NameOfSubstance'][[1]])),
-    baseformula = XML::xmlApply(parsed[[1]]$children$hsdb, function(x) xmlValue(x['mf'][[1]])),
-    identifier = XML::xmlApply(parsed[[1]]$children$hsdb, function(x) xmlValue(x['DOCNO'][[1]]))
-  )
-
-  parsed[[1]]$children$hsdb[[i]]
-  parsed[[1]]$children$hsdb[[i]]['mf'][1]
-  parsed[[1]]$children$hsdb[[i]]['ocpp']
-  parsed[[1]]$children$hsdb[[i]]['sy']
-  parsed[[1]]$children$hsdb[[i]]['mf']
-
-  identifier = XML::xmlValue(parsed[[1]]$children$hsdb[[i]]['CASRegistryNumber']$CASRegistryNumber)
-
-  cas_ids <- XML::xmlApply(parsed[[1]]$children$hsdb, function(x) xmlValue(x['CASRegistryNumber'][[1]]))
-
-  smiles = pbapply::pbsapply(cas_ids, function(id) webchem::cir_query(id, representation = "smiles", resolver = NULL,
-                                                                      first = FALSE)[[1]])
-  # TBA
-  # - - - - - - - - - - - -
-  db.formatted
-}
+# #' @title Build HSDB (currently out of order)
+# #' @description Parses the HSDB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
+# #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
+# #' @return data table with parsed database
+# #' @seealso
+# #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
+# #'  \code{\link[pbapply]{pboptions}},\code{\link[pbapply]{pbapply}}
+# #'  \code{\link[XML]{xmlTreeParse}}
+# #'  \code{\link[webchem]{cir_query}}
+# #' @rdname build.HSDB
+# #' @importFrom utils download.file unzip
+# #' @importFrom pbapply startpb pbsapply
+# #' @importFrom XML xmlTreeParse
+# #' @importFrom data.table data.table
+# #' @importFrom webchem cir_query
+# build.HSDB <- function(outfolder, testMode=FALSE){ # NEEDS WORK
+#   file.url = "ftp://ftp.nlm.nih.gov/nlmdata/.hsdblease/hsdb.xml.20190528.zip"
+#   base.loc <- file.path(outfolder, "hsdb_source")
+#   if(dir.exists(base.loc))(unlink(base.loc, recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
+#   zip.file <- file.path(base.loc, "HSDB.zip")
+#   utils::download.file(file.url, zip.file,mode = "wb", method = "auto")
+#   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+#
+#   input = list.files(base.loc, pattern = "\\.xml",full.names = TRUE)
+#   theurl <- RCurl::getURL("https://toxnet.nlm.nih.gov/help/hsdbcasrn.html",.opts = list(ssl.verifypeer = FALSE) )
+#
+#   n = str_count(as.character(theurl), pattern = "cgi-bin")
+#
+#   db.formatted <- data.frame(
+#     compoundname = rep(NA, n),
+#     baseformula = rep(NA, n),
+#     identifier = rep(NA, n),
+#     structure = rep(NA, n),
+#     charge = rep(NA, n),
+#     description = rep(NA, n)
+#   )
+#
+#   pb <- pbapply::startpb(min = 0, max = n)
+#
+#   idx <- 0
+#
+#   parsed <- XML::xmlTreeParse(input)
+#   i=1
+#
+#   db.formatted <- data.table::data.table(
+#     compoundname = XML::xmlApply(parsed[[1]]$children$hsdb, function(x) xmlValue(x['NameOfSubstance'][[1]])),
+#     baseformula = XML::xmlApply(parsed[[1]]$children$hsdb, function(x) xmlValue(x['mf'][[1]])),
+#     identifier = XML::xmlApply(parsed[[1]]$children$hsdb, function(x) xmlValue(x['DOCNO'][[1]]))
+#   )
+#
+#   parsed[[1]]$children$hsdb[[i]]
+#   parsed[[1]]$children$hsdb[[i]]['mf'][1]
+#   parsed[[1]]$children$hsdb[[i]]['ocpp']
+#   parsed[[1]]$children$hsdb[[i]]['sy']
+#   parsed[[1]]$children$hsdb[[i]]['mf']
+#
+#   identifier = XML::xmlValue(parsed[[1]]$children$hsdb[[i]]['CASRegistryNumber']$CASRegistryNumber)
+#
+#   cas_ids <- XML::xmlApply(parsed[[1]]$children$hsdb, function(x) xmlValue(x['CASRegistryNumber'][[1]]))
+#
+#   smiles = pbapply::pbsapply(cas_ids, function(id) webchem::cir_query(id, representation = "smiles", resolver = NULL,
+#                                                                       first = FALSE)[[1]])
+#   # TBA
+#   # - - - - - - - - - - - -
+#   db.formatted
+# }
 
 #' @title Build BLOOD EXPOSOME DB
 #' @description Parses the BLOOD EXPOSOME DB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.BLOODEXPOSOME(tempdir())
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[openxlsx]{read.xlsx}}
@@ -1341,18 +1404,26 @@ build.HSDB <- function(outfolder){ # NEEDS WORK
 #' @importFrom pbapply pbsapply
 #' @importFrom jsonlite read_json
 #' @importFrom data.table data.table
-build.BLOODEXPOSOME <- function(outfolder){ # WORKS
-  file.url = "https://exposome1.fiehnlab.ucdavis.edu/download/BloodExpsomeDatabase_version_1.0.xlsx"
+#' @examples
+#' build.BLOODEXPOSOME(outfolder=tempdir(), testMode=TRUE)
+build.BLOODEXPOSOME <- function(outfolder, testMode=FALSE){ # WORKS
+  # ssl error was fixed by http instead of https..
+  file.url = "http://exposome1.fiehnlab.ucdavis.edu/download/BloodExpsomeDatabase_version_1.0.xlsx"
 
   base.loc <- file.path(outfolder, "bloodexposome_source")
   if(!dir.exists(base.loc)) dir.create(base.loc)
   excel.file <- file.path(base.loc, "exposome.xlsx")
-  utils::download.file(file.url, excel.file, mode="wb")
+
+  utils::download.file(file.url,
+                       excel.file,
+                       mode="wb",
+                       method = "auto")
 
   version = "1.0"
   date = Sys.Date()
 
   db.full <- openxlsx::read.xlsx(excel.file, sheet = 1, colNames=TRUE, startRow = 3)
+  if(testMode) db.full = db.full[1:10,]
 
   print("getting iupac names from missing compound names...")
   new.names <- pbapply::pbsapply(db.full[which(sapply(db.full$Compound.Name, is.empty)),]$PubChem.CID, function(cid){
@@ -1381,9 +1452,8 @@ build.BLOODEXPOSOME <- function(outfolder){ # WORKS
 #' @title Build EXPOSOME EXPLORER
 #' @description Parses the EXPOSOME EXPLORER DB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.EXPOSOMEEXPLORER(tempdir())
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[stringr]{str_match}}
@@ -1399,14 +1469,16 @@ build.BLOODEXPOSOME <- function(outfolder){ # WORKS
 #' @importFrom data.table fread data.table
 #' @importFrom pbapply pbsapply
 #' @importFrom R.utils decapitalize
-build.EXPOSOMEEXPLORER <- function(outfolder){ # WORKS
+#' @examples
+#' build.EXPOSOMEEXPLORER(outfolder=tempdir(), testMode=TRUE)
+build.EXPOSOMEEXPLORER <- function(outfolder, testMode=FALSE){ # WORKS
   file.url <- "http://exposome-explorer.iarc.fr/system/downloads/current/biomarkers.csv.zip"
 
   base.loc <- file.path(outfolder, "expoexplorer_source")
 
   if(dir.exists(base.loc))(unlink(base.loc, recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
   zip.file <- file.path(base.loc, "expoexpo_comp.zip")
-  utils::download.file(file.url, zip.file,mode = "wb", method = "auto")
+  utils::download.file(file.url, zip.file, mode = "wb", method = "auto")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
 
   version = stringr::str_match(RCurl::getURL("http://exposome-explorer.iarc.fr/releases",.opts = list(ssl.verifypeer = FALSE)),
@@ -1469,9 +1541,8 @@ build.EXPOSOMEEXPLORER <- function(outfolder){ # WORKS
 #' @title Build SMPDB
 #' @description Parses the SMPDB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.SMPDB(tempdir())
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[RCurl]{getURL}}
@@ -1485,7 +1556,9 @@ build.EXPOSOMEEXPLORER <- function(outfolder){ # WORKS
 #' @importFrom stringr str_match_all
 #' @importFrom pbapply pblapply
 #' @importFrom data.table fread rbindlist data.table
-build.SMPDB <- function(outfolder){ # OK I THINK
+#' @examples
+#' build.SMPDB(outfolder=tempdir(), testMode=TRUE)
+build.SMPDB <- function(outfolder, testMode=FALSE){ # OK I THINK
 
   . <- description <- compoundname <- baseformula <- identifier <- NULL
 
@@ -1509,6 +1582,7 @@ build.SMPDB <- function(outfolder){ # OK I THINK
   date = as.Date(date, format = "%B%d,%Y")
 
   smpdb.paths <- list.files(path = base.loc, pattern = "\\.csv$", full.names = TRUE)
+  if(testMode) smpdb.paths = smpdb.paths[1:10]
 
   subtables <- pbapply::pblapply(smpdb.paths, data.table::fread)
   smpdb.tab <- data.table::rbindlist(subtables, fill = TRUE)
@@ -1533,9 +1607,8 @@ build.SMPDB <- function(outfolder){ # OK I THINK
 #' @title Build KEGG
 #' @description Parses the KEGG DB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.KEGG(tempdir())
 #' @seealso
 #'  \code{\link[pbapply]{pbapply}}
 #'  \code{\link[KEGGREST]{keggFind}},\code{\link[KEGGREST]{keggGet}}
@@ -1551,12 +1624,17 @@ build.SMPDB <- function(outfolder){ # OK I THINK
 #' @importFrom stringr str_match
 #' @importFrom data.table data.table rbindlist
 #' @importFrom rcdk load.molecules get.smiles get.total.formal.charge
-build.KEGG <- function(outfolder){ # WORKS
+#' @examples
+#' build.KEGG(outfolder=tempdir(), testMode=TRUE)
+build.KEGG <- function(outfolder, testMode=FALSE){ # WORKS
   batches <- split(0:2300, ceiling(seq_along(0:2300)/100))
   cpds <- pbapply::pblapply(batches, FUN=function(batch){
     names(KEGGREST::keggFind("compound", batch, "mol_weight"))
   })
   cpd.ids <- Reduce(c, cpds)
+
+  if(testMode) cpd.ids = cpd.ids[1:10]
+
   id.batches <- split(cpd.ids, ceiling(seq_along(cpd.ids)/10))
 
   theurl = "https://www.genome.jp/kegg/compound/"
@@ -1711,7 +1789,6 @@ build.DRUGBANK <- function(outfolder){  # WORKS
   )
 
   envir$pb <- pbapply::startpb(min = 0, max = n)
-
   envir$idx <- 0
 
   metabolite = function(currNode, currEnvir=envir){
@@ -1797,10 +1874,9 @@ build.DRUGBANK <- function(outfolder){  # WORKS
 #' @title Build LIPID MAPS
 #' @description Parses the LIPID MAPS DB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @param apikey ChemSpider API key
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.LIPIDMAPS(tempdir())
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[zip]{unzip}}
@@ -1822,7 +1898,9 @@ build.DRUGBANK <- function(outfolder){  # WORKS
 #' @importFrom stringr str_match_all str_match
 #' @importFrom pbapply pblapply pbsapply
 #' @importFrom stringi stri_detect_fixed
-build.LIPIDMAPS <- function(outfolder, apikey){ # WORKS (description needs some tweaking)
+#' @examples
+#' build.LIPIDMAPS(outfolder=tempdir(), testMode=TRUE)
+build.LIPIDMAPS <- function(outfolder, testMode=FALSE, apikey){ # WORKS (description needs some tweaking)
 
   file.url = "https://www.lipidmaps.org/files/?file=LMSD_20191002&ext=sdf.zip"
 
@@ -1861,8 +1939,6 @@ build.LIPIDMAPS <- function(outfolder, apikey){ # WORKS (description needs some 
       })
     )
 
-    #noC = grep("C", mat$structure,value = T,invert = T)
-    #if(length(noC) > 0) print(noC)
     empty.smiles = which(sapply(mat$structure, is.empty))
     if(length(empty.smiles) > 0){
       print(mat$structure[empty.smiles])
@@ -1919,9 +1995,8 @@ build.LIPIDMAPS <- function(outfolder, apikey){ # WORKS (description needs some 
 #' @title Build METABOLIGHTS DB
 #' @description Parses the METABOLIGHTS DB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.METABOLIGHTS(tempdir())
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[XML]{xmlToList}}
@@ -1935,7 +2010,9 @@ build.LIPIDMAPS <- function(outfolder, apikey){ # WORKS (description needs some 
 #' @importFrom pbapply pblapply
 #' @importFrom data.table data.table rbindlist
 #' @importFrom jsonlite read_json
-build.METABOLIGHTS <- function(outfolder){
+#' @examples
+#' build.METABOLIGHTS(outfolder=tempdir(), testMode=TRUE)
+build.METABOLIGHTS <- function(outfolder, testMode=FALSE){
 
   identifier <- study <- NULL
 
@@ -1985,6 +2062,7 @@ build.METABOLIGHTS <- function(outfolder){
   overview = data.table::rbindlist(compendium)
 
   ids = unique(overview$identifier)
+  if(testMode) ids = ids[1:10]
 
   db.rows <- pbapply::pblapply(ids, cl=0, FUN=function(id){
     url <- paste0("https://www.ebi.ac.uk/metabolights/webservice/beta/compound/", id)
@@ -2025,9 +2103,8 @@ build.METABOLIGHTS <- function(outfolder){
 #' @title Build DIMEDB
 #' @description Parses the DIMEDB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.DIMEDB(tempdir())
 #' @seealso
 #'  \code{\link[pbapply]{pbapply}}
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
@@ -2041,7 +2118,9 @@ build.METABOLIGHTS <- function(outfolder){
 #' @importFrom data.table fread data.table
 #' @importFrom reshape2 dcast
 #' @importFrom Hmisc capitalize
-build.DIMEDB <- function(outfolder){ # WORKS
+#' @examples
+#' build.DIMEDB(outfolder=tempdir(), testMode=TRUE)
+build.DIMEDB <- function(outfolder, testMode=FALSE){ # WORKS
   files = c(#"structures.zip",
     "dimedb_pathways.zip",
     "dimedb_sources.zip",
@@ -2089,9 +2168,8 @@ build.DIMEDB <- function(outfolder){ # WORKS
 #' @title Build VMH
 #' @description Parses the VMH DB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.VMH(tempdir())
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
@@ -2106,7 +2184,9 @@ build.DIMEDB <- function(outfolder){ # WORKS
 #' @importFrom httr GET accept content
 #' @importFrom jsonlite fromJSON
 #' @importFrom data.table rbindlist data.table
-build.VMH <- function(outfolder){ # WORKS
+#' @examples
+#' build.VMH(outfolder=tempdir(), testMode=TRUE)
+build.VMH <- function(outfolder, testMode=FALSE){ # WORKS
   api_url <- "https://vmh.uni.lu/_api/metabolites/"
 
   pagerange = 150
@@ -2117,6 +2197,7 @@ build.VMH <- function(outfolder){ # WORKS
   version = stringr::str_match(header,
                                pattern = "(\\w+ 20\\d\\d)")[,2]
 
+  if(testMode) pagerange = 1
   table_list <- pbapply::pblapply(1:pagerange, function(i){
     tbl = NA
     try({
@@ -2183,9 +2264,8 @@ build.VMH <- function(outfolder){ # WORKS
 #' @title Build PHENOL EXPLORER DB
 #' @description Parses the PHENOL EXPLORER DB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.PHENOLEXPLORER(tempdir())
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
@@ -2199,7 +2279,9 @@ build.VMH <- function(outfolder){ # WORKS
 #' @importFrom utils download.file unzip
 #' @importFrom openxlsx read.xlsx
 #' @importFrom data.table fread data.table
-build.PHENOLEXPLORER <- function(outfolder){ # WORKS
+#' @examples
+#' build.PHENOLEXPLORER(outfolder=tempdir(), testMode=TRUE)
+build.PHENOLEXPLORER <- function(outfolder, testMode=FALSE){ # WORKS
 
   . <- description <- NULL
 
@@ -2276,9 +2358,8 @@ build.PHENOLEXPLORER <- function(outfolder){ # WORKS
 #' @title Build MASSBANK DB
 #' @description Parses MASSBANK, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.MASSBANK(tempdir())
 #' @seealso
 #'  \code{\link[stringr]{str_match}}
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
@@ -2290,7 +2371,9 @@ build.PHENOLEXPLORER <- function(outfolder){ # WORKS
 #' @importFrom utils download.file unzip
 #' @importFrom pbapply pblapply
 #' @importFrom data.table data.table rbindlist
-build.MASSBANK <- function(outfolder){ # WORKS
+#' @examples
+#' build.MASSBANK(outfolder=tempdir(), testMode=TRUE)
+build.MASSBANK <- function(outfolder, testMode=FALSE){ # WORKS
 
   baseformula <- NULL
   theurl = "https://massbank.eu/MassBank/"
@@ -2298,7 +2381,7 @@ build.MASSBANK <- function(outfolder){ # WORKS
   version = stringr::str_match(header,
                                pattern = "Update (.*?):")[,2]
 
-  file.url <- "https://github.com/MassBank/MassBank-data/archive/master.zip"
+  file.url <- "https://github.com/MassBank/MassBank-data/archive/2020.06.zip"
   base.loc <- file.path(outfolder, "massbank_source")
   if(dir.exists(base.loc))(unlink(base.loc, recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
   zip.file <- file.path(base.loc, "massbank.zip")
@@ -2309,6 +2392,7 @@ build.MASSBANK <- function(outfolder){ # WORKS
                           full.names = TRUE,
                           recursive = TRUE)
 
+  if(testMode) cpd_files = cpd_files[1:10]
   # - - - - - - - - - - - - - - -
 
   db_rows <- pbapply::pblapply(cpd_files, function(fn){
@@ -2356,9 +2440,8 @@ build.MASSBANK <- function(outfolder){ # WORKS
 #' @title Build BMDB
 #' @description Parses the BMDB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.BMDB(tempdir())
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
@@ -2374,7 +2457,9 @@ build.MASSBANK <- function(outfolder){ # WORKS
 #' @importFrom pbapply startpb setpb
 #' @importFrom base file
 #' @importFrom XML xmlValue xmlEventParse
-build.BMDB <- function(outfolder){
+#' @examples
+#' build.BMDB(outfolder=tempdir(), testMode=TRUE)
+build.BMDB <- function(outfolder, testMode = FALSE){
 
   oldpar = options()
   options(stringsAsFactors = FALSE)
@@ -2385,7 +2470,7 @@ build.BMDB <- function(outfolder){
   version = stringr::str_match(header,
                                pattern = "BMDB Version <strong>(\\d.\\d)")[,2]
 
-  file.url <- "http://www.bovinedb.ca/system/downloads/current/bmdb_metabolites.zip"
+  file.url <- "https://www.bovinedb.ca/system/downloads/current/bmdb_metabolites.zip"
   base.loc <- file.path(outfolder, "bmdb_source")
   if(dir.exists(base.loc))(unlink(base.loc, recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
   zip.file <- file.path(base.loc, "BMDB.zip")
@@ -2401,8 +2486,10 @@ build.BMDB <- function(outfolder){
                      pattern = "<\\/?update_date>",
                      replacement = ""))
 
-  theurl <- RCurl::getURL("http://www.bovinedb.ca/metabolites",.opts = list(ssl.verifypeer = FALSE) )
+  theurl <- RCurl::getURL("https://bovinedb.ca/metabolites")
   n = as.numeric(stringr::str_match_all(theurl, "of <.+?>(.*?)<.+?>")[[1]][1,2])
+
+  if(testMode) n = 10
 
   envir = environment()
 
@@ -2416,7 +2503,8 @@ build.BMDB <- function(outfolder){
   )
 
   envir$idx = 1 # which metabolite are we on
-  envir$pb <- pbapply::startpb(min = 1, max = n)
+  envir$maxn = n
+  envir$pb <- pbapply::startpb(min = 1, max = envir$maxn)
 
   # FOR WINDOWS
   sysinf <- Sys.info()
@@ -2441,7 +2529,7 @@ build.BMDB <- function(outfolder){
 
       line = readLines(con, n = 1,skipNul = TRUE)
 
-      if (length(line) == 0){
+      if (length(line) == 0 | envir$idx == envir$maxn){
         break
       }
 
@@ -2494,6 +2582,7 @@ build.BMDB <- function(outfolder){
       if(currEnvir$idx %% 1000 == 0){
         pbapply::setpb(currEnvir$pb, currEnvir$idx)
       }
+      if(currEnvir$idx == currEnvir$maxn) return()
 
       currEnvir$db.formatted[currEnvir$idx, "compoundname"] <- XML::xmlValue(currNode[['name']])
       currEnvir$db.formatted[currEnvir$idx, "identifier"] <- XML::xmlValue(currNode[['accession']])
@@ -2552,9 +2641,8 @@ build.BMDB <- function(outfolder){
 #' @title Build RMDB
 #' @description Parses the RMDB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.RMDB(tempdir())
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[stringr]{str_split}},\code{\link[stringr]{str_extract}},\code{\link[stringr]{str_match}}
@@ -2566,7 +2654,9 @@ build.BMDB <- function(outfolder){
 #' @importFrom stringr str_split str_extract str_match
 #' @importFrom pbapply pblapply
 #' @importFrom data.table data.table rbindlist
-build.RMDB <- function(outfolder){
+#' @examples
+#' build.RMDB(outfolder=tempdir(), testMode=TRUE)
+build.RMDB <- function(outfolder, testMode=FALSE){
   file.url = "http://www.rumendb.ca/public/downloads/current/metabocards.gz"
   base.loc <- file.path(outfolder, "rmdb_source")
   version = Sys.Date()
@@ -2578,6 +2668,7 @@ build.RMDB <- function(outfolder){
   dat.pasted = paste0(dat, collapse = ";")
   n = sum(grepl("#BEGIN_METABOCARD",dat))
   split = stringr::str_split(dat.pasted, pattern = "END_METABOCARD")[[1]]
+  if(testMode) split = split[1:10]
   db.rows = pbapply::pblapply(split, function(l){
     data.table::data.table(identifier = stringr::str_extract(string = l,
                                                              pattern = "RMDB\\d+"),
@@ -2605,9 +2696,8 @@ build.RMDB <- function(outfolder){
 #' @title Build ECMDB
 #' @description Parses the ECMDB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.ECMDB(tempdir())
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
@@ -2621,7 +2711,9 @@ build.RMDB <- function(outfolder){
 #' @importFrom utils download.file unzip
 #' @importFrom RJSONIO fromJSON
 #' @importFrom data.table rbindlist data.table
-build.ECMDB <- function(outfolder){
+#' @examples
+#' build.ECMDB(outfolder=tempdir(), testMode=TRUE)
+build.ECMDB <- function(outfolder, testMode=FALSE){
 
   theurl = "http://ecmdb.ca/downloads"
   header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
@@ -2636,6 +2728,9 @@ build.ECMDB <- function(outfolder){
   utils::unzip(zip.file, exdir = base.loc)
   json = file.path(base.loc, "ecmdb.json")
   json.rows = RJSONIO::fromJSON(json)
+
+  if(testMode) json.rows = json.rows[1:10]
+
   db.base = data.table::rbindlist(json.rows)
   db.formatted = data.table::data.table(
     compoundname = db.base$name,
@@ -2645,9 +2740,7 @@ build.ECMDB <- function(outfolder){
     charge = db.base$moldb_formal_charge,
     structure = db.base$moldb_smiles
   )
-
   list(db = db.formatted, version = version)
-
 }
 
 #' @title LMDB
@@ -2666,8 +2759,6 @@ build.ECMDB <- function(outfolder){
 #' @description Parses the LMDB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.LMDB(tempdir())
 #' @seealso
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
@@ -2675,6 +2766,8 @@ build.ECMDB <- function(outfolder){
 #' @export
 #' @importFrom RCurl getURL
 #' @importFrom stringr str_match
+#' @examples
+#' build.LMDB(outfolder=tempdir())
 build.LMDB <- function(outfolder){
 
   lmdb <- NULL
@@ -2696,8 +2789,6 @@ build.LMDB <- function(outfolder){
 #' @description Parses the YMDB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.YMDB(tempdir())
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{fread}},\code{\link[data.table]{rbindlist}}
@@ -2714,6 +2805,8 @@ build.LMDB <- function(outfolder){
 #' @importFrom pbapply pblapply
 #' @importFrom RCurl getURL
 #' @importFrom stringr str_match
+#' @examples
+#' build.YMDB(outfolder=tempdir())
 build.YMDB <- function(outfolder){
   file.url = "http://www.ymdb.ca/system/downloads/current/ymdb.json.zip"
   base.loc <- file.path(outfolder, "ymdb_source")
@@ -2791,9 +2884,8 @@ build.YMDB <- function(outfolder){
 #' @title Build PAMDB
 #' @description Parses the PAMDB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.PAMDB(tempdir())
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[data.table]{as.data.table}}
@@ -2807,7 +2899,9 @@ build.YMDB <- function(outfolder){
 #' @importFrom readxl read_excel
 #' @importFrom RCurl getURL
 #' @importFrom stringr str_match
-build.PAMDB <- function(outfolder){
+#' @examples
+#' build.PAMDB(outfolder=tempdir(), testMode=TRUE)
+build.PAMDB <- function(outfolder, testMode=FALSE){
   file.url = "http://pseudomonas.umaryland.edu/PaDl/PaMet.xlsx"
   base.loc <- file.path(outfolder, "pamdb_source")
   if(!dir.exists(base.loc)) dir.create(base.loc, recursive = TRUE)
@@ -2831,9 +2925,8 @@ build.PAMDB <- function(outfolder){
 #' @title Build mVOC db
 #' @description Parses the mVOC db, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.mVOC(tempdir())
 #' @seealso
 #'  \code{\link[XML]{getNodeSet}},\code{\link[XML]{xmlAttrs}},\code{\link[XML]{readHTMLTable}}
 #'  \code{\link[pbapply]{pbapply}}
@@ -2847,7 +2940,9 @@ build.PAMDB <- function(outfolder){
 #' @importFrom data.table data.table rbindlist
 #' @importFrom RCurl getURL
 #' @importFrom stringr str_match
-build.mVOC <- function(outfolder){
+#' @examples
+#' build.mVOC(outfolder=tempdir(), testMode=TRUE)
+build.mVOC <- function(outfolder, testMode=FALSE){
 
   categories = c("\\(", "[",	"$",	"1",	"2",	"3",	"4",	"5",	"6",	"7",	"8",	"9",
                  "A",	"B",	"C",	"D",	"E",	"F",	"H",	"I",	"M",	"N",	"O",	"P",	"Q",	"S",	"T",	"U")
@@ -2857,9 +2952,10 @@ build.mVOC <- function(outfolder){
 
   urlbase = "http://bioinformatics.charite.de/mvoc/"
 
+  if(testMode) categories = c("A")
+
   search_urls <- pbapply::pbsapply(categories, function(categ){
     theurl=paste0("http://bioinformatics.charite.de/mvoc/index.php?site=browse&char=", categ)
-    print(theurl)
     tables <- XML::readHTMLTable(theurl,elFun = hrefFun)
     tables.nonull <- tables[sapply(tables, function(x) !is.null(x))]
     tables.wrows <- tables.nonull[sapply(tables.nonull, function(x) nrow(x)>0)]
@@ -2910,9 +3006,8 @@ build.mVOC <- function(outfolder){
 #' @title Build NANPDB
 #' @description Parses the NANPDB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.NANPDB(tempdir())
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[data.table]{fread}}
@@ -2920,19 +3015,48 @@ build.mVOC <- function(outfolder){
 #' @export
 #' @importFrom utils download.file
 #' @importFrom data.table fread
-build.NANPDB <- function(outfolder){
+#' @examples
+#' build.NANPDB(outfolder=tempdir(), testMode=TRUE)
+build.NANPDB <- function(outfolder, testMode = FALSE){
 
   . <- V2 <- V1 <- V3 <- NULL
-  file.url = "http://african-compounds.org/nanpdb/downloads/smiles/"
-  base.loc <- file.path(outfolder, "nanpdb_source")
-  if(!dir.exists(base.loc)) dir.create(base.loc, recursive = TRUE)
-  smi.file <- file.path(base.loc, "nanpdb.smi")
-  utils::download.file(file.url, smi.file, mode = "wb", cacheOK = TRUE, method = "auto")
-  db.base = data.table::fread(smi.file, sep = "\t")
-  db.formatted = db.base[, .(identifier = V2, structure = V1, compoundname = V3)]
-  db.formatted$charge = c(0)
-  db.formatted$description = c("Found in North Africa. For more info,check the NANPDB website.")
 
+  #htmlfile <- RCurl::getURL("http://african-compounds.org/nanpdb/statistics/",.opts = list(ssl.verifypeer = FALSE) )
+  #y <- htmlParse(htmlfile)
+  #x <- xpathApply(y, "//td")
+  #n = as.numeric(xmlValue(x[[2]]))
+  n = 13141
+  if(testMode) n = 10
+
+  base.url = "http://african-compounds.org/nanpdb/get_compound_card/"
+  db.rows = pbapply::pblapply(1:n, function(i){
+    url = paste0(base.url, i, "/")
+    db.formatted = data.table::data.table()
+    try({
+      htmlfile <- RCurl::getURL(url,.opts = list(ssl.verifypeer = FALSE) )
+      cpdname <- stringr::str_match(htmlfile, "Compound Card of <b>(.*?)<\\/b>")[,2]
+      htmlfile <- gsub("\t|\n", "", htmlfile)
+      htmlfile <- gsub("<\\/li>", ". ", htmlfile)
+      htmlfile <- gsub(":", ": ", htmlfile)
+      tbl = xml2::read_html(htmlfile) %>%
+        rvest::html_node("table") %>%
+        rvest::html_table(fill = TRUE)
+      tbl = t(tbl)
+      colnames(tbl) = tbl[1,]
+      tbl = data.table::as.data.table(tbl)
+      db.formatted <- data.table::data.table(identifier = i,
+                                             compoundname = cpdname,
+                                             structure = tbl$`SMILES:`[2],
+                                             baseformula = tbl$`Molecular Formula:`[2],
+                                             description = paste0(tbl$`Source Species Information`[2],
+                                                                  tbl$`Predicted toxicity from pkCSM`[2]),
+                                             charge=c(0))
+    })
+    # - - - - - - -
+    db.formatted
+  })
+
+  db.formatted = data.table::rbindlist(db.rows, fill=TRUE)
   version = Sys.Date()
 
   list(db = db.formatted, version = version)
@@ -2942,8 +3066,6 @@ build.NANPDB <- function(outfolder){
 #' @description Parses the STOFF db, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
-#' @examples
-#'  database <- build.STOFF(tempdir())
 #' @seealso
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[data.table]{as.data.table}}
@@ -2953,6 +3075,8 @@ build.NANPDB <- function(outfolder){
 #' @importFrom utils download.file unzip
 #' @importFrom data.table as.data.table
 #' @importFrom readxl read_excel
+#' @examples
+#' build.STOFF(outfolder=tempdir())
 build.STOFF <- function(outfolder){
 
   . <- Name <- Formula <- SMILES <- `Additional Names` <- Index <- compoundname <- NULL
@@ -2980,7 +3104,64 @@ build.STOFF <- function(outfolder){
   list(db = db.formatted, version = version)
 }
 
-# build.SIGMA <- function(outfolder){
+#' @title Build REACTOME db
+#' @description Parses the REACTOME db, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
+#' @param outfolder Which folder to save temp files to?
+#' @return data table with parsed database
+#' @seealso
+#'  \code{\link[data.table]{as.data.table}}
+#'  \code{\link[rvest]{html_nodes}}
+#'  \code{\link[xml2]{read_html}}
+#' @rdname build.REACTOME
+#' @export
+#' @importFrom rvest html_nodes
+#' @importFrom xml2 read_html
+#' @importFrom data.table as.data.table fread
+#' @examples
+#' build.REACTOME(outfolder=tempdir())
+build.REACTOME <- function(outfolder){
+
+  . <- description <- organism <- identifier <- NULL
+
+  theurl = "https://reactome.org/download/current/ChEBI2Reactome.txt"
+  chebiExists = length(list.files(outfolder, pattern="chebi\\.db")) > 0
+
+  if(!chebiExists){
+    print("Requires ChEBI. Building...")
+    build.CHEBI(outfolder)
+  }
+
+  base.db = data.table::fread(theurl)
+  colnames(base.db) <- c("identifier", "pathway_id", "pathway_url", "description", "annotation_type", "organism")
+  base.db = base.db[,c("identifier", "description", "organism")]
+  base.db = unique(base.db[ , .(description = paste0(unique(description), collapse=", "),
+                          organism = paste0(unique(organism), collapse=", ")),
+                      by = c("identifier")])
+  base.db$description = paste0("Found in pathways: ", base.db$description, ".",
+                               " Found in organisms: ", base.db$organism, ".")
+  base.db = unique(base.db[,c("identifier",
+                              "description")])
+  base.db$identifier = as.character(base.db$identifier)
+  chebi = data.table::as.data.table(showAllBase(outfolder, "chebi"))
+  chebi = chebi[,-"description",with=F]
+  db.formatted = merge(chebi, base.db)
+  colnames(db.formatted)[colnames(db.formatted) == "formula"] <- "baseformula"
+  db.formatted <- db.formatted[,c("identifier","compoundname",
+                                  "structure","baseformula",
+                                  "description","charge")]
+  url = "https://reactome.org/"
+
+  ver = as.character(url %>%
+    xml2::read_html() %>%
+    rvest::html_nodes(xpath='//*[@id="fav-portfolio1"]/div/h3/text()'))
+  ver = gsub(" released on ", " - ", ver)
+  ver = gsub("Version ", "", ver)
+
+  return(list(db = db.formatted,
+              version = ver))
+}
+
+# build.SIGMA <- function(outfolder, testMode=FALSE){
 #   theurl <- "https://www.sigmaaldrich.com/catalog/search?interface=All&N=9634086+4294494793&page=1&mode=partialmax&focus=product&lang=en&region=global"
 #   header = RCurl::getURL(theurl,.opts = list(ssl.verifypeer = FALSE))
 #   content <- readLines(theurl)

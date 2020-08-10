@@ -341,8 +341,6 @@ getPredicted <- function(mz,
 #' @param apikey API key for ChemSpider
 #' @param detailed Find detailed results? Not just the compound name, but other associated info?, Default: FALSE
 #' @return Data table with match results.
-#' @examples
-#'  hits = searchFormulaWeb(c("C6H12O6"), search="pubchem", detailed = TRUE)
 #' @seealso
 #'  \code{\link[pbapply]{pbapply}}
 #'  \code{\link[data.table]{as.data.table}},\code{\link[data.table]{rbindlist}}
@@ -367,19 +365,64 @@ getPredicted <- function(mz,
 #' @importFrom httr POST add_headers content_type content GET
 #' @importFrom RJSONIO fromJSON
 searchFormulaWeb <- function(formulas,
-                             search = c("pubchem", "chemspider", "knapsack", "supernatural2"),
+                             search = c("pubchem", "chemspider", "knapsack",
+                                        "supernatural2", "chemidplus"),
                              apikey = "sp1pysTkYyC0wSETdkWjEeEK8eiXXFuG",
                              detailed = TRUE){
 
   V1 <- V2 <- . <- c_id <- metabolite <- organism <- NULL
 
+  formulas <- unique(gsub(formulas, pattern = "\\[2\\]H", replacement = "D"))
+
   if(length(search)>0){
     i = 0
     count = length(formulas)
     if(count == 0) return(NULL)
-    formulas <- unique(gsub(formulas, pattern = "\\[2\\]H", replacement = "D"))
     list_per_website <- lapply(search, function(db){
       switch(db,
+             chemidplus = {
+               print("Searching ChemIDplus...")
+               batchSize = 25
+               rows = pbapply::pblapply(formulas, function(origform){
+                 form=gsub("([A-z]+)1(?=[A-z]|$)", "\\1", origform, perl=T)
+                 form=gsub("([A-z]\\d+)", "\\1-", form)
+                 form=tolower(gsub("-$", "",form))
+                 toturl = gsubfn::fn$paste("https://chem.nlm.nih.gov/api/data/formula/equals/$form?data=totals")
+                 totals = 0
+                 try({
+                   totals = jsonlite::read_json(toturl)$substances
+                 },silent = TRUE)
+                 if(totals > 0){
+                   batches = seq(1,totals,25)
+                   rows = lapply(batches, function(batch){
+                     url = gsubfn::fn$paste("https://chem.nlm.nih.gov/api/data/formula/equals/$form?data=complete&batchStart=$batch")
+                     res = jsonlite::read_json(url)$results
+                     dt = data.table::rbindlist(lapply(res, function(l){
+                       if(grepl(pattern = "\\.",
+                                l$summary$f)){
+                         data.table::data.table()
+                       }else{
+                         data.table::data.table(compoundname = l$summary$na,
+                                                baseformula = origform,
+                                                structure = l$structureDetails$s,
+                                                source = "chemidplus",
+                                                description = if(length(l$notes)>0) paste0("From ",
+                                                                                           l$notes[[1]]$e[[1]]$s,
+                                                                                           ": ", l$notes[[1]]$e[[1]]$d) else "No further info available.")
+                       }
+                    }), fill=T, use.names = T)
+                   })
+                   tbl = data.table::rbindlist(rows, use.names = T)
+                   tbl = tbl[!is.na(structure)]
+                   tbl = tbl[!grepl("with",
+                                    compoundname)]
+                   tbl
+                 }else{
+                   data.table::data.table()
+                 }
+               })
+               data.table::rbindlist(rows, fill=TRUE)
+             },
              supernatural2 = {
                print("Searching SUPER NATURAL II...")
                rows = pbapply::pblapply(formulas, function(formula){
@@ -435,7 +478,8 @@ searchFormulaWeb <- function(formulas,
                        db.frag$identifier = identifiers
                        db.frag$structure = smiles
                        if(nrow(db.frag) > 0){
-                         keep = which(enviPat::check_chemform(isotopes, as.character(db.frag$baseformula))$new_formula == formula)
+                         keep = which(enviPat::check_chemform(isotopes,
+                                                              as.character(db.frag$baseformula))$new_formula == formula)
                          db.frag[keep,]
                        }else{
                          data.table::data.table()

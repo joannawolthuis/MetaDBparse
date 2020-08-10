@@ -14,7 +14,7 @@
 showAllBase <- function(outfolder, base.dbname){
   conn <- RSQLite::dbConnect(RSQLite::SQLite(), file.path(outfolder, paste0(base.dbname,".db"))) # change this to proper var later
   # --- browse ---
-  result <- RSQLite::dbGetQuery(conn, "SELECT DISTINCT compoundname, baseformula as formula, structure as structure, description as description, charge as charge FROM base")
+  result <- RSQLite::dbGetQuery(conn, "SELECT DISTINCT identifier,compoundname, baseformula as formula, structure as structure, description as description, charge as charge FROM base")
   RSQLite::dbDisconnect(conn)
   # --- result ---
   result

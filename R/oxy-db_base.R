@@ -52,6 +52,9 @@ smiles.to.iatom <- function(smiles, silent=TRUE, cl=0){
 #'  \code{\link[rcdk]{get.smiles}},\code{\link[rcdk]{smiles.flavors}}
 #'  \code{\link[rJava]{jcall}}
 #' @rdname iatom.to.smiles
+#' @examples
+#'  iatom = smiles.to.iatom(c('OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O'))
+#'  smi = iatom.to.smiles(iatom)
 #' @export
 #' @importFrom rcdk get.smiles smiles.flavors
 #' @importFrom rJava .jcall
@@ -96,6 +99,9 @@ iatom.to.smiles <- function(iatoms, smitype="Canonical", silent=TRUE){
 #'  \code{\link[rJava]{jcall}}
 #' @rdname iatom.to.charge
 #' @export
+#' @examples
+#'  iatom = smiles.to.iatom(c('OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O'))
+#'  ch = iatom.to.charge(iatom)
 #' @importFrom rcdk get.total.formal.charge
 #' @importFrom rJava .jcall
 iatom.to.charge <- function(iatoms, silent=TRUE){
@@ -127,6 +133,9 @@ iatom.to.charge <- function(iatoms, silent=TRUE){
 #'  \code{\link[rJava]{jcall}}
 #' @rdname iatom.to.formula
 #' @export
+#' @examples
+#'  iatom = smiles.to.iatom(c('OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O'))
+#'  form = iatom.to.formula(iatom)
 #' @importFrom rcdk get.mol2formula
 #' @importFrom rJava .jcall
 iatom.to.formula <- function(iatoms, silent=TRUE){
@@ -163,6 +172,9 @@ iatom.to.formula <- function(iatoms, silent=TRUE){
 #'  \code{\link[data.table]{rbindlist}}
 #' @rdname cleanDB
 #' @export
+#' @examples
+#' myDB = build.PHENOLEXPLORER(tempdir(), TRUE)
+#' cleanedDB = cleanDB(myDB$db, cl = 0, blocksize = 10)
 #' @importFrom parallel clusterExport
 #' @importFrom pbapply pblapply
 #' @importFrom enviPat check_chemform
@@ -245,39 +257,41 @@ cleanDB <- function(db.formatted, cl, silent=T, blocksize, smitype='Canonical'){
 #' @param smitype Which SMILES format do you want?, Default: 'Canonical'
 #' @param silent Suppress warnings?, Default: TRUE
 #' @param cl parallel::makeCluster object for multithreading, Default: 0
-#' @param apikey ChemSpider API key (needed for LIPID MAPS)
 #' @return Nothing, writes SQLite database to 'outfolder'.
 #' @seealso
 #'  \code{\link[data.table]{fread}},\code{\link[data.table]{as.data.table}}
 #'  \code{\link[DBI]{dbDisconnect}}
 #' @rdname buildBaseDB
 #' @export
+#' @examples
+#'  buildBaseDB(outfolder = tempdir(), "phenolexplorer")
 #' @importFrom data.table fread as.data.table data.table
 #' @importFrom RSQLite dbExecute
 #' @importFrom DBI dbDisconnect
 buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
-                        smitype = "Canonical", silent=TRUE, cl=0, apikey){
+                        smitype = "Canonical", silent=TRUE, cl=0, ...){
 
+  httr::set_config(httr::config(ssl_verifypeer = 0L))
   removeDB(outfolder, paste0(dbname,".db"))
   conn <- openBaseDB(outfolder, paste0(dbname,".db"))
   if(is.null(custom_csv_path)){
     db.formatted.all <- switch(dbname,
                            chebi = build.CHEBI(outfolder),
-                           maconda = build.MACONDA(outfolder, conn, apikey),
+                           maconda = build.MACONDA(outfolder, conn),
                            kegg = build.KEGG(outfolder),
                            bloodexposome = build.BLOODEXPOSOME(outfolder),
                            dimedb = build.DIMEDB(outfolder),
                            expoexplorer = build.EXPOSOMEEXPLORER(outfolder),
                            foodb = build.FOODB(outfolder),
                            drugbank = build.DRUGBANK(outfolder),
-                           lipidmaps = build.LIPIDMAPS(outfolder, apikey),
+                           lipidmaps = build.LIPIDMAPS(outfolder),
                            massbank = build.MASSBANK(outfolder),
                            metabolights = build.METABOLIGHTS(outfolder),
                            metacyc = build.METACYC(outfolder),
                            phenolexplorer = build.PHENOLEXPLORER(outfolder),
                            respect = build.RESPECT(outfolder),
                            wikidata = build.WIKIDATA(outfolder),
-                           #wikipathways = build.WIKIPATHWAYS(outfolder),
+                           wikipathways = build.WIKIPATHWAYS(outfolder),
                            t3db = build.T3DB(outfolder),
                            vmh = build.VMH(outfolder),
                            hmdb = build.HMDB(outfolder),
@@ -292,7 +306,8 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
                            mcdb = build.MCDB(outfolder),
                            mvoc = build.mVOC(outfolder),
                            pamdb = build.PAMDB(outfolder),
-                           pharmgkb = build.PHARMGKB(outfolder))
+                           pharmgkb = build.PHARMGKB(outfolder),
+                           reactome = build.REACTOME(outfolder))
   }else{
     db.formatted.all <- list(db = data.table::fread(custom_csv_path, header=TRUE),
                              version = Sys.time())
