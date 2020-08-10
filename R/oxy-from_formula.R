@@ -408,14 +408,13 @@ searchFormulaWeb <- function(formulas,
                                                 source = "chemidplus",
                                                 description = if(length(l$notes)>0) paste0("From ",
                                                                                            l$notes[[1]]$e[[1]]$s,
-                                                                                           ": ", l$notes[[1]]$e[[1]]$d) else "No further info available.")
+                                                                                           ": ", l$notes[[1]]$e[[1]]$d) else "No further info available.",
+                                                identifier = l$summary$rn)
+
                        }
                     }), fill=T, use.names = T)
                    })
                    tbl = data.table::rbindlist(rows, use.names = T)
-                   tbl = tbl[!is.na(structure)]
-                   tbl = tbl[!grepl("with",
-                                    compoundname)]
                    tbl
                  }else{
                    data.table::data.table()
@@ -630,7 +629,7 @@ searchFormulaWeb <- function(formulas,
                data.table::rbindlist(rows, fill = TRUE)
              })
     })
-    fin = data.table::rbindlist(list_per_website,fill=TRUE)
+    fin = data.table::rbindlist(list_per_website,fill=TRUE,use.names = T)
     if(nrow(fin) > 0){
       fin$identifier <- as.character(fin$identifier)
       fin$structure <- sapply(fin$structure, function(smi) if(is.na(smi)) "" else smi)
