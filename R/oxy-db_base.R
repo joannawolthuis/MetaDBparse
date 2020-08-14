@@ -173,13 +173,13 @@ iatom.to.formula <- function(iatoms, silent=TRUE){
 #' @rdname cleanDB
 #' @export
 #' @examples
-#' myDB = build.PHENOLEXPLORER(tempdir(), TRUE)
-#' cleanedDB = cleanDB(myDB$db, cl = 0, blocksize = 10)
+#' \dontrun{myDB = build.LMDB(tempdir())}
+#' \dontrun{cleanedDB = cleanDB(myDB$db, cl = 0, blocksize = 10)}
 #' @importFrom parallel clusterExport
 #' @importFrom pbapply pblapply
 #' @importFrom enviPat check_chemform
 #' @importFrom data.table rbindlist
-cleanDB <- function(db.formatted, cl, silent=T, blocksize, smitype='Canonical'){
+cleanDB <- function(db.formatted, cl, silent=TRUE, blocksize, smitype='Canonical'){
 
   blocks = split(1:nrow(db.formatted), ceiling(seq_along(1:nrow(db.formatted))/blocksize))
 
@@ -257,6 +257,10 @@ cleanDB <- function(db.formatted, cl, silent=T, blocksize, smitype='Canonical'){
 #' @param smitype Which SMILES format do you want?, Default: 'Canonical'
 #' @param silent Suppress warnings?, Default: TRUE
 #' @param cl parallel::makeCluster object for multithreading, Default: 0
+#' @param test Run in test mode? Makes an incomplete ver of db, but is faster.
+#' @param doBT Do a biotransformation step using Biotransformer?
+#' @param btOpts Biotransfomer -q options. Defaults to phase II transformation only.
+#' @param btLoc Location of Biotransformer JAR file. Needs to be executable!
 #' @return Nothing, writes SQLite database to 'outfolder'.
 #' @seealso
 #'  \code{\link[data.table]{fread}},\code{\link[data.table]{as.data.table}}
@@ -264,12 +268,16 @@ cleanDB <- function(db.formatted, cl, silent=T, blocksize, smitype='Canonical'){
 #' @rdname buildBaseDB
 #' @export
 #' @examples
-#'  buildBaseDB(outfolder = tempdir(), "phenolexplorer")
+#'  \dontrun{buildBaseDB(outfolder = tempdir(), "lmdb")}
 #' @importFrom data.table fread as.data.table data.table
 #' @importFrom RSQLite dbExecute
 #' @importFrom DBI dbDisconnect
 buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
-                        smitype = "Canonical", silent=TRUE, cl=0, ...){
+                        smitype = "Canonical", silent=TRUE, cl=0,
+                        test=FALSE,
+                        doBT = FALSE,
+                        btOpts = "phaseII:1",
+                        btLoc = tempfile()){
 
   httr::set_config(httr::config(ssl_verifypeer = 0L))
   removeDB(outfolder, paste0(dbname,".db"))
@@ -317,10 +325,50 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path=NULL,
 
   db.formatted <- data.table::as.data.table(db.formatted.all$db)
   db.formatted <- data.frame(lapply(db.formatted, as.character), stringsAsFactors=FALSE)
-  db.final <- data.table::as.data.table(cleanDB(db.formatted,
-                                                cl = cl,
-                                                silent = T,#silent,
-                                                blocksize = 400))
+
+  if(test & nrow(db.formatted > 10)) db.formatted = db.formatted[1:10,]
+
+  # == USE BIOTRANSFORMER IF WANTED ===
+  if(doBT){
+    db.biotrans <- doBT(smis = db.formatted$structure,
+                        opts = btOpts,
+                        jarloc = btLoc)
+    if(nrow(db.biotrans) > 0){
+      db.biotrans.fin <- data.table::rbindlist(lapply(1:nrow(db.biotrans), function(i){
+        newInfo = db.biotrans[i,]
+        oldIdx = which(db.formatted$structure == newInfo$structure)
+        oldInfo = db.formatted[oldIdx,]
+        oldInfo$structure <- newInfo$SMILES
+        oldInfo$description <- paste0("Modified through Biotransformer: ",
+                                      newInfo$Reaction, ". ",
+                                      oldInfo$description)
+        reacShorthand <- if(grepl("glucuronidation", tolower(newInfo$Reaction))){
+          "glucuronide"
+        }else if(grepl("sulfonation", tolower(newInfo$Reaction))){
+          "sulfone"
+        }else if(grepl("sulfation", tolower(newInfo$Reaction))){
+          "sulphate"
+        }
+        oldInfo$compoundname <- paste(oldInfo$compoundname, reacShorthand)
+        oldInfo$identifier <- paste0(oldInfo$identifier, "_", newInfo$`Reaction ID`)
+        oldInfo
+      }))
+      db.formatted = data.table::rbindlist(list(db.formatted,
+                                                db.biotrans.fin),
+                                           use.names = TRUE)
+    }
+  }
+
+  # ===============================
+
+  if(dbname %in% c("reactome", "wikipathways")){
+    db.final <- db.formatted
+  }else{
+    db.final <- data.table::as.data.table(cleanDB(db.formatted,
+                                                  cl = cl,
+                                                  silent = silent,
+                                                  blocksize = 400))
+  }
 
   db.final <- db.final[, lapply(.SD, as.character)]
 

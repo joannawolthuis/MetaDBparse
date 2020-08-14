@@ -3,6 +3,90 @@
   data("isotopes", package="enviPat", envir=parent.env(environment()))
   }
 
+#' @title Build WikiPathways
+#' @description Parses WikiPathways chemical compound database, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
+#' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
+#' @return data table with parsed database
+#' @seealso
+#'  \code{\link[SPARQL]{SPARQL}}
+#'  \code{\link[data.table]{as.data.table}}
+#'  \code{\link[RCurl]{getURL}}
+#'  \code{\link[rvest]{html_nodes}}
+#'  \code{\link[xml2]{read_html}}
+#' @rdname build.WIKIPATHWAYS
+#' @export
+#' @importFrom SPARQL SPARQL
+#' @importFrom RCurl getURL
+#' @importFrom RSQLite dbConnect dbWriteTable dbRemoveTable dbDisconnect
+#' @importFrom data.table as.data.table
+#' @importFrom xml2 read_html
+#' @importFrom rvest html_nodes
+#' @examples
+#' \dontrun{build.WIKIPATHWAYS(outfolder=tempdir(), testMode=TRUE)}
+build.WIKIPATHWAYS <- function(outfolder, testMode=FALSE){
+
+  . <- compoundname <- description <- NULL
+
+  chebi.loc <- file.path(outfolder, "chebi.db")
+  chebiExists = file.exists(chebi.loc)
+
+  if(!chebiExists){
+    print("Requires ChEBI. Building...")
+    buildBaseDB(outfolder, "chebi")
+  }
+
+  chebi = data.table::as.data.table(showAllBase(outfolder, "chebi"))
+
+  chebi$identifier <- as.numeric(chebi$identifier)
+
+  base.db <- SPARQL::SPARQL(url="http://sparql.wikipathways.org/sparql",
+                            query='prefix wp: <http://vocabularies.wikipathways.org/wp#>
+                                                   prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#>
+                                                   prefix dcterms: <http://purl.org/dc/terms/>
+                                                   prefix xsd:     <http://www.w3.org/2001/XMLSchema#>
+                                                   PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+
+                                                   select  ?mb
+                                                   (group_concat(distinct str(?labelLit);separator=", ") as ?label )
+                                                   ?idurl as ?csid
+                                                   (group_concat(distinct ?pwTitle;separator=", ") as ?description)
+                                                   ?pathway
+                                                   where {
+                                                   ?mb a wp:Metabolite ;
+                                                   rdfs:label ?labelLit ;
+                                                   wp:bdbChEBI ?idurl ;
+                                                   dcterms:isPartOf ?pathway .
+                                                   ?pathway a wp:Pathway ;
+                                                   dc:title ?pwTitle .
+                                                   FILTER (BOUND(?idurl))
+                                                   }
+                                                   GROUP BY ?mb ?wp ?idurl ?pathway')
+
+  chebi.join.table <- data.table::data.table(identifier = as.numeric(gsub(base.db$results$csid,
+                                                                          pattern = ".*:|>",
+                                                                          replacement = "")),
+                                             description = base.db$results$description,
+                                             widentifier = base.db$results$mb,
+                                             pathway = base.db$results$pathway)
+
+  base.db$identifier = as.numeric(base.db$identifier)
+  chebi = chebi[,-"description",with=F]
+  db.formatted = merge(chebi.join.table, chebi, by="identifier")
+  #db.formatted$identifier <- db.formatted$widentifier
+  #db.formatted$identifier <- gsub(db.formatted$identifier, pattern = "<|>", replacement = "")
+  db.formatted <- data.table::as.data.table(db.formatted)
+  db.formatted = unique(db.formatted[ , .(compoundname = paste0(unique(compoundname), collapse=", "),
+                                          description = paste0("Found in pathways: ",paste0(unique(description), collapse=", "))),
+                                      by = c("structure", "identifier", "charge")])
+  # ---
+  page = RCurl::getURL("https://www.wikipathways.org/index.php/WikiPathways")
+  ver = stringr::str_match(page, ">([\\w| ]*?) Release<")[,2]
+
+  list(db = db.formatted,
+       version = ver)
+}
+
 #' @title Build MCDB
 #' @description Parses the MCDB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
@@ -19,7 +103,7 @@
 #' @rdname build.MCDB
 #' @export
 #' @examples
-#' build.MCDB(outfolder = tempdir(), testMode = TRUE)
+#' \dontrun{build.MCDB(outfolder = tempdir(), testMode = TRUE)}
 #' @importFrom utils download.file unzip
 #' @importFrom RCurl getURL
 #' @importFrom XML readHTMLTable xmlValue xmlEventParse
@@ -28,7 +112,7 @@
 #' @importFrom base file
 #' @importFrom stringr str_match
 #' @examples
-#' build.MCDB(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.MCDB(outfolder=tempdir(), testMode=TRUE)}
 build.MCDB <- function(outfolder, testMode=FALSE){ # WORKS
 
   Description <- NULL
@@ -197,7 +281,7 @@ build.MCDB <- function(outfolder, testMode=FALSE){ # WORKS
 #' @importFrom base file
 #' @importFrom stringr str_match
 #' @examples
-#' build.HMDB(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.HMDB(outfolder=tempdir(), testMode=TRUE)}
 build.HMDB <- function(outfolder, testMode=FALSE){ # WORKS
 
   Description <- DESCRIPTION <-  NULL
@@ -436,256 +520,65 @@ build.METACYC <- function(outfolder){ # WORKS
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[data.table]{as.data.table}}
+#'  \code{\link[ChemmineR]{datablock2ma}},\code{\link[ChemmineR]{datablock}}
 #' @rdname build.CHEBI
 #' @export
 #' @importFrom RCurl getURL
 #' @importFrom utils download.file
 #' @importFrom data.table as.data.table
+#' @importFrom ChemmineR datablock2ma datablock
 #' @examples
-#' build.CHEBI(outfolder=tempdir())
+#' \dontrun{build.CHEBI(outfolder=tempdir())}
 build.CHEBI <- function(outfolder){ # WORKS
-  # avoid data table NOTEs
-  DEFINITION <- FORMULA <- ID <- CHARGE <- STRUCTURE <- NULL
-  db.full <- {
-    release = "latest"
-    woAssociations = FALSE
-    chebi_download <- tempdir()
-    url = "ftp://ftp.ebi.ac.uk/pub/databases/chebi/archive/"
-    filenames = RCurl::getURL(url, ftp.use.epsv = FALSE, dirlistonly = TRUE)
 
-    releases <- strsplit(filenames, split="\n")[[1]]
-    releases <- as.numeric(gsub(x = releases, pattern = "rel", replacement = ""))
-    message("Validating ChEBI release number ... ", appendLF = FALSE)
+  file.url = "ftp://ftp.ebi.ac.uk/pub/databases/chebi/SDF/ChEBI_complete.sdf.gz"
+  base.loc <- file.path(outfolder, "chebi_source")
+  if(!dir.exists(base.loc)) dir.create(base.loc)
+  zip.file <- file.path(base.loc, "chebi.sdf.gz")
+  utils::download.file(file.url, zip.file, mode="wb", method = "auto")
 
-    if (release == "latest") {
-      release <- max(releases)
-    } else {
-      release <- releases[match(release, releases)]
-    }
+  # -------------------------------
 
-    version = release
+  version = Sys.Date()
+  sdf.path <- zip.file
 
-    message("OK")
-    ftp <- paste0("ftp://ftp.ebi.ac.uk/pub/databases/chebi/archive/rel",
-                  release, "/Flat_file_tab_delimited/")
-    message("Downloading compounds ... ", appendLF = FALSE)
-    utils::download.file(paste0(ftp, "compounds.tsv.gz"), paste0(chebi_download,
-                                                                 "compounds.tsv"),
-                         quiet = TRUE,
-                         mode="wb", method = "auto")
-    compounds <- as.data.frame.array(read.delim2(paste0(chebi_download,
-                                                        "compounds.tsv")))
-    message("DONE", appendLF = TRUE)
-    message("Downloading synonyms ... ", appendLF = FALSE)
-    utils::download.file(paste0(ftp, "names.tsv.gz"), paste0(chebi_download,
-                                                             "names.tsv"), quiet = TRUE, mode="wb", method = "auto")
-    names <- suppressWarnings(as.data.frame.array(read.delim2(paste0(chebi_download,
-                                                                     "names.tsv"))))
-    message("DONE", appendLF = TRUE)
-    message("Downloading formulas ... ", appendLF = FALSE)
-    utils::download.file(paste0(ftp, "chemical_data.tsv"), paste0(chebi_download,
-                                                                  "formulas.tsv"), quiet = TRUE, mode="wb", method = "auto")
-    formulas <- suppressWarnings(as.data.frame.array(read.delim2(paste0(chebi_download,
-                                                                        "formulas.tsv"))))
+  desc <- function(sdfset){
+    mat <- NULL
+    try({
+      db <- data.table::as.data.table(ChemmineR::datablock2ma(datablocklist=ChemmineR::datablock(sdfset)))
+      mat = data.table::data.table(
+        identifier = gsub("CHEBI:", "", as.character(db$`ChEBI ID`)),
+        compoundname = as.character(db$`ChEBI Name`),
+        baseformula = as.character(db$Formulae),
+        structure = sapply(1:nrow(db), function(i) if(!is.empty(db$SMILES[i])) db$SMILES[i] else db$InChI[i]),
+        description = db$Definition
+      )
+      empty.smiles = sapply(mat$structure, is.empty)
+      mat = mat[!empty.smiles,]
+      mat = as.matrix(mat)
+    }, silent = T)
+    mat
+  }
+  parsedLoc = file.path(base.loc,
+                        "chebi_parsed.csv")
+  sdfStream.joanna(input = sdf.path,
+                   output = parsedLoc,
+                   append = FALSE,
+                   fct = desc,
+                   silent = TRUE)
 
-    message("Downloading structures ... ", appendLF = FALSE)
+  db.formatted <- data.table::fread(parsedLoc,
+                                    fill = TRUE,
+                                    header = TRUE)
+  db.formatted$V1 <- NULL
 
-    utils::download.file(paste0(ftp, "structures.csv.gz"), paste0(chebi_download,
-                                                                  "structures.csv"), quiet = TRUE, mode="wb", method = "auto")
-
-    message("DONE", appendLF = TRUE)
-
-    structures <- suppressWarnings(as.data.frame.array(read.delim2(paste0(chebi_download,
-                                                                          "structures.csv"), sep=",")))
-    # mol.rows <- which(structures$TYPE == "mol")
-    # inchi.rows <- which(structures$TYPE == "InChI")
-    # inchikey.rows <- which(structures$TYPE == "InChIKey")
-
-    smile.rows <- which(structures$TYPE == "SMILES")
-
-    structures <- structures[smile.rows,]
-
-    message("DONE", appendLF = TRUE)
-    message("Building ChEBI ... ", appendLF = TRUE)
-
-    #compounds <- compounds[compounds[, "STAR"] >= 3, ]
-    latest <- compounds[, c("ID", "NAME", "DEFINITION")]
-    old <- compounds[, c("ID", "PARENT_ID")]
-    old <- merge(x = old, y = latest, by.x = "PARENT_ID", by.y = "ID")
-    compounds <- rbind(latest, old[, c("ID", "NAME", "DEFINITION")])
-    compounds[compounds[, "NAME"] == "null", "NAME"] <- NA
-    compounds <- compounds[complete.cases(compounds), ]
-    DB <- suppressWarnings((merge(compounds[, c("ID", "NAME", "DEFINITION")],
-                                  names[, c("COMPOUND_ID", "SOURCE", "NAME")], by.x = "ID",
-                                  by.y = "COMPOUND_ID", all.x = TRUE)))
-    ChEBI <- unique(DB[, c("ID", "NAME.x", "DEFINITION")])
-    colnames(ChEBI) <- c("ID", "ChEBI", "DEFINITION")
-
-    message(" KEGG Associations ... ", appendLF = FALSE)
-    KEGG <- unique(DB[DB[, "SOURCE"] == "KEGG COMPOUND", c("ID",
-                                                           "NAME.y")])
-    KEGG <- KEGG[complete.cases(KEGG), ]
-    colnames(KEGG) <- c("ID", "KEGG")
-    message("DONE", appendLF = TRUE)
-    message(" IUPAC Associations ... ", appendLF = FALSE)
-    IUPAC <- unique(DB[DB[, "SOURCE"] == "IUPAC", c("ID", "NAME.y")])
-    IUPAC <- IUPAC[complete.cases(IUPAC), ]
-    colnames(IUPAC) <- c("ID", "IUPAC")
-    message("DONE", appendLF = TRUE)
-    message(" MetaCyc Associations ... ", appendLF = FALSE)
-    MetaCyc <- unique(DB[DB[, "SOURCE"] == "MetaCyc", c("ID",
-                                                        "NAME.y")])
-    MetaCyc <- MetaCyc[complete.cases(MetaCyc), ]
-    colnames(MetaCyc) <- c("ID", "MetaCyc")
-    message("DONE", appendLF = TRUE)
-    message(" ChEMBL Associations ... ", appendLF = FALSE)
-    ChEMBL <- unique(DB[DB[, "SOURCE"] == "ChEMBL", c("ID",
-                                                      "NAME.y")])
-    ChEMBL <- ChEMBL[complete.cases(ChEMBL), ]
-    colnames(ChEMBL) <- c("ID", "ChEMBL")
-    message("DONE", appendLF = TRUE)
-    DB <- unique(merge(DB["ID"], ChEBI, by = "ID", all.x = TRUE))
-    DB <- unique(merge(DB, KEGG, by = "ID", all.x = TRUE))
-    DB <- unique(merge(DB, IUPAC, by = "ID", all.x = TRUE))
-    DB <- unique(merge(DB, MetaCyc, by = "ID", all.x = TRUE))
-    DB <- unique(merge(DB, ChEMBL, by = "ID", all.x = TRUE))
-    rm(ChEBI, ChEMBL, compounds, IUPAC, KEGG, latest, MetaCyc,
-       names, old)
-    if ("FORMULA" %in% unique(formulas[, "TYPE"])) {
-      message(" Formula Associations ... ", appendLF = FALSE)
-      formula <- formulas[formulas[, "TYPE"] == "FORMULA",
-                          c("COMPOUND_ID", "CHEMICAL_DATA")]
-      colnames(formula) <- c("ID", "FORMULA")
-      DB <- merge(DB, formula, by = "ID", all.x = TRUE)
-      DB <- merge(DB, DB[, c("ChEBI", "FORMULA")], by = "ChEBI",
-                  all.x = TRUE)
-      DB[is.na(DB[, "FORMULA.x"]), "FORMULA.x"] <- "null"
-      DB[is.na(DB[, "FORMULA.y"]), "FORMULA.y"] <- "null"
-      DB[DB[, "FORMULA.x"] != "null" & DB[, "FORMULA.y"] ==
-           "null", "FORMULA.y"] <- DB[DB[, "FORMULA.x"] !=
-                                        "null" & DB[, "FORMULA.y"] == "null", "FORMULA.x"]
-      DB[DB[, "FORMULA.y"] != "null" & DB[, "FORMULA.x"] ==
-           "null", "FORMULA.x"] <- DB[DB[, "FORMULA.y"] !=
-                                        "null" & DB[, "FORMULA.x"] == "null", "FORMULA.y"]
-      DB <- unique(DB[DB[, "FORMULA.x"] != "null" & DB[, "FORMULA.y"] !=
-                        "null", c("ID", "DEFINITION","ChEBI", "KEGG", "IUPAC", "MetaCyc",
-                                  "ChEMBL", "FORMULA.x")])
-      rm(formula)
-      message("DONE", appendLF = TRUE)
-    }
-    else {
-      message("NOT AVAILABLE FOR THIS RELEASE")
-    }
-    message("Downloading molecular weights ... ", appendLF = FALSE)
-    if ("MASS" %in% unique(formulas[, "TYPE"])) {
-      mass <- formulas[formulas[, "TYPE"] == "MASS", c("COMPOUND_ID",
-                                                       "CHEMICAL_DATA")]
-      colnames(mass) <- c("ID", "MASS")
-      DB <- merge(DB, mass, by = "ID", all.x = TRUE)
-      DB <- merge(DB, DB[, c("ChEBI", "MASS")], by = "ChEBI",
-                  all.x = TRUE)
-      DB[is.na(DB[, "MASS.x"]), "MASS.x"] <- "null"
-      DB[is.na(DB[, "MASS.y"]), "MASS.y"] <- "null"
-      DB[DB[, "MASS.x"] != "null" & DB[, "MASS.y"] == "null",
-         "MASS.y"] <- DB[DB[, "MASS.x"] != "null" & DB[,
-                                                       "MASS.y"] == "null", "MASS.x"]
-      DB[DB[, "MASS.y"] != "null" & DB[, "MASS.x"] == "null",
-         "MASS.x"] <- DB[DB[, "MASS.y"] != "null" & DB[,
-                                                       "MASS.x"] == "null", "MASS.y"]
-      DB <- unique(DB[, c("ID", "DEFINITION", "ChEBI", "KEGG", "IUPAC",
-                          "MetaCyc", "ChEMBL", "FORMULA.x", "MASS.x")])
-      rm(mass)
-      message("DONE", appendLF = TRUE)
-    }
-    else {
-      message("NOT AVAILABLE FOR THIS RELEASE")
-    }
-    message("Downloading monoisotopic molecular weights ... ",
-            appendLF = FALSE)
-    if ("MONOISOTOPIC MASS" %in% unique(formulas[, "TYPE"])) {
-      mmass <- formulas[formulas[, "TYPE"] == "MONOISOTOPIC MASS",
-                        c("COMPOUND_ID", "CHEMICAL_DATA")]
-      colnames(mmass) <- c("ID", "MONOISOTOPIC")
-      DB <- merge(DB, mmass, by = "ID", all.x = TRUE)
-      DB <- merge(DB, DB[, c("ChEBI", "MONOISOTOPIC")], by = "ChEBI",
-                  all.x = TRUE)
-      DB[is.na(DB[, "MONOISOTOPIC.x"]), "MONOISOTOPIC.x"] <- "null"
-      DB[is.na(DB[, "MONOISOTOPIC.y"]), "MONOISOTOPIC.y"] <- "null"
-      DB[DB[, "MONOISOTOPIC.x"] != "null" & DB[, "MONOISOTOPIC.y"] ==
-           "null", "MONOISOTOPIC.y"] <- DB[DB[, "MONOISOTOPIC.x"] !=
-                                             "null" & DB[, "MONOISOTOPIC.y"] == "null", "MONOISOTOPIC.x"]
-      DB[DB[, "MONOISOTOPIC.y"] != "null" & DB[, "MONOISOTOPIC.x"] ==
-           "null", "MONOISOTOPIC.x"] <- DB[DB[, "MONOISOTOPIC.y"] !=
-                                             "null" & DB[, "MONOISOTOPIC.x"] == "null", "MONOISOTOPIC.y"]
-      DB <- unique(DB[, c("ID","DEFINITION", "ChEBI", "KEGG", "IUPAC",
-                          "MetaCyc", "ChEMBL", "FORMULA.x", "MASS.x", "MONOISOTOPIC.x")])
-      rm(mmass)
-      message("DONE", appendLF = TRUE)
-    }
-    else {
-      message("NOT AVAILABLE FOR THIS RELEASE")
-    }
-    message("Downloading molecular charges ... ", appendLF = FALSE)
-    if ("CHARGE" %in% unique(formulas[, "TYPE"])) {
-      charge <- formulas[formulas[, "TYPE"] == "CHARGE", c("COMPOUND_ID",
-                                                           "CHEMICAL_DATA")]
-      colnames(charge) <- c("ID", "CHARGE")
-      DB <- merge(DB, charge, by = "ID", all.x = TRUE)
-      DB <- merge(DB, DB[, c("ChEBI", "CHARGE")], by = "ChEBI",
-                  all.x = TRUE)
-      DB[is.na(DB[, "CHARGE.x"]), "CHARGE.x"] <- "null"
-      DB[is.na(DB[, "CHARGE.y"]), "CHARGE.y"] <- "null"
-      DB[DB[, "CHARGE.x"] != "null" & DB[, "CHARGE.y"] ==
-           "null", "CHARGE.y"] <- DB[DB[, "CHARGE.x"] != "null" &
-                                       DB[, "CHARGE.y"] == "null", "CHARGE.x"]
-      DB[DB[, "CHARGE.y"] != "null" & DB[, "CHARGE.x"] ==
-           "null", "CHARGE.x"] <- DB[DB[, "CHARGE.y"] != "null" &
-                                       DB[, "CHARGE.x"] == "null", "CHARGE.y"]
-      DB <- unique(DB[, c("ID", "DEFINITION", "ChEBI", "KEGG", "IUPAC",
-                          "MetaCyc", "ChEMBL", "FORMULA.x", "MASS.x", "MONOISOTOPIC.x",
-                          "CHARGE.x")])
-      message("DONE", appendLF = TRUE)
-    }
-    else {
-      message("NOT AVAILABLE FOR THIS RELEASE")
-    }
-    DB[DB == "null"] <- NA
-
-    DB = merge(DB, structures[,-1], by.x = "ID",  by.y = "COMPOUND_ID", all.x = TRUE, incomparables = "unknown")
-
-    DB <- unique(DB[complete.cases(DB[, c("ID", "DEFINITION","ChEBI", "FORMULA.x",
-                                          "MASS.x", "MONOISOTOPIC.x", "CHARGE.x", "STRUCTURE")]), ])
-    colnames(DB) <- c("ID", "DEFINITION","ChEBI", "KEGG", "IUPAC", "MetaCyc",
-                      "ChEMBL", "FORMULA", "MASS", "MONOISOTOPIC", "CHARGE", "STRUCTURE")
-
-    if (woAssociations == TRUE) {
-      compounds <- unique(rbind(setNames(DB[, c("ChEBI", "DEFINITION","FORMULA",
-                                                "MASS", "MONOISOTOPIC", "CHARGE")], c("NAME","DEFINITION","FORMULA",
-                                                                                      "MASS", "MONOISOTOPIC", "CHARGE","STRUCTURE")), setNames(DB[,
-                                                                                                                                                  c("KEGG","DEFINITION", "FORMULA", "MASS", "MONOISOTOPIC", "CHARGE","STRUCTURE")],
-                                                                                                                                               c("NAME", "DEFINITION","FORMULA", "MASS", "MONOISOTOPIC", "CHARGE","STRUCTURE")),
-                                setNames(DB[, c("IUPAC", "DEFINITION","FORMULA", "MASS", "MONOISOTOPIC",
-                                                "CHARGE")], c("NAME", "DEFINITION","FORMULA", "MASS", "MONOISOTOPIC",
-                                                              "CHARGE")), setNames(DB[, c("MetaCyc", "DEFINITION","FORMULA",
-                                                                                          "MASS", "MONOISOTOPIC", "CHARGE","STRUCTURE")], c("NAME", "DEFINITION",
-                                                                                                                                            "FORMULA", "MASS", "MONOISOTOPIC", "CHARGE","STRUCTURE")),
-                                setNames(DB[, c("ChEMBL","DEFINITION", "FORMULA", "MASS", "MONOISOTOPIC",
-                                                "CHARGE","STRUCTURE")], c("NAME", "DEFINITION","FORMULA", "MASS", "MONOISOTOPIC",
-                                                                          "CHARGE","STRUCTURE"))))
-      compounds <- compounds[complete.cases(compounds), ]
-      compounds
-    }
-    else {
-      DB
-    }} # uses an altered version from minval package
-  db.full <- data.table::as.data.table(db.full)
-  db.formatted <- unique(db.full[, list(compoundname = ChEBI,
-                                        description = DEFINITION,
-                                        baseformula = FORMULA,
-                                        identifier = ID,
-                                        charge = gsub(CHARGE,pattern = "$\\+\\d", replacement = ""),
-                                        structure = toupper(STRUCTURE)
-  )])
+  # -- ver ---
+  url = "https://www.ebi.ac.uk/chebi/statisticsForward.do"
+  version = as.character(url %>%
+                       xml2::read_html() %>%
+                       rvest::html_nodes(xpath='//*[@id="content"]/h4'))
+  version = gsub("(.*Release)|(<.*?>)|\n", "", version)
+  version = trimws(version)
   list(db = db.formatted, version = version)
 }
 
@@ -694,7 +587,7 @@ build.CHEBI <- function(outfolder){ # WORKS
 #' @param outfolder Which folder to save temp files to?
 #' @return data table with parsed database
 #' @seealso
-#'  \code{\link[utils]{download.file}},\code{\link[utils]{untar}}
+#'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
 #'  \code{\link[data.table]{fread}}
@@ -705,7 +598,7 @@ build.CHEBI <- function(outfolder){ # WORKS
 #' @importFrom stringr str_match
 #' @importFrom data.table fread data.table
 #' @examples
-#' build.PHARMGKB(outfolder=tempdir())
+#' \dontrun{build.PHARMGKB(outfolder=tempdir())}
 build.PHARMGKB <- function(outfolder){ # WORKS
   SMILES <- `PharmGKB Accession Id` <- Name <- NULL
 
@@ -716,14 +609,14 @@ build.PHARMGKB <- function(outfolder){ # WORKS
   if(dir.exists(base.loc))(unlink(base.loc,recursive = TRUE)); dir.create(base.loc, recursive = TRUE);
   zip.file <- file.path(base.loc, "drugs.zip")
   utils::download.file(file.url, zip.file, mode = 'wb', method = "auto")
-  utils::untar(normalizePath(zip.file), exdir = normalizePath(base.loc))
+  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
   drug.db <- data.table::fread(file.path(base.loc, "drugs.tsv"), quote = "")
   drug.db <- drug.db[SMILES != ""]
 
   file.url = "https://s3.pgkb.org/data/chemicals.zip"
     zip.file <- file.path(base.loc, "chemicals.zip")
   utils::download.file(file.url, zip.file, mode = 'wb', method = "auto")
-  utils::untar(normalizePath(zip.file), exdir = normalizePath(base.loc))
+  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
   chem.db <- data.table::fread(file.path(base.loc, "chemicals.tsv"), quote = "")
   chem.db <- chem.db[SMILES != ""]
 
@@ -786,7 +679,7 @@ build.PHARMGKB <- function(outfolder){ # WORKS
 #' @importFrom stringr str_match
 #' @importFrom data.table fread data.table
 #' @examples
-#' build.FOODB(outfolder=tempdir())
+#' \dontrun{build.FOODB(outfolder=tempdir())}
 build.FOODB <- function(outfolder){ # WORKS
   # TODO: make sure that it automatically grabs the most recent CSV?
   . <- orig_health_effect_name <- compound_id <- NULL
@@ -835,7 +728,7 @@ build.FOODB <- function(outfolder){ # WORKS
 #' @importFrom WikidataQueryServiceR query_wikidata
 #' @importFrom data.table as.data.table data.table
 #' @examples
-#' build.WIKIDATA(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.WIKIDATA(outfolder=tempdir(), testMode=TRUE)}
 build.WIKIDATA <- function(outfolder, testMode=FALSE){ # WORKS
 
   date = Sys.Date()
@@ -899,97 +792,6 @@ build.WIKIDATA <- function(outfolder, testMode=FALSE){ # WORKS
 
 }
 
-#' @title Build WikiPathways
-#' @description Parses WikiPathways chemical compound database, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
-#' @param outfolder Which folder to save temp files to?
-#' @param testMode run in test mode? Only parses first ten compounds
-#' @return data table with parsed database
-#' @seealso
-#'  \code{\link[SPARQL]{SPARQL}}
-#'  \code{\link[data.table]{as.data.table}}
-#'  \code{\link[RCurl]{getURL}}
-#'  \code{\link[rvest]{html_nodes}}
-#'  \code{\link[xml2]{read_html}}
-#' @rdname build.WIKIPATHWAYS
-#' @export
-#' @importFrom SPARQL SPARQL
-#' @importFrom RCurl getURL
-#' @importFrom RSQLite dbConnect dbWriteTable dbRemoveTable dbDisconnect
-#' @importFrom data.table as.data.table
-#' @importFrom xml2 read_html
-#' @importFrom rvest html_nodes
-#' @examples
-#' build.WIKIPATHWAYS(outfolder=tempdir(), testMode=TRUE)
-# RE-ENABLE AFTER TALKING TO EGON
-build.WIKIPATHWAYS <- function(outfolder, testMode=FALSE){
-
-  . <- compoundname <- description <- NULL
-
-  chebi.loc <- file.path(outfolder, "chebi.db")
-  chebiExists = file.exists(chebi.loc)
-
-  if(!chebiExists){
-    print("Requires ChEBI. Building...")
-    build.CHEBI(outfolder)
-  }
-
-  # ---------------------------------------------------
-  chebi <- SPARQL::SPARQL(url="http://sparql.wikipathways.org/sparql",
-                          query='prefix wp: <http://vocabularies.wikipathways.org/wp#>
-                                                   prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#>
-                                                   prefix dcterms: <http://purl.org/dc/terms/>
-                                                   prefix xsd:     <http://www.w3.org/2001/XMLSchema#>
-                                                   PREFIX wdt: <http://www.wikidata.org/prop/direct/>
-
-                                                   select  ?mb
-                                                   (group_concat(distinct str(?labelLit);separator=", ") as ?label )
-                                                   ?idurl as ?csid
-                                                   (group_concat(distinct ?pwTitle;separator=", ") as ?description)
-                                                   ?pathway
-                                                   where {
-                                                   ?mb a wp:Metabolite ;
-                                                   rdfs:label ?labelLit ;
-                                                   wp:bdbChEBI ?idurl ;
-                                                   dcterms:isPartOf ?pathway .
-                                                   ?pathway a wp:Pathway ;
-                                                   dc:title ?pwTitle .
-                                                   FILTER (BOUND(?idurl))
-                                                   }
-                                                   GROUP BY ?mb ?wp ?idurl ?pathway')
-
-  chebi.ids <- gsub(chebi$results$csid, pattern = ".*:|>", replacement = "")
-  conn.chebi <- RSQLite::dbConnect(RSQLite::SQLite(), chebi.loc)
-  chebi.join.table <- data.table::data.table(identifier = chebi.ids,
-                                             description = chebi$results$description,
-                                             widentifier = chebi$results$mb,
-                                             pathway = chebi$results$pathway)
-  RSQLite::dbWriteTable(conn.chebi, "wikipathways", chebi.join.table, overwrite=TRUE)
-  db.formatted <- RSQLite::dbGetQuery(conn.chebi, "SELECT DISTINCT  b.compoundname,
-                                                               b.identifier,
-                                                               w.description,
-                                                               b.baseformula,
-                                                               b.charge,
-                                                               b.structure
-                                                               FROM base b
-                                                               JOIN wikipathways w
-                                                               ON b.identifier = w.identifier")
-
-  db.formatted$identifier <- gsub(db.formatted$identifier, pattern = "<|>", replacement = "")
-  db.formatted <- data.table::as.data.table(db.formatted)
-  db.formatted = unique(db.formatted[ , .(compoundname = paste0(unique(compoundname), collapse=", "),
-                                          description = paste0("Found in pathways: ",paste0(unique(description), collapse=", "))),
-                            by = c("structure", "identifier", "charge")])
-
-  RSQLite::dbRemoveTable(conn.chebi, "wikipathways")
-  RSQLite::dbDisconnect(conn.chebi)
-  # ---
-  page = RCurl::getURL("https://www.wikipathways.org/index.php/WikiPathways")
-  ver = stringr::str_match(page, ">([\\w| ]*?) Release<")[,2]
-
-  list(db = db.formatted,
-       version = ver)
-}
-
 #' @title Build RESPECT
 #' @description Parses RESPECT, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
@@ -1009,7 +811,7 @@ build.WIKIPATHWAYS <- function(outfolder, testMode=FALSE){
 #' @importFrom pbapply pblapply
 #' @importFrom data.table data.table rbindlist
 #' @examples
-#' build.RESPECT(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.RESPECT(outfolder=tempdir(), testMode=TRUE)}
 build.RESPECT <- function(outfolder, testMode=FALSE){ # WORKS
 
   baseformula <- NULL
@@ -1086,7 +888,7 @@ build.RESPECT <- function(outfolder, testMode=FALSE){ # WORKS
 #' @importFrom DBI dbDisconnect
 #' @importFrom gsubfn fn
 #' @examples
-#' build.MACONDA(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.MACONDA(outfolder=tempdir(), testMode=TRUE)}
 build.MACONDA <- function(outfolder, testMode=FALSE, conn, apikey){ # NEEDS SPECIAL FUNCTIONALITY
 
   Name <- NULL
@@ -1290,7 +1092,7 @@ build.MACONDA <- function(outfolder, testMode=FALSE, conn, apikey){ # NEEDS SPEC
 #' @importFrom stringr str_match
 #' @importFrom data.table fread data.table
 #' @examples
-#' build.T3DB(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.T3DB(outfolder=tempdir(), testMode=TRUE)}
 build.T3DB <- function(outfolder, testMode=FALSE){ # WORKS
   # t3db
   file.url <- "http://www.t3db.ca/system/downloads/current/toxins.csv.zip"
@@ -1405,7 +1207,7 @@ build.T3DB <- function(outfolder, testMode=FALSE){ # WORKS
 #' @importFrom jsonlite read_json
 #' @importFrom data.table data.table
 #' @examples
-#' build.BLOODEXPOSOME(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.BLOODEXPOSOME(outfolder=tempdir(), testMode=TRUE)}
 build.BLOODEXPOSOME <- function(outfolder, testMode=FALSE){ # WORKS
   # ssl error was fixed by http instead of https..
   file.url = "http://exposome1.fiehnlab.ucdavis.edu/download/BloodExpsomeDatabase_version_1.0.xlsx"
@@ -1470,7 +1272,7 @@ build.BLOODEXPOSOME <- function(outfolder, testMode=FALSE){ # WORKS
 #' @importFrom pbapply pbsapply
 #' @importFrom R.utils decapitalize
 #' @examples
-#' build.EXPOSOMEEXPLORER(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.EXPOSOMEEXPLORER(outfolder=tempdir(), testMode=TRUE)}
 build.EXPOSOMEEXPLORER <- function(outfolder, testMode=FALSE){ # WORKS
   file.url <- "http://exposome-explorer.iarc.fr/system/downloads/current/biomarkers.csv.zip"
 
@@ -1557,7 +1359,7 @@ build.EXPOSOMEEXPLORER <- function(outfolder, testMode=FALSE){ # WORKS
 #' @importFrom pbapply pblapply
 #' @importFrom data.table fread rbindlist data.table
 #' @examples
-#' build.SMPDB(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.SMPDB(outfolder=tempdir(), testMode=TRUE)}
 build.SMPDB <- function(outfolder, testMode=FALSE){ # OK I THINK
 
   . <- description <- compoundname <- baseformula <- identifier <- NULL
@@ -1625,7 +1427,7 @@ build.SMPDB <- function(outfolder, testMode=FALSE){ # OK I THINK
 #' @importFrom data.table data.table rbindlist
 #' @importFrom rcdk load.molecules get.smiles get.total.formal.charge
 #' @examples
-#' build.KEGG(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.KEGG(outfolder=tempdir(), testMode=TRUE)}
 build.KEGG <- function(outfolder, testMode=FALSE){ # WORKS
   batches <- split(0:2300, ceiling(seq_along(0:2300)/100))
   cpds <- pbapply::pblapply(batches, FUN=function(batch){
@@ -1899,7 +1701,7 @@ build.DRUGBANK <- function(outfolder){  # WORKS
 #' @importFrom pbapply pblapply pbsapply
 #' @importFrom stringi stri_detect_fixed
 #' @examples
-#' build.LIPIDMAPS(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.LIPIDMAPS(outfolder=tempdir(), testMode=TRUE)}
 build.LIPIDMAPS <- function(outfolder, testMode=FALSE, apikey){ # WORKS (description needs some tweaking)
 
   file.url = "https://www.lipidmaps.org/files/?file=LMSD_20191002&ext=sdf.zip"
@@ -1921,9 +1723,7 @@ build.LIPIDMAPS <- function(outfolder, testMode=FALSE, apikey){ # WORKS (descrip
 
   desc <- function(sdfset){
     mat <- NULL
-    #last_sdf <- sdfset
     db <- data.table::as.data.table(ChemmineR::datablock2ma(datablocklist=ChemmineR::datablock(sdfset)))
-    #last_db <- db
     mat = data.table::data.table(
       identifier = as.character(db$LM_ID),
       compoundname = sapply(1:nrow(db), function(i) if(!is.empty(db$NAME[i])) db$NAME[i] else db$SYSTEMATIC_NAME[i]),
@@ -2011,7 +1811,7 @@ build.LIPIDMAPS <- function(outfolder, testMode=FALSE, apikey){ # WORKS (descrip
 #' @importFrom data.table data.table rbindlist
 #' @importFrom jsonlite read_json
 #' @examples
-#' build.METABOLIGHTS(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.METABOLIGHTS(outfolder=tempdir(), testMode=TRUE)}
 build.METABOLIGHTS <- function(outfolder, testMode=FALSE){
 
   identifier <- study <- NULL
@@ -2119,7 +1919,7 @@ build.METABOLIGHTS <- function(outfolder, testMode=FALSE){
 #' @importFrom reshape2 dcast
 #' @importFrom Hmisc capitalize
 #' @examples
-#' build.DIMEDB(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.DIMEDB(outfolder=tempdir(), testMode=TRUE)}
 build.DIMEDB <- function(outfolder, testMode=FALSE){ # WORKS
   files = c(#"structures.zip",
     "dimedb_pathways.zip",
@@ -2185,7 +1985,7 @@ build.DIMEDB <- function(outfolder, testMode=FALSE){ # WORKS
 #' @importFrom jsonlite fromJSON
 #' @importFrom data.table rbindlist data.table
 #' @examples
-#' build.VMH(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.VMH(outfolder=tempdir(), testMode=TRUE)}
 build.VMH <- function(outfolder, testMode=FALSE){ # WORKS
   api_url <- "https://vmh.uni.lu/_api/metabolites/"
 
@@ -2280,7 +2080,7 @@ build.VMH <- function(outfolder, testMode=FALSE){ # WORKS
 #' @importFrom openxlsx read.xlsx
 #' @importFrom data.table fread data.table
 #' @examples
-#' build.PHENOLEXPLORER(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.PHENOLEXPLORER(outfolder=tempdir(), testMode=TRUE)}
 build.PHENOLEXPLORER <- function(outfolder, testMode=FALSE){ # WORKS
 
   . <- description <- NULL
@@ -2372,7 +2172,7 @@ build.PHENOLEXPLORER <- function(outfolder, testMode=FALSE){ # WORKS
 #' @importFrom pbapply pblapply
 #' @importFrom data.table data.table rbindlist
 #' @examples
-#' build.MASSBANK(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.MASSBANK(outfolder=tempdir(), testMode=TRUE)}
 build.MASSBANK <- function(outfolder, testMode=FALSE){ # WORKS
 
   baseformula <- NULL
@@ -2458,7 +2258,7 @@ build.MASSBANK <- function(outfolder, testMode=FALSE){ # WORKS
 #' @importFrom base file
 #' @importFrom XML xmlValue xmlEventParse
 #' @examples
-#' build.BMDB(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.BMDB(outfolder=tempdir(), testMode=TRUE)}
 build.BMDB <- function(outfolder, testMode = FALSE){
 
   oldpar = options()
@@ -2655,7 +2455,7 @@ build.BMDB <- function(outfolder, testMode = FALSE){
 #' @importFrom pbapply pblapply
 #' @importFrom data.table data.table rbindlist
 #' @examples
-#' build.RMDB(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.RMDB(outfolder=tempdir(), testMode=TRUE)}
 build.RMDB <- function(outfolder, testMode=FALSE){
   file.url = "http://www.rumendb.ca/public/downloads/current/metabocards.gz"
   base.loc <- file.path(outfolder, "rmdb_source")
@@ -2712,7 +2512,7 @@ build.RMDB <- function(outfolder, testMode=FALSE){
 #' @importFrom RJSONIO fromJSON
 #' @importFrom data.table rbindlist data.table
 #' @examples
-#' build.ECMDB(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.ECMDB(outfolder=tempdir(), testMode=TRUE)}
 build.ECMDB <- function(outfolder, testMode=FALSE){
 
   theurl = "http://ecmdb.ca/downloads"
@@ -2767,7 +2567,7 @@ build.ECMDB <- function(outfolder, testMode=FALSE){
 #' @importFrom RCurl getURL
 #' @importFrom stringr str_match
 #' @examples
-#' build.LMDB(outfolder=tempdir())
+#' \dontrun{build.LMDB(outfolder=tempdir())}
 build.LMDB <- function(outfolder){
 
   lmdb <- NULL
@@ -2806,7 +2606,7 @@ build.LMDB <- function(outfolder){
 #' @importFrom RCurl getURL
 #' @importFrom stringr str_match
 #' @examples
-#' build.YMDB(outfolder=tempdir())
+#' \dontrun{build.YMDB(outfolder=tempdir())}
 build.YMDB <- function(outfolder){
   file.url = "http://www.ymdb.ca/system/downloads/current/ymdb.json.zip"
   base.loc <- file.path(outfolder, "ymdb_source")
@@ -2900,7 +2700,7 @@ build.YMDB <- function(outfolder){
 #' @importFrom RCurl getURL
 #' @importFrom stringr str_match
 #' @examples
-#' build.PAMDB(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.PAMDB(outfolder=tempdir(), testMode=TRUE)}
 build.PAMDB <- function(outfolder, testMode=FALSE){
   file.url = "http://pseudomonas.umaryland.edu/PaDl/PaMet.xlsx"
   base.loc <- file.path(outfolder, "pamdb_source")
@@ -2941,7 +2741,7 @@ build.PAMDB <- function(outfolder, testMode=FALSE){
 #' @importFrom RCurl getURL
 #' @importFrom stringr str_match
 #' @examples
-#' build.mVOC(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.mVOC(outfolder=tempdir(), testMode=TRUE)}
 build.mVOC <- function(outfolder, testMode=FALSE){
 
   categories = c("\\(", "[",	"$",	"1",	"2",	"3",	"4",	"5",	"6",	"7",	"8",	"9",
@@ -3016,7 +2816,7 @@ build.mVOC <- function(outfolder, testMode=FALSE){
 #' @importFrom utils download.file
 #' @importFrom data.table fread
 #' @examples
-#' build.NANPDB(outfolder=tempdir(), testMode=TRUE)
+#' \dontrun{build.NANPDB(outfolder=tempdir(), testMode=TRUE)}
 build.NANPDB <- function(outfolder, testMode = FALSE){
 
   . <- V2 <- V1 <- V3 <- NULL
@@ -3076,7 +2876,7 @@ build.NANPDB <- function(outfolder, testMode = FALSE){
 #' @importFrom data.table as.data.table
 #' @importFrom readxl read_excel
 #' @examples
-#' build.STOFF(outfolder=tempdir())
+#' \dontrun{build.STOFF(outfolder=tempdir())}
 build.STOFF <- function(outfolder){
 
   . <- Name <- Formula <- SMILES <- `Additional Names` <- Index <- compoundname <- NULL
@@ -3118,7 +2918,7 @@ build.STOFF <- function(outfolder){
 #' @importFrom xml2 read_html
 #' @importFrom data.table as.data.table fread
 #' @examples
-#' build.REACTOME(outfolder=tempdir())
+#' \dontrun{build.REACTOME(outfolder=tempdir())}
 build.REACTOME <- function(outfolder){
 
   . <- description <- organism <- identifier <- NULL
@@ -3128,8 +2928,12 @@ build.REACTOME <- function(outfolder){
 
   if(!chebiExists){
     print("Requires ChEBI. Building...")
-    build.CHEBI(outfolder)
+    buildBaseDB(outfolder, "chebi")
   }
+
+  chebi = data.table::as.data.table(showAllBase(outfolder, "chebi"))
+
+  chebi$identifier <- as.numeric(chebi$identifier)
 
   base.db = data.table::fread(theurl)
   colnames(base.db) <- c("identifier", "pathway_id", "pathway_url", "description", "annotation_type", "organism")
@@ -3142,8 +2946,8 @@ build.REACTOME <- function(outfolder){
   base.db = unique(base.db[,c("identifier",
                               "description")])
   base.db$identifier = as.character(base.db$identifier)
-  chebi = data.table::as.data.table(showAllBase(outfolder, "chebi"))
   chebi = chebi[,-"description",with=F]
+  base.db$identifier <- as.numeric(base.db$identifier)
   db.formatted = merge(chebi, base.db)
   colnames(db.formatted)[colnames(db.formatted) == "formula"] <- "baseformula"
   db.formatted <- db.formatted[,c("identifier","compoundname",

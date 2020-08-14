@@ -9,12 +9,16 @@ Description: Provides parsing functionality for over 30 metabolomics databases, 
     Furthermore, formulas can be predicted for a given m/z, and these can be matched to ChemSpider or PubChem for further annotation.
     Current databases available: HMDB, ChEBI, LMDB, RMDB, BMDB, MCDB, ECMDB, Wikidata, mVOC, VMH, T3DB, Exposome Explorer, FooDB, MetaCyc (requires account), DrugBank (requires account), ReSPECT, MaConDa, Blood Exposome DB, KEGG, SMPDB, LIPID MAPS, MetaboLights, DimeDB, Phenol Explorer, MassBank, YMDB, PAMDB, NANPDB and STOFF. 
     Featured in the 'MetaboShiny' package (Wolthuis, J. (2019) <doi:10.1101/734236>).
-Depends: R (>= 2.10)
 License: Apache License 2.0
 Encoding: UTF-8
 LazyData: true
+Depends:
+  R (>= 2.10),
+  rvest,
+  RCurl,
+  XML,
+  SPARQL
 Imports:
-  SPARQL,
   methods,
   pacman,
   rcdk,
@@ -27,8 +31,6 @@ Imports:
   DBI,
   gsubfn,
   utils,
-  RCurl,
-  XML,
   base,
   stringr,
   WikidataQueryServiceR,
@@ -39,7 +41,6 @@ Imports:
   KEGGREST,
   zip,
   ChemmineR,
-  rvest,
   xml2,
   stringi,
   reshape2,

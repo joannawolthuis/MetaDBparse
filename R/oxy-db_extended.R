@@ -46,6 +46,10 @@ removeFailedStructures <- function(outfolder,
 #'  \code{\link[rcdk]{matches}},\code{\link[rcdk]{get.total.formal.charge}}
 #' @rdname countAdductRuleMatches
 #' @export
+#' @examples
+#'  iatom = smiles.to.iatom(c('OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O'))
+#'  data(adduct_rules)
+#'  addScore <- countAdductRuleMatches(iatom, adduct_rules = adduct_rules)
 #' @importFrom rcdk matches get.total.formal.charge
 #' @importFrom data.table data.table
 countAdductRuleMatches <- function(iatoms, adduct_rules){
@@ -79,17 +83,23 @@ countAdductRuleMatches <- function(iatoms, adduct_rules){
 #' @title Check for combined adduct rules
 #' @description Sometimes multiple rules apply - this function checks if they all apply as noted in the rule table.
 #' @param adduct_rule_scores Scores from countAdductRuleMatches.
-#' @param adduct_table Adduct tablle
+#' @param adduct_table Adduct table
 #' @return Table with TRUE/FALSE for each structure and adduct
 #' @seealso
 #'  \code{\link[data.table]{as.data.table}}
 #' @rdname checkAdductRule
 #' @export
+#' @examples
+#'  iatom = smiles.to.iatom(c('OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O'))
+#'  data(adduct_rules)
+#'  data(adducts)
+#'  addScore <- countAdductRuleMatches(iatom, adduct_rules = adduct_rules)
+#'  checkAdductRule(addScore, adduct_table = adducts)
 #' @importFrom data.table as.data.table data.table
 checkAdductRule <- function(adduct_rule_scores,
                             adduct_table){
 
-  ..left_val <- NULL
+  left_val <- NULL
 
   adduct.qualify.cols = lapply(1:nrow(adduct_table), function(i){
     row <- adduct_table[i,]
@@ -105,14 +115,15 @@ checkAdductRule <- function(adduct_rule_scores,
       leftright = strsplit(rule, ">|<|=")[[1]]
       left_val = leftright[1]
       right = as.numeric(leftright[2])
-      left = as.numeric(adduct_rule_scores[,..left_val][[1]])
+      left = as.numeric(adduct_rule_scores[,left_val,
+                                           with=FALSE][[1]])
       qualifies = switch(middle,
                          below = left < right,
                          equals = left == right,
                          above = left > right)
+      data.table::as.data.table(qualifies)
     }))
-
-    qualified.rule = apply(qualified_per_rule, MARGIN = 1, all)
+    qualified.rule = apply(qualified_per_rule, MARGIN=1, FUN=all)
     add.row = data.table::data.table(qualified.rule)
     colnames(add.row) <- row$Name
     add.row
@@ -134,6 +145,12 @@ checkAdductRule <- function(adduct_rule_scores,
 #'  \code{\link[enviPat]{check_chemform}},\code{\link[enviPat]{mergeform}},\code{\link[enviPat]{check_ded}},\code{\link[enviPat]{subform}},\code{\link[enviPat]{multiform}}
 #' @rdname doAdduct
 #' @export
+#' @examples
+#'  data(adduct_rules)
+#'  data(adducts)
+#'  structure = 'OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O'
+#'  doAdduct(structure = structure, formula="C6H12O6", charge=0,
+#'  adduct_table=adducts, query_adduct="[M+H]1+")
 #' @importFrom enviPat check_chemform mergeform check_ded subform multiform
 #' @importFrom data.table data.table
 doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
@@ -230,13 +247,14 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct){
 #' @param formula Molecular formula
 #' @param charge Final charge
 #' @return Table with isotopes of this molecular formula
+#' @examples
+#'  doIsotopes(formula="C6H12O6", charge=0)
 #' @seealso
 #'  \code{\link[enviPat]{isopattern}}
 #' @rdname doIsotopes
 #' @export
 #' @importFrom enviPat isopattern
 #' @importFrom data.table data.table
-#'
 doIsotopes <- function(formula, charge){
   isotables <- enviPat::isopattern(
     isotopes,
@@ -295,6 +313,14 @@ doIsotopes <- function(formula, charge){
 #'  \code{\link[enviPat]{check_chemform}}
 #' @rdname buildExtDB
 #' @export
+#' @examples
+#'  \dontrun{myFolder = tempdir()}
+#'  \dontrun{buildBaseDB(outfolder = myFolder, "lmdb")}
+#'  \dontrun{file.remove(file.path(myFolder, "extended.db"))}
+#'  \dontrun{data(adducts)}
+#'  \dontrun{data(adduct_rules)}
+#'  \dontrun{buildExtDB(outfolder = myFolder, base.dbname = "lmdb",
+#'  silent=FALSE, adduct_table = adducts, adduct_rules = adduct_rules)}
 #' @importFrom RSQLite dbConnect SQLite dbExecute dbExistsTable dbGetQuery dbDisconnect dbWriteTable dbReadTable
 #' @importFrom gsubfn fn
 #' @importFrom data.table as.data.table data.table rbindlist fwrite fread

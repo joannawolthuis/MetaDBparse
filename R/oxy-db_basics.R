@@ -125,7 +125,7 @@ sdfStream.joanna <- function (input, output, append = FALSE, fct, Nlines = 10000
       indexDF <- data.frame(SDFlineStart = c(offset +
                                                1, index[-length(index)] + 1), SDFlineEnd = index)
       offset <- indexDF[length(indexDF[, 2]), 2]
-      sdfset <- read.SDFset(read.SDFstr(complete))
+      sdfset <- ChemmineR::read.SDFset(ChemmineR::read.SDFstr(complete),skipErrors = T)
 
       if (length(indexDF[, 1]) == 1) {
         suppressWarnings(sdfset <- c(sdfset, sdfset))
