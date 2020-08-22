@@ -9,13 +9,13 @@
 #' @examples
 #'  \dontrun{jarloc = downloadBT(outfolder = tempdir())}
 #' @importFrom utils download.file unzip
-downloadBT <- function(outfolder){
-  file.url = "https://bitbucket.org/djoumbou/biotransformerjar/get/f47aa4e3c0da.zip"
+downloadBT <- function(outfolder) {
+  file.url <- "https://bitbucket.org/djoumbou/biotransformerjar/get/f47aa4e3c0da.zip"
   zip.file <- file.path(outfolder, "biotransformer.zip")
-  utils::download.file(file.url, zip.file,mode = "wb",cacheOK = TRUE, method = "auto")
+  utils::download.file(file.url, zip.file, mode = "wb", cacheOK = TRUE, method = "auto")
   utils::unzip(zip.file, exdir = outfolder)
-  newfolder = file.path(outfolder, "djoumbou-biotransformerjar-f47aa4e3c0da")
-  jarloc = list.files(newfolder, pattern="\\.jar", full.names = T)
+  newfolder <- file.path(outfolder, "djoumbou-biotransformerjar-f47aa4e3c0da")
+  jarloc <- list.files(newfolder, pattern = "\\.jar", full.names = TRUE)
   system(gsubfn::fn$paste("chmod -x $jarloc"))
   return(jarloc)
 }
@@ -41,32 +41,27 @@ downloadBT <- function(outfolder){
 #'      opts = "cyp450:2; phaseII:1")}
 #' @importFrom data.table fread rbindlist
 #' @importFrom pbapply pblapply
-doBT <- function(smis = c("CCNC1=NC(=NC(=N1)Cl)NC(C)C"),
-                 jarloc,
-                 opts="cyp450:2; phaseII:1",
-                 cl = 0,
-                 help=F){
-  #buildBaseDB(outfolder = tempdir(), "phenolexplorer", test=T, doBT=TRUE, btLoc="/Users/jwolthuis/Downloads/biotransformer/biotransformer-1.1.5.jar")
-  if(help == T){
+doBT <- function(smis = c("CCNC1=NC(=NC(=N1)Cl)NC(C)C"), jarloc, opts = "cyp450:2; phaseII:1", cl = 0, help = FALSE) {
+  if (help == TRUE) {
     print("For opts, please specify the type of description: Type of Biotransformer - EC-based (ecbased), CYP450 (cyp450), Phase II (phaseII), Human gut microbial (hgut), human super transformer* (superbio, or allHuman), Environmental microbial (envimicro).")
-  }else{
-    oldDir = getwd()
-    if(getwd() != dirname(jarloc)) setwd(dirname(jarloc))
-    btRows = pbapply::pblapply(smis, cl = cl, function(smi){
-      mets = data.table::data.table()
+  }
+  else {
+    oldDir <- getwd()
+    if (getwd() != dirname(jarloc)) {
+      setwd(dirname(jarloc))
+    }
+    btRows <- pbapply::pblapply(smis, cl = cl, function(smi) {
+      mets <- data.table::data.table()
       try({
-        smifile=tempfile(fileext = ".csv")
-        cmd = gsubfn::fn$paste('java -jar $jarloc -ismi \"$smi\" -ocsv $smifile -k pred -q \"$opts\"')
-        system(cmd, intern = T)
-        mets = data.table::fread(smifile)
-        mets$structure = c(smi)
+        smifile <- tempfile(fileext = ".csv")
+        cmd <- gsubfn::fn$paste("java -jar $jarloc -ismi \"$smi\" -ocsv $smifile -k pred -q \"$opts\"")
+        system(cmd, intern = TRUE)
+        mets <- data.table::fread(smifile)
+        mets$structure <- c(smi)
       })
       mets
     })
     setwd(oldDir)
-    data.table::rbindlist(btRows,
-                          fill = T,
-                          use.names = T)
+    data.table::rbindlist(btRows, fill = TRUE, use.names = TRUE)
   }
 }
-

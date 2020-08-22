@@ -20,7 +20,6 @@ openBaseDB <- function(outfolder, dbname){
                                                                     identifier text,
                                                                     charge text,
                                                                     structure text)")
-  #DBI::dbDisconnect(conn)
   conn
 }
 
@@ -65,9 +64,7 @@ writeDB <- function(conn, table, tblname){
 #' @return Nothing, writes csv version of given SDF files to disk
 #' @rdname sdfStream.joanna
 #' @export
-sdfStream.joanna <- function (input, output, append = FALSE, fct, Nlines = 10000,
-                              startline = 1, restartNlines = 10000, silent = FALSE, ...)
-{
+sdfStream.joanna <- function(input, output, append = FALSE, fct, Nlines = 10000, startline = 1, restartNlines = 10000, silent = FALSE, ...) {
   stop <- FALSE
   f <- file(input, "r")
   n <- Nlines
@@ -75,15 +72,12 @@ sdfStream.joanna <- function (input, output, append = FALSE, fct, Nlines = 10000
   if (startline != 1) {
     fmap <- file(input, "r")
     shiftback <- 2
-    chunkmap <- scan(fmap, skip = startline - shiftback,
-                     nlines = restartNlines, what = "a", blank.lines.skip = FALSE,
-                     quiet = TRUE, sep = "\n")
-    startline <- startline + (which(grepl("^\\${4,4}", chunkmap,
-                                          perl = TRUE))[1] + 1 - shiftback)
-    if (is.na(startline))
+    chunkmap <- scan(fmap, skip = startline - shiftback, nlines = restartNlines, what = "a", blank.lines.skip = FALSE, quiet = TRUE, sep = "\n")
+    startline <- startline + (which(grepl("^\\${4,4}", chunkmap, perl = TRUE))[1] + 1 - shiftback)
+    if (is.na(startline)) {
       stop("Invalid value assigned to startline.")
-    dummy <- scan(f, skip = startline - 2, nlines = 1, what = "a",
-                  blank.lines.skip = FALSE, quiet = TRUE, sep = "\n")
+    }
+    dummy <- scan(f, skip = startline - 2, nlines = 1, what = "a", blank.lines.skip = FALSE, quiet = TRUE, sep = "\n")
     close(fmap)
     offset <- startline - 1
   }
@@ -97,8 +91,7 @@ sdfStream.joanna <- function (input, output, append = FALSE, fct, Nlines = 10000
       if (length(partial) > 0) {
         chunk <- c(partial, chunk)
       }
-      inner <- sum(grepl("^\\${4,4}", chunk, perl = TRUE)) <
-        2
+      inner <- sum(grepl("^\\${4,4}", chunk, perl = TRUE)) < 2
       while (inner) {
         chunklength <- length(chunk)
         chunk <- c(chunk, readLines(f, n = n))
@@ -106,14 +99,12 @@ sdfStream.joanna <- function (input, output, append = FALSE, fct, Nlines = 10000
           inner <- FALSE
         }
         else {
-          inner <- sum(grepl("^\\${4,4}", chunk, perl = TRUE)) <
-            2
+          inner <- sum(grepl("^\\${4,4}", chunk, perl = TRUE)) < 2
         }
       }
       y <- regexpr("^\\${4,4}", chunk, perl = TRUE)
       index <- which(y != -1)
-      indexDF <- data.frame(start = c(1, index[-length(index)] +
-                                        1), end = index)
+      indexDF <- data.frame(start = c(1, index[-length(index)] + 1), end = index)
       complete <- chunk[1:index[length(index)]]
       if ((index[length(index)] + 1) <= length(chunk)) {
         partial <- chunk[(index[length(index)] + 1):length(chunk)]
@@ -122,30 +113,25 @@ sdfStream.joanna <- function (input, output, append = FALSE, fct, Nlines = 10000
         partial <- NULL
       }
       index <- index + offset
-      indexDF <- data.frame(SDFlineStart = c(offset +
-                                               1, index[-length(index)] + 1), SDFlineEnd = index)
+      indexDF <- data.frame(SDFlineStart = c(offset + 1, index[-length(index)] + 1), SDFlineEnd = index)
       offset <- indexDF[length(indexDF[, 2]), 2]
-      sdfset <- ChemmineR::read.SDFset(ChemmineR::read.SDFstr(complete),skipErrors = T)
-
+      sdfset <- ChemmineR::read.SDFset(ChemmineR::read.SDFstr(complete), skipErrors = TRUE)
       if (length(indexDF[, 1]) == 1) {
         suppressWarnings(sdfset <- c(sdfset, sdfset))
         resultMA <- fct(sdfset, ...)
-              }
+      }
       else {
         resultMA <- fct(sdfset, ...)
-              }
-
+      }
       if (silent == FALSE) {
         print(rownames(resultMA))
       }
       if (counter == 1 & append != TRUE) {
         unlink(output)
-        write.table(resultMA, output, quote = FALSE,
-                    col.names = NA, sep = "\t")
+        write.table(resultMA, output, quote = FALSE, col.names = NA, sep = "\t")
       }
       else {
-        write.table(resultMA, output, quote = FALSE,
-                    append = TRUE, col.names = FALSE, sep = "\t")
+        write.table(resultMA, output, quote = FALSE, append = TRUE, col.names = FALSE, sep = "\t")
       }
     }
     if (length(chunk) == 0) {
@@ -163,15 +149,18 @@ sdfStream.joanna <- function (input, output, append = FALSE, fct, Nlines = 10000
 #'  is.empty(NA)
 #' @rdname is.empty
 #' @export
-is.empty <- function(item){
-  if(is.null(item)){
-      return(TRUE)
-    }else if(is.na(item)){
-      return(TRUE)
-    }else if(gsub(item, pattern = " ", replacement="") == ""){
-        return(TRUE)
-    }else{
-      return(FALSE)
-    }
+is.empty <- function(item) {
+  if (is.null(item)) {
+    return(TRUE)
   }
+  else if (is.na(item)) {
+    return(TRUE)
+  }
+  else if (gsub(item, pattern = " ", replacement = "") == "") {
+    return(TRUE)
+  }
+  else {
+    return(FALSE)
+  }
+}
 
