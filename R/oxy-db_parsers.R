@@ -514,12 +514,11 @@ build.FOODB <- function(outfolder) {
   zip.file <- file.path(base.loc, "foodb.tar.gz")
   utils::download.file(file.url, zip.file, mode = "wb", method = "auto")
   utils::untar(normalizePath(zip.file), exdir = normalizePath(base.loc))
-  theurl <- RCurl::getURL("https://foodb.ca/downloads", .opts = list(ssl.verifypeer = FALSE))
-  version <- stringr::str_match(theurl, pattern = "FooDB Version <strong>(...)<")[, 2]
-  date <- stringr::str_match(theurl, pattern = "FooDB CSV file<\\/td><td>(.{3,40})<\\/td>")[, 2]
-  date <- as.Date(date, format = "%B%e%Y")
-  subdate <- gsub(date, pattern = "-", replacement = "_")
-  base.table <- data.table::fread(file = file.path(base.loc, paste0("foodb_", subdate, "_csv"), "Compound.csv"))
+  thedir = list.files(base.loc, pattern="_")
+  date <- stringr::str_match(thedir, "\\d+_\\d+_\\d+")[1,1]
+  date <- as.Date(date, format = "%Y_%m_%d")
+  version <- format(date, format="%b %d %Y")
+  base.table <- data.table::fread(file = file.path(base.loc, thedir, "Compound.csv"))
   health <- data.table::fread(file = file.path(base.loc, paste0("foodb_", subdate, "_csv"), "CompoundsHealthEffect.csv"))
   health_summ <- health[, .(health_effect = list(orig_health_effect_name)), by = compound_id]
   base.merged <- merge(base.table, health_summ, by.x = "id", by.y = "compound_id", all.x = TRUE)

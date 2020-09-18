@@ -41,14 +41,20 @@ downloadBT <- function(outfolder) {
 #'      opts = "cyp450:2; phaseII:1")}
 #' @importFrom data.table fread rbindlist
 #' @importFrom pbapply pblapply
-doBT <- function(smis = c("CCNC1=NC(=NC(=N1)Cl)NC(C)C"), jarloc, opts = "cyp450:2; phaseII:1", cl = 0, help = FALSE) {
+doBT <- function(smis = c("CCNC1=NC(=NC(=N1)Cl)NC(C)C"),
+                 jarloc,
+                 opts = "cyp450:2; phaseII:1",
+                 cl = 0,
+                 help = FALSE){
   if (help == TRUE) {
     print("For opts, please specify the type of description: Type of Biotransformer - EC-based (ecbased), CYP450 (cyp450), Phase II (phaseII), Human gut microbial (hgut), human super transformer* (superbio, or allHuman), Environmental microbial (envimicro).")
-  }
-  else {
+  } else {
     oldDir <- getwd()
-    if (getwd() != dirname(jarloc)) {
+    if(getwd() != dirname(jarloc)){
       setwd(dirname(jarloc))
+      on.exit({
+        setwd(oldDir)
+      })
     }
     btRows <- pbapply::pblapply(smis, cl = cl, function(smi) {
       mets <- data.table::data.table()
@@ -61,7 +67,6 @@ doBT <- function(smis = c("CCNC1=NC(=NC(=N1)Cl)NC(C)C"), jarloc, opts = "cyp450:
       })
       mets
     })
-    setwd(oldDir)
     data.table::rbindlist(btRows, fill = TRUE, use.names = TRUE)
   }
 }

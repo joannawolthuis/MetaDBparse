@@ -1,4 +1,4 @@
-#' @title Weights of all isotopes of all elemnts used
+#' @title Weights of all isotopes of all elements used
 #' @description Sourced from 'enviPat' package
 "isotopes"
 
