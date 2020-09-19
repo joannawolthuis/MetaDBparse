@@ -515,14 +515,15 @@ build.FOODB <- function(outfolder) {
   utils::download.file(file.url, zip.file, mode = "wb", method = "auto")
   utils::untar(normalizePath(zip.file), exdir = normalizePath(base.loc))
   thedir = list.files(base.loc, pattern="_")
-  date <- stringr::str_match(thedir, "\\d+_\\d+_\\d+")[1,1]
-  date <- as.Date(date, format = "%Y_%m_%d")
+  subdate <- stringr::str_match(thedir, "\\d+_\\d+_\\d+")[1,1]
+  date <- as.Date(subdate, format = "%Y_%m_%d")
   version <- format(date, format="%b %d %Y")
   base.table <- data.table::fread(file = file.path(base.loc, thedir, "Compound.csv"))
-  health <- data.table::fread(file = file.path(base.loc, paste0("foodb_", subdate, "_csv"), "CompoundsHealthEffect.csv"))
+  health <- data.table::fread(file = file.path(base.loc, thedir, "CompoundsHealthEffect.csv"))
   health_summ <- health[, .(health_effect = list(orig_health_effect_name)), by = compound_id]
   base.merged <- merge(base.table, health_summ, by.x = "id", by.y = "compound_id", all.x = TRUE)
-  db.formatted <- data.table::data.table(compoundname = base.merged$name, description = paste0(base.table$annotation_quality, " ASSOCIATED HEALTH EFFECTS:", base.merged$health_effect), baseformula = c(NA), identifier = base.merged$public_id, charge = c(0), structure = base.merged$cas_number)
+  db.formatted <- data.table::data.table(compoundname = base.merged$name,
+                                         description = paste0(base.table$annotation_quality, " ASSOCIATED HEALTH EFFECTS:", base.merged$health_effect), baseformula = c(NA), identifier = base.merged$public_id, charge = c(0), structure = base.merged$cas_number)
   db.formatted$description <- gsub("ASSOCIATED HEALTH EFFECTS:NULL", "", db.formatted$description)
   db.formatted <- unique(db.formatted)
   list(db = db.formatted, version = version)
