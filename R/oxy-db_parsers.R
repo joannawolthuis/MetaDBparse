@@ -515,8 +515,8 @@ build.FOODB <- function(outfolder) {
   utils::download.file(file.url, zip.file, mode = "wb", method = "auto")
   utils::untar(normalizePath(zip.file), exdir = normalizePath(base.loc))
   thedir = list.files(base.loc, pattern="_")
-  subdate <- stringr::str_match(thedir, "\\d+_\\d+_\\d+")[1,1]
-  date <- as.Date(subdate, format = "%Y_%m_%d")
+  date <- stringr::str_match(thedir, "\\d+_\\d+_\\d+")[1,1]
+  date <- as.Date(date, format = "%Y_%m_%d")
   version <- format(date, format="%b %d %Y")
   base.table <- data.table::fread(file = file.path(base.loc, thedir, "Compound.csv"))
   health <- data.table::fread(file = file.path(base.loc, thedir, "CompoundsHealthEffect.csv"))
@@ -825,13 +825,13 @@ build.T3DB <- function(outfolder, testMode = FALSE) {
 #' @return data table with parsed database
 #' @seealso
 #'  \code{\link[utils]{download.file}}
-#'  \code{\link[openxlsx]{read.xlsx}}
+#'  \code{\link[readxl]{read_xlsx}}
 #'  \code{\link[pbapply]{pbapply}}
 #'  \code{\link[jsonlite]{read_json}}
 #' @rdname build.BLOODEXPOSOME
 #' @export
 #' @importFrom utils download.file
-#' @importFrom openxlsx read.xlsx
+#' @importFrom readxl read_xlsx
 #' @importFrom pbapply pbsapply
 #' @importFrom jsonlite read_json
 #' @importFrom data.table data.table
@@ -847,7 +847,8 @@ build.BLOODEXPOSOME <- function(outfolder, testMode = FALSE) {
   utils::download.file(file.url, excel.file, mode = "wb", method = "auto")
   version <- "1.0"
   date <- Sys.Date()
-  db.full <- openxlsx::read.xlsx(excel.file, sheet = 1, colNames = TRUE, startRow = 3)
+  db.full <- readxl::read_xlsx(excel.file, sheet = 1,col_names = T,skip = 2)
+  db.full <- as.data.frame(db.full)
   if (testMode) {
     db.full <- db.full[1:10, ]
   }
@@ -1490,14 +1491,14 @@ build.VMH <- function(outfolder, testMode = FALSE) {
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
 #'  \code{\link[utils]{download.file}},\code{\link[utils]{unzip}}
-#'  \code{\link[openxlsx]{read.xlsx}}
+#'  \code{\link[readxl]{read_xlsx}}
 #'  \code{\link[data.table]{fread}}
 #' @rdname build.PHENOLEXPLORER
 #' @export
 #' @importFrom RCurl getURL
 #' @importFrom stringr str_match
 #' @importFrom utils download.file unzip
-#' @importFrom openxlsx read.xlsx
+#' @importFrom readxl read_xlsx
 #' @importFrom data.table fread data.table
 #' @examples
 #' \dontrun{build.PHENOLEXPLORER(outfolder=tempdir(), testMode=TRUE)}
@@ -1516,7 +1517,7 @@ build.PHENOLEXPLORER <- function(outfolder, testMode = FALSE) {
     utils::download.file(url, destfile = zip.file, mode = "wb", method = "auto")
     utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
   }
-  compo_tbl <- openxlsx::read.xlsx(file.path(base.loc, "composition-data.xlsx"), sheet = 1)
+  compo_tbl <- as.data.frame(readxl::read_xlsx(file.path(base.loc, "composition-data.xlsx"), sheet = 1))
   compo_tbl$description <- paste0("Present in ", tolower(compo_tbl$food), "(", tolower(compo_tbl$food_group), ", ", tolower(compo_tbl$food_sub_group), "). ", "Belongs to the compound class of ", tolower(compo_tbl$compound_group), " (", tolower(compo_tbl$compound_sub_group), "). ", "PMIDS: ", compo_tbl$pubmed_ids)
   db.base <- unique(compo_tbl[, c("compound", "description")])
   struct_tbl <- data.table::fread(file.path(base.loc, "compounds-structures.csv"))
@@ -1935,14 +1936,14 @@ build.YMDB <- function(outfolder) {
 #' @seealso
 #'  \code{\link[utils]{download.file}}
 #'  \code{\link[data.table]{as.data.table}}
-#'  \code{\link[readxl]{read_excel}}
+#'  \code{\link[readxl]{read_xlsx}}
 #'  \code{\link[RCurl]{getURL}}
 #'  \code{\link[stringr]{str_match}}
 #' @rdname build.PAMDB
 #' @export
 #' @importFrom utils download.file
 #' @importFrom data.table as.data.table data.table
-#' @importFrom readxl read_excel
+#' @importFrom readxl read_xlsx
 #' @importFrom RCurl getURL
 #' @importFrom stringr str_match
 #' @examples
@@ -1955,7 +1956,7 @@ build.PAMDB <- function(outfolder, testMode = FALSE) {
   }
   xlsx.file <- file.path(base.loc, "pamdb.xlsx")
   utils::download.file(file.url, xlsx.file, mode = "wb", cacheOK = TRUE, method = "auto")
-  db.base <- data.table::as.data.table(readxl::read_excel(xlsx.file, sheet = 1))
+  db.base <- data.table::as.data.table(readxl::read_xlsx(xlsx.file, sheet = 1))
   db.formatted <- data.table::data.table(identifier = db.base$MetID, compoundname = db.base$Name, structure = db.base$SMILES, baseformula = c(NA), description = gsub(gsub(db.base$Reactions, pattern = "\\r", replacement = ", "), pattern = "\\n", replacement = ""), charge = db.base$Charge)
   theurl <- "http://pseudomonas.umaryland.edu/"
   header <- RCurl::getURL(theurl, .opts = list(ssl.verifypeer = FALSE))
@@ -2101,7 +2102,7 @@ build.STOFF <- function(outfolder) {
   excel.file <- file.path(base.loc, "SI_Content.xls")
   xlsx.file <- gsub(excel.file, pattern = "xls", replacement = "xlsx")
   file.copy(excel.file, xlsx.file)
-  db.base <- data.table::as.data.table(readxl::read_excel(xlsx.file, sheet = 1))
+  db.base <- data.table::as.data.table(readxl::read_xlsx(xlsx.file, sheet = 1))
   db.base.aggr <- db.base[, .(compoundname = unique(Name), baseformula = unique(Formula), structure = unique(SMILES), description = paste0("Synonyms: ", paste(`Additional Names`, collapse = ","))), by = Index]
   db.base.aggr$charge <- c(0)
   db.formatted <- db.base.aggr[!is.na(compoundname)]

@@ -35,7 +35,6 @@ Imports:
   stringr,
   WikidataQueryServiceR,
   webchem,
-  openxlsx,
   jsonlite,
   R.utils,
   KEGGREST,
