@@ -244,16 +244,30 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct) {
 #' @importFrom enviPat isopattern
 #' @importFrom data.table data.table
 doIsotopes <- function(formula, charge) {
-  isotables <- enviPat::isopattern(isotopes, formula, threshold = 0.1, plotit = FALSE, charge = charge, verbose = FALSE, )
+
+  # note these specifically: 2H, 13C, and 15N
+
+  isotables <- enviPat::isopattern(isotopes, formula, threshold = 0.1, plotit = FALSE, charge = charge, verbose = FALSE)
+
   isolist <- lapply(isotables, function(isotable) {
     if (isotable[[1]] == "error") {
       return(data.table())
     }
-    iso.dt <- data.table::data.table(isotable, fill = TRUE)
-    result <- iso.dt[, 1:2]
-    names(result) <- c("fullmz", "isoprevalence")
+
+    iso.dt <- data.table::data.table(isotable)
+
+    for(iso in c("2H","13C", "15N")){
+      if(iso %in% colnames(iso.dt)){
+        iso.dt[[paste0("n",iso)]] <- iso.dt[[iso]]
+      }else{
+        iso.dt[[paste0("n",iso)]] <- c(0)
+      }
+    }
+    result <- iso.dt[, c("m/z","abundance","n2H","n13C", "n15N")]
+    names(result) <- c("fullmz", "isoprevalence", "n2H","n13C", "n15N")
     result
   })
+
   isolist.nonas <- isolist[!is.na(isolist)]
   isotable <- data.table::rbindlist(isolist.nonas)
   keep.isos <- names(isolist.nonas)
@@ -340,13 +354,17 @@ buildExtDB <- function(outfolder, ext.dbname = "extended", base.dbname, cl = 0, 
   else {
     new_adducts <- adducts$Name
   }
+  #"n2H", "n13C", "n15N"
   RSQLite::dbExecute(full.conn, strwrap("CREATE TABLE IF NOT EXISTS extended(
                                         struct_id INT,
                                         fullformula text,
                                         finalcharge text,
                                         fullmz decimal(30,13),
                                         adduct text,
-                                        isoprevalence float)", width = 10000, simplify = TRUE))
+                                        isoprevalence float,
+                                        n2H int,
+                                        n13C int,
+                                        n15N int)", width = 10000, simplify = TRUE))
   RSQLite::dbExecute(full.conn, gsubfn::fn$paste("PRAGMA auto_vacuum = 1;"))
   base.db <- normalizePath(file.path(outfolder, paste0(base.dbname, ".db")))
   RSQLite::dbExecute(full.conn, gsubfn::fn$paste("ATTACH '$base.db' AS tmp"))
@@ -413,7 +431,6 @@ buildExtDB <- function(outfolder, ext.dbname = "extended", base.dbname, cl = 0, 
   tmpfiles.struct <- sapply(1:length(blocks), function(i) file.path(tempdir, paste0(base.dbname, "_str_", i, ".csv")))
   RSQLite::dbDisconnect(full.conn)
   per.adduct.tables <- pbapply::pblapply(1:length(blocks), cl = cl, function(i, mzrange = mzrange, silent = silent, blocks = blocks, adduct_table = adduct_table, adduct_rules = adduct_rules, tmpfiles.ext = tmpfiles.ext, tmpfiles.struct = tmpfiles.struct, mapper = mapper, use.rules = use.rules) {
-    print(i)
     block <- blocks[[i]]
     deut <- grep(block$baseformula, pattern = "D")
     if (length(deut) > 0) {
@@ -462,19 +479,41 @@ buildExtDB <- function(outfolder, ext.dbname = "extended", base.dbname, cl = 0, 
         return(data.table::data.table())
       }
       else {
-        isotable <- doIsotopes(formula = adducted[keepers, ]$final, charge = adducted[keepers, ]$final.charge)
-        formula_plus_iso <- merge(adducted, isotable, by = c("final", "final.charge"), allow.cartesian = TRUE)
-        adducted.plus.isotopes <- merge(adducted, formula_plus_iso, by = c("baseformula", "charge", "adducted", "final.charge", "final", "structure"), allow.cartesian = TRUE)
-        meta.table <- data.table::data.table(fullmz = adducted.plus.isotopes$fullmz, fullformula = adducted.plus.isotopes$final, finalcharge = adducted.plus.isotopes$final.charge, adduct = c(add), isoprevalence = adducted.plus.isotopes$isoprevalence, structure = adducted.plus.isotopes$structure)
-        ids <- mapper$struct_id[match(meta.table$structure, mapper$smiles)]
+        isotable <- doIsotopes(formula = adducted[keepers, ]$final,
+                               charge = adducted[keepers, ]$final.charge)
+        formula_plus_iso <- merge(adducted,
+                                  isotable,
+                                  by = c("final", "final.charge"),
+                                  allow.cartesian = TRUE)
+        adducted.plus.isotopes <- merge(adducted,
+                                        formula_plus_iso,
+                                        by = c("baseformula", "charge", "adducted",
+                                               "final.charge", "final", "structure"),
+                                        allow.cartesian = TRUE)
+        meta.table <- data.table::data.table(fullmz = adducted.plus.isotopes$fullmz,
+                                             fullformula = adducted.plus.isotopes$final,
+                                             finalcharge = adducted.plus.isotopes$final.charge,
+                                             adduct = c(add),
+                                             isoprevalence = adducted.plus.isotopes$isoprevalence,
+                                             structure = adducted.plus.isotopes$structure,
+                                             n13C = adducted.plus.isotopes$n13C,
+                                             n2H = adducted.plus.isotopes$n2H,
+                                             n15N = adducted.plus.isotopes$n15N)
+        ids <- mapper$struct_id[match(meta.table$structure,
+                                      mapper$smiles)]
         meta.table$struct_id <- ids
-        return(unique(meta.table[, -"structure"]))
+        res = unique(meta.table[, -"structure"])
+        return(res)
       }
     })
     to.write <- data.table::rbindlist(per.adduct.tables)
+    to.write <<- to.write
     if (nrow(to.write) > 0) {
       structs <- unique(blocks[[i]][, c("struct_id", "smiles")])
-      data.table::fwrite(to.write[, c("struct_id", "fullformula", "finalcharge", "fullmz", "adduct", "isoprevalence")], file = tmpfiles.ext[i], append = FALSE)
+      data.table::fwrite(to.write[, c("struct_id", "fullformula", "finalcharge",
+                                      "fullmz", "adduct", "isoprevalence",
+                                      "n2H","n13C","n15N")],
+                         file = tmpfiles.ext[i], append = FALSE)
       if (!adduct_only) {
         data.table::fwrite(structs, file = tmpfiles.struct[i], append = FALSE)
       }

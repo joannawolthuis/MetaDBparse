@@ -538,7 +538,7 @@ chemspiderInfo <- function(ids, maxn = 100, apikey) {
 pubChemInfo <- function(ids, maxn = 30) {
   Title <- Description <- CID <- NULL
   split.ids <- split(ids, ceiling(seq_along(ids) / maxn))
-  chunk.row.list <- lapply(split.ids, function(idgroup) {
+  chunk.row.list <- pbapply::pblapply(split.ids, function(idgroup) {
     url_struct <- paste0("https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/", paste0(idgroup, collapse = ","), "/property/MolecularFormula,CanonicalSMILES,Charge/JSON")
     struct_res <- jsonlite::fromJSON(url_struct, simplifyVector = TRUE)
     keep.ids <- which(struct_res$PropertyTable$Properties$Charge == 0)

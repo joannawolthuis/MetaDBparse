@@ -15,7 +15,7 @@
 #'  \dontrun{showAllBase(outfolder = myFolder, "lmdb")}
 showAllBase <- function(outfolder, base.dbname) {
   conn <- RSQLite::dbConnect(RSQLite::SQLite(), file.path(outfolder, paste0(base.dbname, ".db")))
-  result <- RSQLite::dbGetQuery(conn, "SELECT DISTINCT identifier,compoundname, baseformula as formula, structure as structure, description as description, charge as charge FROM base")
+  result <- RSQLite::dbGetQuery(conn, "SELECT DISTINCT * FROM base")
   RSQLite::dbDisconnect(conn)
   result
 }
@@ -52,6 +52,12 @@ showAllBase <- function(outfolder, base.dbname) {
 #'  \dontrun{searchMZ(c("104.3519421"), "positive", outfolder = myFolder, "lmdb", ppm = 3)}
 searchMZ <- function(mzs, ionmodes, outfolder, base.dbname, ppm, ext.dbname = "extended", append = FALSE) {
   conn <- RSQLite::dbConnect(RSQLite::SQLite(), file.path(outfolder, paste0(ext.dbname, ".db")))
+
+  ### check for isotope header ###
+  fields = RSQLite::dbListFields(conn, "extended")
+  hasIsoLabel = "n2H" %in% fields
+  ################################
+
   mzvals <- data.table::data.table(mzmed = as.numeric(mzs), foundinmode = ionmodes)
   eachPPM <- length(ppm) > 1
   mzranges <- data.table::rbindlist(lapply(1:length(mzs), function(i) {
@@ -76,14 +82,18 @@ searchMZ <- function(mzs, ionmodes, outfolder, base.dbname, ppm, ext.dbname = "e
   RSQLite::dbExecute(conn, sql.make.rtree)
   RSQLite::dbWriteTable(conn, "mzranges", mzranges, append = TRUE)
   RSQLite::dbExecute(conn, "DROP TABLE IF EXISTS unfiltered")
-  query <- "CREATE TABLE unfiltered AS SELECT DISTINCT cpd.adduct as adduct,
+  query <- if(hasIsoLabel){
+    "CREATE TABLE unfiltered AS SELECT DISTINCT cpd.adduct as adduct,
                                                        cpd.isoprevalence as isoprevalence,
                                                        cpd.fullformula,
                                                        cpd.finalcharge,
+                                                       cpd.n2H,
+                                                       cpd.n13C,
+                                                       cpd.n15N,
                                                        struc.smiles as structure,
                                                        mz.mzmed as query_mz,
                                                        (1e6*ABS(mz.mzmed - cpd.fullmz)/cpd.fullmz) AS dppm
-                                                       FROM mzvals mz
+                                                       FROM mzvals mz INDEXED BY mzfind
                                                        JOIN mzranges rng ON rng.ID = mz.ID
                                                        JOIN extended cpd indexed by e_idx2
                                                        ON cpd.fullmz BETWEEN rng.mzmin AND rng.mzmax
@@ -92,19 +102,40 @@ searchMZ <- function(mzs, ionmodes, outfolder, base.dbname, ppm, ext.dbname = "e
                                                        AND mz.foundinmode = adducts.Ion_Mode
                                                        JOIN structures struc
                                                        ON cpd.struct_id = struc.struct_id"
+  }else{
+    "CREATE TABLE unfiltered AS SELECT DISTINCT cpd.adduct as adduct,
+                                                       cpd.isoprevalence as isoprevalence,
+                                                       cpd.fullformula,
+                                                       cpd.finalcharge,
+                                                       struc.smiles as structure,
+                                                       mz.mzmed as query_mz,
+                                                       (1e6*ABS(mz.mzmed - cpd.fullmz)/cpd.fullmz) AS dppm
+                                                       FROM mzvals mz INDEXED BY mzfind
+                                                       JOIN mzranges rng ON rng.ID = mz.ID
+                                                       JOIN extended cpd indexed by e_idx2
+                                                       ON cpd.fullmz BETWEEN rng.mzmin AND rng.mzmax
+                                                       JOIN adducts
+                                                       ON cpd.adduct = adducts.Name
+                                                       AND mz.foundinmode = adducts.Ion_Mode
+                                                       JOIN structures struc
+                                                       ON cpd.struct_id = struc.struct_id"
+  }
+
 
   RSQLite::dbExecute(conn, query)
   table.per.db <- lapply(base.dbname, function(db) {
-    dbpath <- file.path(outfolder, paste0(db, ".db"))
-    try(
-      {
-        DBI::dbExecute(conn, gsubfn::fn$paste("DETACH base"))
-      },
-      silent = TRUE
-    )
-    query <- gsubfn::fn$paste("ATTACH '$dbpath' AS base")
-    RSQLite::dbExecute(conn, query)
-    query <- strwrap("SELECT b.compoundname,
+    R.utils::withTimeout({
+      dbpath <- file.path(outfolder, paste0(db, ".db"))
+      try(
+        {
+          DBI::dbExecute(conn, gsubfn::fn$paste("DETACH base"))
+        },
+        silent = TRUE
+      )
+      query <- gsubfn::fn$paste("ATTACH '$dbpath' AS base")
+      RSQLite::dbExecute(conn, query)
+      extras = if(hasIsoLabel) ",u.n2H, u.n13C, u.n15N" else ""
+      query <- gsubfn::fn$paste(strwrap("SELECT b.compoundname,
                              b.baseformula,
                              u.adduct,
                              u.isoprevalence as perciso,
@@ -114,23 +145,24 @@ searchMZ <- function(mzs, ionmodes, outfolder, base.dbname, ppm, ext.dbname = "e
                              b.identifier,
                              b.description,
                              u.structure,
-                             u.query_mz
+                             u.query_mz $extras
                              FROM unfiltered u
                              JOIN base.base b
                              ON u.structure = b.structure",
-                     width = 10000, simplify = TRUE
-    )
-    results <- DBI::dbGetQuery(conn, query)
-    if (nrow(results) > 0) {
-      results$perciso <- round(results$perciso, 2)
-      results$dppm <- signif(results$dppm, 2)
-      results$source <- c(db)
-      colnames(results)[which(colnames(results) == "perciso")] <- "%iso"
-    }
-    else {
-      results <- data.table::data.table()
-    }
-    results
+                                        width = 10000, simplify = TRUE
+      ))
+      results <- DBI::dbGetQuery(conn, query)
+      if (nrow(results) > 0) {
+        results$perciso <- round(results$perciso, 2)
+        results$dppm <- signif(results$dppm, 2)
+        results$source <- c(db)
+        colnames(results)[which(colnames(results) == "perciso")] <- "%iso"
+      }
+      else {
+        results <- data.table::data.table()
+      }
+      results
+      },timeout=5,onTimeout="warning")
   })
   merged.results <- data.table::rbindlist(table.per.db)
   DBI::dbDisconnect(conn)
@@ -163,7 +195,6 @@ searchFormula <- function(formula, charge, outfolder, base.dbname) {
                                                          charge INTEGER)")
     formTbl = data.table::data.table(formula = formula,
                                      charge = charge)
-    print(formTbl)
     RSQLite::dbWriteTable(conn = conn,
                           name = "formulas",
                           value = formTbl,
@@ -205,11 +236,24 @@ searchFormula <- function(formula, charge, outfolder, base.dbname) {
 #'  \dontrun{searchRev("O=C(O)C(N)CC=1N=CN(C1)C", outfolder = myFolder)}
 searchRev <- function(structure, ext.dbname = "extended", outfolder) {
   conn <- RSQLite::dbConnect(RSQLite::SQLite(), file.path(outfolder, paste0(ext.dbname, ".db")))
-  result <- RSQLite::dbSendStatement(conn, "SELECT DISTINCT fullmz, fullformula, finalcharge, adduct, isoprevalence
+
+  fields = RSQLite::dbListFields(conn, "extended")
+  hasIsoLabel = "n2H" %in% fields
+
+  result <- if(!hasIsoLabel){
+    RSQLite::dbSendStatement(conn, "SELECT DISTINCT fullmz, fullformula, finalcharge, adduct, isoprevalence
                                             FROM extended ext
                                             JOIN structures struct
                                             ON ext.struct_id = struct.struct_id
                                             WHERE struct.smiles = $structure")
+  }else{
+    RSQLite::dbSendStatement(conn, "SELECT DISTINCT fullmz, fullformula, finalcharge, adduct, isoprevalence, n2H, n13C, n15N
+                                            FROM extended ext
+                                            JOIN structures struct
+                                            ON ext.struct_id = struct.struct_id
+                                            WHERE struct.smiles = $structure")
+  }
+
   RSQLite::dbBind(result, list(structure = structure))
   res <- RSQLite::dbFetch(result)
   RSQLite::dbClearResult(result)
