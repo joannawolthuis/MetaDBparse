@@ -34,7 +34,6 @@ Imports:
   base,
   stringr,
   WikidataQueryServiceR,
-  webchem,
   jsonlite,
   R.utils,
   KEGGREST,

@@ -332,7 +332,6 @@ searchCMMR <- function(cmm_url = "http://ceumass.eps.uspceu.es/mediator/api/v3/b
 #' @export
 #' @importFrom data.table data.table
 #' @importFrom pbapply pbsapply
-#' @importFrom webchem cs_inchikey_inchi cs_inchi_smiles
 #' @examples
 #' \dontrun{searchMZonline(mz = 170.09240307, mode = "positive", which_db = "cmmr")}
 searchMZonline <- function(mz = 178.1219, mode = "positive", adducts, ppm = 2, which_db = "cmmr", apikey = "") {
