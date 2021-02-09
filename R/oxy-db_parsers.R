@@ -82,7 +82,7 @@ build.WIKIPATHWAYS <- function(outfolder, testMode = FALSE) {
 build.MCDB <- function(outfolder, testMode = FALSE) {
   Description <- NULL
   oldpar <- options()
-  options(stringsAsFactors = FALSE)
+  options(stringsAsFactors = FALSE, timeout=1000)
   on.exit(options(oldpar))
   file.url <- "https://www.mcdb.ca/system/downloads/current/milk_metabolites.zip"
   base.loc <- file.path(outfolder, "mcdb_source")
@@ -219,7 +219,7 @@ build.MCDB <- function(outfolder, testMode = FALSE) {
 build.HMDB <- function(outfolder, testMode = FALSE) {
   Description <- DESCRIPTION <- NULL
   oldpar <- options()
-  options(stringsAsFactors = FALSE)
+  options(stringsAsFactors = FALSE, timeout=1000)
   on.exit(options(oldpar))
   file.url <- "http://www.hmdb.ca/system/downloads/current/hmdb_metabolites.zip"
   base.loc <- file.path(outfolder, "hmdb_source")
@@ -1116,6 +1116,10 @@ build.KEGG <- function(outfolder, testMode = FALSE) {
       path = data.table::data.table(pathway = names(cpd$PATHWAY),
                                     identifier = cpd$ENTRY,
                                     description = cpd$PATHWAY)
+      if(ncol(path) < 3){
+        path = data.table::data.table()
+      }
+
       list(main = main, path = path)
     })
     res <- data.table::rbindlist(lapply(base.list, function(x) x$main), fill=T)
@@ -1722,7 +1726,7 @@ build.MASSBANK <- function(outfolder, testMode = FALSE) {
 #' \dontrun{build.BMDB(outfolder=tempdir(), testMode=TRUE)}
 build.BMDB <- function(outfolder, testMode = FALSE) {
   oldpar <- options()
-  options(stringsAsFactors = FALSE)
+  options(stringsAsFactors = FALSE, timeout=1000)
   on.exit(options(oldpar))
   theurl <- "http://www.bovinedb.ca/about"
   header <- RCurl::getURL(theurl, .opts = list(ssl.verifypeer = FALSE))

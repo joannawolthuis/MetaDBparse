@@ -14,7 +14,7 @@
 removeFailedStructures <- function(outfolder,
                                    ext.dbname = "extended"){
   outfolder <- normalizePath(outfolder)
-  print(paste("Will remove failed isotope calculations, this may take a while. Removing structures from structure list that didn't make it into isotope calculation."))
+  print(paste("Will remove failed structures, this may take a while. Removing structures from structure list that didn't make it into isotope calculation."))
   full.db <- file.path(outfolder, paste0(ext.dbname, ".db"))
   first.db <- !file.exists(full.db)
   if(first.db){
@@ -30,7 +30,8 @@ removeFailedStructures <- function(outfolder,
                                            FROM structures
                                            LEFT JOIN extended
                                            ON structures.struct_id=extended.struct_id
-                                           WHERE extended.struct_id IS NULL)"
+                                           WHERE extended.struct_id IS NULL
+                                           OR structures.smiles IS NULL)"
     )
     RSQLite::dbDisconnect(full.conn)
   }
@@ -243,11 +244,11 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct) {
 #' @export
 #' @importFrom enviPat isopattern
 #' @importFrom data.table data.table
-doIsotopes <- function(formula, charge, count.isos=F) {
+doIsotopes <- function(formula, charge, count.isos=F, isothresh=0.1,isotable=isotopes) {
   # note these specifically: 2H, 13C, and 15N
-  isotables <- enviPat::isopattern(isotopes,
+  isotables <- enviPat::isopattern(isotable,
                                    formula,
-                                   threshold = 0.1,
+                                   threshold = isothresh,
                                    plotit = FALSE,
                                    charge = charge,
                                    verbose = FALSE)
@@ -319,7 +320,7 @@ doIsotopes <- function(formula, charge, count.isos=F) {
 buildExtDB <- function(outfolder, ext.dbname = "extended", base.dbname, cl = 0,
                        blocksize = 600, mzrange = c(60, 600), adduct_table = adducts,
                        adduct_rules = adduct_rules, silent = silent, use.rules = TRUE,
-                       count.isos = F, all.isos = T) {
+                       count.isos = F, all.isos = T,isothresh=0.1, isotable=isotopes) {
   Name <- charge <- ..add <- NULL
   outfolder <- normalizePath(outfolder)
   print(paste("Will calculate adducts + isotopes for the", base.dbname, "database."))
@@ -510,7 +511,9 @@ buildExtDB <- function(outfolder, ext.dbname = "extended", base.dbname, cl = 0,
         if(all.isos){
           isotable <- doIsotopes(formula = adducted[keepers, ]$final,
                                  charge = adducted[keepers, ]$final.charge,
-                                 count.isos = count.isos)
+                                 count.isos = count.isos,
+                                 isothresh = isothresh,
+                                 isotable=isotable)
         }else {
           # names(result) <- c(c("fullmz", "isoprevalence"), if(count.isos) c("n2H","n13C", "n15N") else c())
           isotable = data.table::data.table(fullmz = checked[keepers, ]$mz,

@@ -257,8 +257,11 @@ cleanDB <- function(db.formatted, cl, silent = TRUE, blocksize, smitype = "Canon
 #' @importFrom data.table fread as.data.table data.table
 #' @importFrom RSQLite dbExecute
 #' @importFrom DBI dbDisconnect
-buildBaseDB <- function(outfolder, dbname, custom_csv_path = NULL, smitype = "Canonical", silent = TRUE, cl = 0, test = FALSE, doBT = FALSE, btOpts = "phaseII:1", btLoc) {
+buildBaseDB <- function(outfolder, dbname, custom_csv_path = NULL, smitype = "Canonical", silent = TRUE, cl = 0, test = FALSE, doBT = FALSE, btOpts = "phaseII:1", btLoc, skipClean=F) {
   httr::set_config(httr::config(ssl_verifypeer = 0))
+  oldpar <- options()
+  options(stringsAsFactors = FALSE, timeout=1000)
+  on.exit(options(oldpar))
   removeDB(outfolder, paste0(dbname, ".db"))
   conn <- openBaseDB(outfolder, paste0(dbname, ".db"))
   if (is.null(custom_csv_path)) {
@@ -283,6 +286,7 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path = NULL, smitype = "Ca
   if (dbname == "maconda") {
     return(NA)
   }
+
   db.formatted <- data.table::as.data.table(db.formatted.all$db)
   db.formatted <- data.frame(lapply(db.formatted, as.character), stringsAsFactors = FALSE)
   if (test & nrow(db.formatted > 10)) {
@@ -313,11 +317,22 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path = NULL, smitype = "Ca
       db.formatted <- data.table::rbindlist(list(db.formatted, db.biotrans.fin), use.names = TRUE)
     }
   }
-  db.formatted <- db.formatted[!(db.formatted$structure %in% c(NA,"")),]
-  db.final <- data.table::as.data.table(cleanDB(db.formatted,
+
+  if(all(is.na(db.formatted$structure))) skipClean = T
+
+  if(!skipClean){
+    db.formatted <- db.formatted[!(db.formatted$structure %in% c(NA,"")),]
+    db.final <- data.table::as.data.table(cleanDB(db.formatted,
                                                   cl = cl,
                                                   silent = silent,
                                                   blocksize = 400))
+  }else{
+    db.final = data.table::as.data.table(db.formatted)
+    db.final$structure = paste0("[", db.final$baseformula, "]", db.final$charge)
+  }
+
+  print("Preview:")
+  print(head(db.final))
 
   db.final <- db.final[, lapply(.SD, as.character)]
   writeDB(conn, data.table::data.table(date = Sys.Date(), version = db.formatted.all$version), "metadata")
@@ -327,6 +342,5 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path = NULL, smitype = "Ca
   }
   RSQLite::dbExecute(conn, "CREATE INDEX b_idx1 ON base(structure)")
   DBI::dbDisconnect(conn)
-
-  }
+}
 

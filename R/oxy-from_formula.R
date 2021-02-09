@@ -190,14 +190,18 @@ revertAdduct <- function(formula, add_name, adduct_table = adducts) {
 #' \dontrun{getPredicted(mz = 170, ppm = 2, mode = "positive",
 #' rules = c("hc", "chnops", "nops"),
 #' elements = c("C","H","O"))}
-getPredicted <- function(mz, ppm = 2, mode = "positive", rules = c("senior", "lewis", "hc", "chnops", "nops"), elements = c("C", "H", "N", "O", "P", "S"), search = c("PubChem", "ChemSpider"), detailed = TRUE, calc_adducts = adducts[Ion_mode == mode, ]$Name) {
+getPredicted <- function(mz, ppm = 2, mode = "positive",
+                         rules = c("senior", "lewis", "hc", "chnops", "nops"),
+                         elements = c("C", "H", "N", "O", "P", "S"), search = c("PubChem", "ChemSpider"),
+                         detailed = TRUE,
+                         calc_adducts = adducts[Ion_mode == mode, ]$Name,
+                         adduct_table = adducts) {
   Name <- Ion_mode <- fullformula <- NULL
   cat("\n      _...._\n    .`      `.    *             *\n   / ***      \\            Predicting   *\n  : **         :    *   molecular formulas...\n  :            :\n   \\          /\n*   `-.,,,,.-'        *\n     _(    )_             *\n  * )        (                  *\n   (          ) *\n    `-......-`\n")
   print("Considered adducts:")
-  print(calc_adducts)
   per_adduct_results <- lapply(calc_adducts, function(add_name) {
-    row <- adducts[Name == add_name]
-    predicted <- getFormula(mz = mz, ppm = ppm, add_name = add_name, adducts = adducts, elements = elements)
+    row <- adduct_table[Name == add_name]
+    predicted <- getFormula(mz = mz, ppm = ppm, add_name = add_name, adducts = adduct_table, elements = elements)
     if (nrow(predicted) == 0) {
       return(data.table::data.table())
     }
@@ -211,12 +215,12 @@ getPredicted <- function(mz, ppm = 2, mode = "positive", rules = c("senior", "le
       checked <- enviPat::check_chemform(isotopes, formula)
       new_formula <- checked[1, ]$new_formula
       theor_orig_formula <- new_formula
-      theor_orig_formula <- revertAdduct(theor_orig_formula, add_name, adduct_table = adducts)
+      theor_orig_formula <- revertAdduct(theor_orig_formula, add_name, adduct_table = adduct_table)
       if (is.na(theor_orig_formula)) {
         return(data.table::data.table())
       }
       else {
-        data.table::data.table(query_mz = c(mz), compoundname = theor_orig_formula, baseformula = theor_orig_formula, fullformula = new_formula, basecharge = c(0), finalcharge = c(adducts[Name == add_name]$Charge), adduct = row$Name, `%iso` = 100, identifier = new_formula, structure = paste0("[", new_formula, "]0"), description = "Predicted possible formula for this m/z value.", source = "magicball", dppm = iter.rows[i, ]$dppm)
+        data.table::data.table(query_mz = c(mz), compoundname = theor_orig_formula, baseformula = theor_orig_formula, fullformula = new_formula, basecharge = c(0), finalcharge = c(adduct_table[Name == add_name]$Charge), adduct = row$Name, `%iso` = 100, identifier = new_formula, structure = paste0("[", new_formula, "]0"), description = "Predicted possible formula for this m/z value.", source = "magicball", dppm = iter.rows[i, ]$dppm)
       }
     }, row = row)
     if (length(res) > 0) {
