@@ -432,6 +432,9 @@ buildExtDB <- function(outfolder, ext.dbname = "extended", base.dbname, cl = 0,
     RSQLite::dbGetQuery(full.conn, "SELECT MAX(struct_id) FROM structures")[, 1]
   }
   to.do <- to.do[!grepl(pattern = " ", to.do$baseformula), ]
+
+  print(head(to.do))
+
   start.id <- done.structures + 1
   mapper <- data.table::data.table(struct_id = seq(start.id, start.id + nrow(to.do) - 1, 1), smiles = to.do$structure, baseformula = to.do$baseformula, charge = as.numeric(to.do$charge))
   if (adduct_only) {

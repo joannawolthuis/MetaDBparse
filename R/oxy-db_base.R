@@ -13,7 +13,11 @@
 #' @importFrom rcdk parse.smiles do.aromaticity do.typing do.isotopes
 #' @importFrom rJava .jcall
 smiles.to.iatom <- function(smiles, silent = TRUE, cl = 0) {
+  print(smiles[[1]])
+  print(silent)
+  Sys.sleep(5)
   iatoms <- sapply(smiles, function(x, silent) {
+    print(x)
     mol <- NULL
     try(
       {
@@ -35,11 +39,10 @@ smiles.to.iatom <- function(smiles, silent = TRUE, cl = 0) {
         } else {
           fun()
         }
-      },
-      silent = silent
+      }
     )
     mol
-  }, silent = silent)
+  })
   try({
     rJava::.jcall("java/lang/System", "V", "gc")
     gc()
