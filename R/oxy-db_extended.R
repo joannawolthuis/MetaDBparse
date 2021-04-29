@@ -14,7 +14,7 @@
 removeFailedStructures <- function(outfolder,
                                    ext.dbname = "extended"){
   outfolder <- normalizePath(outfolder)
-  print(paste("Will remove failed structures, this may take a while. Removing structures from structure list that didn't make it into isotope calculation."))
+  print(paste("Will remove failed isotope calculations, this may take a while. Removing structures from structure list that didn't make it into isotope calculation."))
   full.db <- file.path(outfolder, paste0(ext.dbname, ".db"))
   first.db <- !file.exists(full.db)
   if(first.db){
@@ -30,8 +30,7 @@ removeFailedStructures <- function(outfolder,
                                            FROM structures
                                            LEFT JOIN extended
                                            ON structures.struct_id=extended.struct_id
-                                           WHERE extended.struct_id IS NULL
-                                           OR structures.smiles IS NULL)"
+                                           WHERE extended.struct_id IS NULL)"
     )
     RSQLite::dbDisconnect(full.conn)
   }
@@ -244,16 +243,13 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct) {
 #' @export
 #' @importFrom enviPat isopattern
 #' @importFrom data.table data.table
-doIsotopes <- function(formula, charge, count.isos=F, isothresh=0.1,isotable=isotopes) {
-  # note these specifically: 2H, 13C, and 15N
-  isotables <- enviPat::isopattern(isotable,
-                                   formula,
-                                   threshold = isothresh,
-                                   plotit = FALSE,
-                                   charge = charge,
-                                   verbose = FALSE)
+doIsotopes <- function(formula, charge, count.isos=F) {
 
-  isolist <- lapply(isotables, function(isotable){
+  # note these specifically: 2H, 13C, and 15N
+
+  isotables <- enviPat::isopattern(isotopes, formula, threshold = 0.1, plotit = FALSE, charge = charge, verbose = FALSE)
+
+  isolist <- lapply(isotables, function(isotable) {
     if (isotable[[1]] == "error") {
       return(data.table())
     }
@@ -267,12 +263,12 @@ doIsotopes <- function(formula, charge, count.isos=F, isothresh=0.1,isotable=iso
         }
       }
     }
-    keepcols = c(c("m/z","abundance"), if(count.isos) c("n2H","n13C", "n15N") else c())
-    result <- iso.dt[, ..keepcols]
+    result <- iso.dt[, c(c("m/z","abundance"), if(count.isos) c("n2H","n13C", "n15N") else c()), with=F]
     names(result) <- c(c("fullmz", "isoprevalence"), if(count.isos) c("n2H","n13C", "n15N") else c())
     result
   })
   isolist.nonas <- isolist[!is.na(isolist)]
+  print(isolist.nonas[[1]])
   isotable <- data.table::rbindlist(isolist.nonas)
   keep.isos <- names(isolist.nonas)
   charges <- charge[!is.na(isolist)]
@@ -305,7 +301,7 @@ doIsotopes <- function(formula, charge, count.isos=F, isothresh=0.1,isotable=iso
 #' @export
 #' @examples
 #'  \dontrun{myFolder = tempdir()}
-#'  \dontrun{buildBaseDB(outfolder = myFolder, "lmdb")}
+#'  \dontrun{buildBaseDB(outfolder = myFolder, "lmdb", test = TRUE)}
 #'  \dontrun{file.remove(file.path(myFolder, "extended.db"))}
 #'  \dontrun{data(adducts)}
 #'  \dontrun{data(adduct_rules)}
@@ -320,7 +316,7 @@ doIsotopes <- function(formula, charge, count.isos=F, isothresh=0.1,isotable=iso
 buildExtDB <- function(outfolder, ext.dbname = "extended", base.dbname, cl = 0,
                        blocksize = 600, mzrange = c(60, 600), adduct_table = adducts,
                        adduct_rules = adduct_rules, silent = silent, use.rules = TRUE,
-                       count.isos = F, all.isos = T,isothresh=0.1, isotable=isotopes) {
+                       count.isos = F, all.isos = T) {
   Name <- charge <- ..add <- NULL
   outfolder <- normalizePath(outfolder)
   print(paste("Will calculate adducts + isotopes for the", base.dbname, "database."))
@@ -432,9 +428,6 @@ buildExtDB <- function(outfolder, ext.dbname = "extended", base.dbname, cl = 0,
     RSQLite::dbGetQuery(full.conn, "SELECT MAX(struct_id) FROM structures")[, 1]
   }
   to.do <- to.do[!grepl(pattern = " ", to.do$baseformula), ]
-
-  print(head(to.do))
-
   start.id <- done.structures + 1
   mapper <- data.table::data.table(struct_id = seq(start.id, start.id + nrow(to.do) - 1, 1), smiles = to.do$structure, baseformula = to.do$baseformula, charge = as.numeric(to.do$charge))
   if (adduct_only) {
@@ -450,16 +443,7 @@ buildExtDB <- function(outfolder, ext.dbname = "extended", base.dbname, cl = 0,
   tmpfiles.ext <- sapply(1:length(blocks), function(i) file.path(tempdir, paste0(base.dbname, "_ext_", i, ".csv")))
   tmpfiles.struct <- sapply(1:length(blocks), function(i) file.path(tempdir, paste0(base.dbname, "_str_", i, ".csv")))
   RSQLite::dbDisconnect(full.conn)
-  per.adduct.tables <- pbapply::pblapply(1:length(blocks), cl = cl, function(i, mzrange = mzrange,
-                                                                             silent = silent, blocks = blocks,
-                                                                             adduct_table = adduct_table,
-                                                                             adduct_rules = adduct_rules,
-                                                                             tmpfiles.ext = tmpfiles.ext,
-                                                                             tmpfiles.struct = tmpfiles.struct,
-                                                                             mapper = mapper,
-                                                                             use.rules = use.rules,
-                                                                             count.isos = count.isos,
-                                                                             all.isos = all.isos) {
+  per.adduct.tables <- pbapply::pblapply(1:length(blocks), cl = cl, function(i, mzrange = mzrange, silent = silent, blocks = blocks, adduct_table = adduct_table, adduct_rules = adduct_rules, tmpfiles.ext = tmpfiles.ext, tmpfiles.struct = tmpfiles.struct, mapper = mapper, use.rules = use.rules) {
     block <- blocks[[i]]
     deut <- grep(block$baseformula, pattern = "D")
     if (length(deut) > 0) {
@@ -497,10 +481,7 @@ buildExtDB <- function(outfolder, ext.dbname = "extended", base.dbname, cl = 0,
       if (nrow(block.calc.adduct) == 0) {
         return(data.table::data.table())
       }
-      adducted <- doAdduct(structure = block.calc.adduct$smiles,
-                           formula = block.calc.adduct$baseformula,
-                           charge = block.calc.adduct$charge,
-                           adduct_table = adduct_table, query_adduct = add)
+      adducted <- doAdduct(structure = block.calc.adduct$smiles, formula = block.calc.adduct$baseformula, charge = block.calc.adduct$charge, adduct_table = adduct_table, query_adduct = add)
       if (nrow(adducted) == 0) {
         return(data.table::data.table())
       }
@@ -514,9 +495,7 @@ buildExtDB <- function(outfolder, ext.dbname = "extended", base.dbname, cl = 0,
         if(all.isos){
           isotable <- doIsotopes(formula = adducted[keepers, ]$final,
                                  charge = adducted[keepers, ]$final.charge,
-                                 count.isos = count.isos,
-                                 isothresh = isothresh,
-                                 isotable=isotable)
+                                 count.isos = count.isos)
         }else {
           # names(result) <- c(c("fullmz", "isoprevalence"), if(count.isos) c("n2H","n13C", "n15N") else c())
           isotable = data.table::data.table(fullmz = checked[keepers, ]$mz,
@@ -567,10 +546,7 @@ buildExtDB <- function(outfolder, ext.dbname = "extended", base.dbname, cl = 0,
         data.table::fwrite(structs, file = tmpfiles.struct[i], append = FALSE)
       }
     }
-  }, mzrange = mzrange, silent = silent, blocks = blocks, adduct_table = adduct_table,
-  adduct_rules = adduct_rules, tmpfiles.ext = tmpfiles.ext, tmpfiles.struct = tmpfiles.struct,
-  mapper = mapper, use.rules = use.rules, count.isos = count.isos,
-  all.isos = all.isos)
+  }, mzrange = mzrange, silent = silent, blocks = blocks, adduct_table = adduct_table, adduct_rules = adduct_rules, tmpfiles.ext = tmpfiles.ext, tmpfiles.struct = tmpfiles.struct, mapper = mapper, use.rules = use.rules)
   print("loading into database... please stand by - w- ")
   pbapply::pbsapply(1:length(blocks), function(i) {
     full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)

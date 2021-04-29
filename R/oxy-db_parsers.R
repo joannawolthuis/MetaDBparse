@@ -1200,11 +1200,27 @@ build.DRUGBANK <- function(outfolder) {
   header <- readLines(input, n = 10)
   hasInfo <- grep(x = header, pattern = "version", value = TRUE, perl = TRUE)[2]
   version <- stringr::str_match(string = hasInfo, pattern = "version=\"(.*)\" exported")[, 2]
-  theurl <- RCurl::getURL("https://go.drugbank.com/stats", .opts = list(ssl.verifypeer = FALSE))
+
+  # con = file(input, "r")
+  # n = 0
+  # while ( TRUE ) {
+  #   line = readLines(con, n = 1)
+  #   if ( length(line) == 0 ) {
+  #     break
+  #   }
+  #   mets = stringr::str_count(line, pattern = "<drug")
+  #   n = n + mets
+  #   print(n)
+  # }
+  # close(con)
+
+  stats_page = file("https://go.drugbank.com/stats")
+  theurl = readLines(stats_page)
   tables <- XML::readHTMLTable(theurl, header = FALSE)
   stats <- data.table::as.data.table(tables[[1]])
   colnames(stats) <- c("Description", "Count")
   n <- as.numeric(as.character(gsub(x = stats[Description == "Total Number of Drugs"]$Count, pattern = ",", replacement = "")))
+
   envir <- environment()
   envir$db.formatted <- data.frame(compoundname = rep(NA, n), baseformula = rep(NA, n), identifier = rep(NA, n), structure = rep(NA, n), charge = rep(NA, n), description = rep(NA, n))
   envir$pb <- pbapply::startpb(min = 0, max = n)
@@ -1345,7 +1361,6 @@ build.LIPIDMAPS <- function(outfolder, testMode = FALSE, apikey) {
     }))
     empty.smiles <- which(sapply(mat$structure, is.empty))
     if (length(empty.smiles) > 0) {
-      print(mat$structure[empty.smiles])
       mat$structure[empty.smiles] <- pbapply::pbsapply(mat$structure[empty.smiles], function(x) {
         url <- gsubfn::fn$paste("https://cactus.nci.nih.gov/chemical/structure/$x/smiles")
         Sys.sleep(0.1)
@@ -1836,50 +1851,17 @@ build.BMDB <- function(outfolder, testMode = FALSE) {
   list(db = envir$db.formatted, version = version)
 }
 
-#' @title Build RMDB
+#' @title Build RMDB (deprecated)
 #' @description Parses the RMDB, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
 #' @param testMode run in test mode? Only parses first ten compounds
-#' @return data table with parsed database
-#' @seealso
-#'  \code{\link[utils]{download.file}}
-#'  \code{\link[stringr]{str_split}},\code{\link[stringr]{str_extract}},\code{\link[stringr]{str_match}}
-#'  \code{\link[pbapply]{pbapply}}
-#'  \code{\link[data.table]{rbindlist}}
+#' @return Message that RMDB is deprecated
 #' @rdname build.RMDB
 #' @export
-#' @importFrom utils download.file
-#' @importFrom stringr str_split str_extract str_match
-#' @importFrom pbapply pblapply
-#' @importFrom data.table data.table rbindlist
 #' @examples
 #' \dontrun{build.RMDB(outfolder=tempdir(), testMode=TRUE)}
 build.RMDB <- function(outfolder, testMode = FALSE) {
-  file.url <- "http://www.rumendb.ca/public/downloads/current/metabocards.gz"
-  base.loc <- file.path(outfolder, "rmdb_source")
-  version <- Sys.Date()
-  if (!dir.exists(base.loc)) {
-    dir.create(base.loc, recursive = TRUE)
-  }
-  gz.file <- file.path(base.loc, "rmdb.gz")
-  utils::download.file(file.url, gz.file, mode = "wb", cacheOK = TRUE, method = "auto")
-  zz <- gzfile(gz.file, "rt")
-  dat <- readLines(zz)
-  dat.pasted <- paste0(dat, collapse = ";")
-  n <- sum(grepl("#BEGIN_METABOCARD", dat))
-  split <- stringr::str_split(dat.pasted, pattern = "END_METABOCARD")[[1]]
-  if (testMode) {
-    split <- split[1:10]
-  }
-  db.rows <- pbapply::pblapply(split, function(l) {
-    data.table::data.table(identifier = stringr::str_extract(string = l, pattern = "RMDB\\d+"), compoundname = stringr::str_match(string = l, pattern = "name:;(.*?);;")[, 2], baseformula = stringr::str_match(string = l, pattern = "chemical_formula:;(.*?);;")[, 2], description = paste0(stringr::str_match(string = l, pattern = "description:;(.*?);")[, 2], " Found in ", tolower(stringr::str_match(string = l, pattern = "biofluid_location:;(.*?);")[, 2]), "."), structure = stringr::str_match(
-      string = l,
-      pattern = "smiles_canonical:;(.*?);;"
-    )[, 2])
-  })
-  db.formatted <- data.table::rbindlist(db.rows)
-  db.formatted$charge <- c(0)
-  list(db = db.formatted, version = version)
+  print("RMDB is as of recently incorporated in BMDB.")
 }
 
 #' @title Build ECMDB
@@ -2095,39 +2077,62 @@ build.mVOC <- function(outfolder, testMode = FALSE) {
     categories <- c("A")
   }
   search_urls <- pbapply::pbsapply(categories, function(categ) {
-    theurl <- paste0("http://bioinformatics.charite.de/mvoc/index.php?site=browse&char=", categ)
-    tables <- XML::readHTMLTable(theurl, elFun = hrefFun)
-    tables.nonull <- tables[sapply(tables, function(x) !is.null(x))]
-    tables.wrows <- tables.nonull[sapply(tables.nonull, function(x) nrow(x) > 0)]
-    urls <- gsub(unlist(tables.wrows), pattern = "\\./", replacement = urlbase)
-    urls[!is.na(urls)]
+    theurl <- paste0("https://bioinformatics.charite.de/mvoc/index.php?site=browse&char=", categ)
+    data <- readLines(theurl)
+    # https://bioinformatics.charite.de/mvoc/index.php?site=ergebnis&compound_id=11095734
+    matches = stringr::str_match_all(data, pattern = "compound\\_id\\=(\\d+)")
+    matches = unlist(matches)
+    cpd_ids = grep("^\\d+$", matches, value=T)
+    paste0("https://bioinformatics.charite.de/mvoc/index.php?site=ergebnis&compound_id=", cpd_ids)
   })
+
   db_rows <- pbapply::pblapply(unlist(search_urls), function(theurl) {
     try({
-      tables <- XML::readHTMLTable(theurl)
-      tables.nonull <- tables[sapply(tables, function(x) !is.null(x))]
-      end.nameblock <- min(which(!is.na(tables.nonull[[1]][, 2])))
-      names <- tables.nonull[[1]][1:end.nameblock - 1, 1]
-      restblock <- tables.nonull[[1]][-c(1:end.nameblock), ]
-      trans_restblock <- as.data.frame(t(restblock))
-      colnames(trans_restblock) <- trans_restblock[1, ]
-      trans_restblock <- trans_restblock[2, ]
-      has.desc <- which(sapply(tables.nonull, function(x) "Biological Function" %in% colnames(x)))
-      tbl_desc <- tables.nonull[[has.desc]]
-      desc <- paste0(sapply(1:nrow(tbl_desc), function(i) {
-        row <- tbl_desc[i, 1:2]
-        paste0(row[2], "(", row[1], ")")
-      }), collapse = ". ")
-      db.formatted <- data.table::data.table(identifier = trans_restblock$`PubChem ID`, compoundname = names[1], structure = trans_restblock$SMILES, baseformula = trans_restblock$Formula, description = paste0("Microbes producing this compound:", desc, ". Other names:", paste0(names[-1], collapse = ",")), charge = c(0))
+      lines = readLines(theurl)
+      pmid = stringr::str_match(lines, "PubChem ID: (\\d+)")
+      pmid = pmid[complete.cases(pmid),]
+      pmid = pmid[2]
+      # ---------------------
+      name = stringr::str_match(lines, "<div style='width:50%'><h1>(.+?)<\\/h1>")
+      name = name[complete.cases(name),]
+      name = name[2]
+      # ---------------------
+      syn_names = stringr::str_match_all(lines, "<td>.+?<\\/td>")
+      syn_first = which(sapply(syn_names, function(tbl) nrow(tbl)>0))[1]
+      syns = syn_names[[syn_first]][,1]
+      syns = gsub("<.+?>", "", syns)
+      # ---------------------
+      formula = stringr::str_match(lines, "Formula<\\/td><td.+?>(.*?)<\\/td>")
+      formula = formula[complete.cases(formula),]
+      formula = gsub("<.*?>", "", formula[2])
+      # ---------------------
+      smiles = stringr::str_match(lines,  "SMILES<\\/td><td.+?>(.*?)<\\/td>")
+      smiles = smiles[complete.cases(smiles),]
+      smiles = smiles[2]
+      # ---------------------
+      microbes = unlist(stringr::str_match_all(lines, "&species=(.+?)'"))
+      microbes = unique(grep("&species", microbes, invert=T, value=T))
+      microbes = microbes[2]
+
+      # ---------------------
+
+      db.formatted <- data.table::data.table(identifier = pmid,
+                                             compoundname = name,
+                                             structure = smiles,
+                                             baseformula = formula,
+                                             description = paste0("Microbes producing this compound:",
+                                                                  microbes,
+                                                                  ". Other names:",
+                                                                  paste0(syns, collapse = ",")),
+                                             charge = c(0))
       Sys.sleep(1)
       db.formatted
     })
   })
   db.formatted <- data.table::rbindlist(db_rows[sapply(db_rows, function(x) !is.null(nrow(x)))])
-  theurl <- "http://bioinformatics.charite.de/mvoc/index.php?site=home"
-  header <- RCurl::getURL(theurl, .opts = list(ssl.verifypeer = FALSE))
-  version <- stringr::str_match(header, pattern = "mVOC (\\d.\\d)")[, 2]
-  list(db = db.formatted, version = version)
+  version <- "2.0"
+  list(db = db.formatted,
+       version = version)
 }
 
 #' @title Build ANPDB
@@ -2197,7 +2202,7 @@ build.ANPDB <- function(outfolder, testMode = FALSE) {
 #' \dontrun{build.STOFF(outfolder=tempdir())}
 build.STOFF <- function(outfolder) {
   . <- Name <- Formula <- SMILES <- `Additional Names` <- Index <- compoundname <- NULL
-  file.url <- "http://www.lfu.bayern.de/stoffident/stoffident-static-content/html/download/SI_Content.zip"
+  file.url = "https://water.for-ident.org/download/STOFF-IDENT_content_17.10.17.zip"
   base.loc <- file.path(outfolder, "stoff_source")
   if (!dir.exists(base.loc)) {
     dir.create(base.loc, recursive = TRUE)
@@ -2205,11 +2210,15 @@ build.STOFF <- function(outfolder) {
   zip.file <- file.path(base.loc, "stoff.zip")
   utils::download.file(file.url, zip.file, mode = "wb", cacheOK = TRUE, method = "auto")
   utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
-  excel.file <- file.path(base.loc, "SI_Content.xls")
+  excel.file <- file.path(base.loc, "STOFF-IDENT_content_17.10.17.xlsx")
   xlsx.file <- gsub(excel.file, pattern = "xls", replacement = "xlsx")
   file.copy(excel.file, xlsx.file)
   db.base <- data.table::as.data.table(readxl::read_xlsx(xlsx.file, sheet = 1))
-  db.base.aggr <- db.base[, .(compoundname = unique(Name), baseformula = unique(Formula), structure = unique(SMILES), description = paste0("Synonyms: ", paste(`Additional Names`, collapse = ","))), by = Index]
+  db.base.aggr <- db.base[, .(compoundname = `Additional Names`[1],
+                              baseformula = Formula[1],
+                              structure = SMILES[1],
+                              description = paste0("In categories:", Categories[1] ,".\nSynonyms: ", paste(`Additional Names`, collapse = ","))),
+                          by = Index]
   db.base.aggr$charge <- c(0)
   db.formatted <- db.base.aggr[!is.na(compoundname)]
   colnames(db.formatted)[1] <- "identifier"
@@ -2269,10 +2278,10 @@ build.REACTOME <- function(outfolder) {
 }
 
 build.METABOLOMICSWORKBENCH <- function(outfolder){
-  study_url = "https://www.metabolomicsworkbench.org/rest/study/study_id/ST/summary"
+  study_url = "https://www.metabolomicsworkbench.org/rest/study/study_id/ST/species"
   studies = jsonlite::read_json(study_url)
   study_tbl = data.table::rbindlist(pbapply::pblapply(studies,function(l){
-    data.table::data.table(identifier = l$study_id, title= l$study_title, species = l$subject_species)
+    data.table::data.table(identifier = l$`Study ID`, species = l$`Latin name`)
   }))
   # studies > disease https://www.metabolomicsworkbench.org/rest/study/study_id/ST/disease
   disease_url = "https://www.metabolomicsworkbench.org/rest/study/study_id/ST/disease"
@@ -2316,9 +2325,11 @@ build.METABOLOMICSWORKBENCH <- function(outfolder){
   }))
   met_info_tbl$identifier <- as.character(met_info_tbl$identifier)
   met_info_study = merge(met_info_tbl,met_id_name_tbl, on="identifier")
-  big_merged <- merge(met_info_study, merged_info, by.x = "study", by.y = "identifier")
+  big_merged <- merge(met_info_study, merged_info, by.x = "study", by.y = "identifier", allow.cartesian = T)
   aggregated <- big_merged[ , .(description = paste0("Mentioned in the following studies (and connected diseases):",
-                                                     paste0(unique(paste0(study, "(", disease, ")")),collapse=","))
+                                                     paste0(unique(
+                                                       paste0(study, "(", disease, ")")),
+                                                       collapse=","))
                                 ),
                             by = identifier]
   aggregated$description <- gsub("\\(NA\\)", "", aggregated$description)
@@ -2336,7 +2347,8 @@ build.METABOLOMICSWORKBENCH <- function(outfolder){
 
   date <- Sys.Date()
   version <- Sys.Date()
-  list(db = db.formatted,
-       version = version)
+  db.formatted.all = list(db = db.formatted,
+                          version = version)
 
+  return(db.formatted.all)
   }

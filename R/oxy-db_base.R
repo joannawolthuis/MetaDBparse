@@ -13,11 +13,8 @@
 #' @importFrom rcdk parse.smiles do.aromaticity do.typing do.isotopes
 #' @importFrom rJava .jcall
 smiles.to.iatom <- function(smiles, silent = TRUE, cl = 0) {
-  print(smiles[[1]])
-  print(silent)
-  Sys.sleep(5)
   iatoms <- sapply(smiles, function(x, silent) {
-    print(x)
+    #print(x)
     mol <- NULL
     try(
       {
@@ -42,7 +39,7 @@ smiles.to.iatom <- function(smiles, silent = TRUE, cl = 0) {
       }
     )
     mol
-  })
+  }, silent = silent)
   try({
     rJava::.jcall("java/lang/System", "V", "gc")
     gc()
@@ -260,7 +257,8 @@ cleanDB <- function(db.formatted, cl, silent = TRUE, blocksize, smitype = "Canon
 #' @importFrom data.table fread as.data.table data.table
 #' @importFrom RSQLite dbExecute
 #' @importFrom DBI dbDisconnect
-buildBaseDB <- function(outfolder, dbname, custom_csv_path = NULL, smitype = "Canonical", silent = TRUE, cl = 0, test = FALSE, doBT = FALSE, btOpts = "phaseII:1", btLoc, skipClean=F) {
+buildBaseDB <- function(outfolder, dbname, custom_csv_path = NULL, smitype = "Canonical",
+                        silent = TRUE, cl = 0, test = FALSE, doBT = FALSE, btOpts = "phaseII:1", btLoc, skipClean=F) {
   httr::set_config(httr::config(ssl_verifypeer = 0))
   oldpar <- options()
   options(stringsAsFactors = FALSE, timeout=1000)
@@ -282,8 +280,7 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path = NULL, smitype = "Ca
                                reactome = build.REACTOME(outfolder),
                                metabolomicsworkbench = build.METABOLOMICSWORKBENCH(outfolder)
     )
-  }
-  else {
+  } else {
     db.formatted.all <- list(db = data.table::fread(custom_csv_path, header = TRUE), version = Sys.time())
   }
   if (dbname == "maconda") {

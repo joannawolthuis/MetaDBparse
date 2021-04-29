@@ -125,7 +125,8 @@ sdfStream.joanna <- function(input, output, append = FALSE, fct, Nlines = 10000,
           resultMA <- fct(sdfset, ...)
         }
         if (silent == FALSE) {
-          print(rownames(resultMA))
+          NULL
+          #print(rownames(resultMA))
         }
         if (counter == 1 & append != TRUE) {
           unlink(output)
