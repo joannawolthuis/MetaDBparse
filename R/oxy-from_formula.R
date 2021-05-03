@@ -177,6 +177,7 @@ revertAdduct <- function(formula, add_name, adduct_table = adducts) {
 #' @param elements Which elements to consider?, Default: c("C", "H", "N", "O", "P", "S")
 #' @param search Check the found formulas on PubChem or ChemSpider?, Default: c("PubChem", "ChemSpider")
 #' @param detailed Look up details like description etc. if hit found? Makes things slower!, Default: TRUE
+#' @param adduct_table Adduct table to use, referred to by 'calc_adducts'. Allows use for custom 'adducts' such as in-source fragments etc.
 #' @param calc_adducts Which adducts to consider?, Default: adducts[Ion_mode == mode, ]$Name
 #' @return Table of found matches and associated info
 #' @seealso

@@ -246,6 +246,7 @@ cleanDB <- function(db.formatted, cl, silent = TRUE, blocksize, smitype = "Canon
 #' @param doBT Do a biotransformation step using Biotransformer?
 #' @param btOpts Biotransfomer -q options. Defaults to phase II transformation only.
 #' @param btLoc Location of Biotransformer JAR file. Needs to be executable!
+#' @param skipClean Skip cleaning step? Cleaning step uses SMILES to acquire formula, charge, and transforms SMILES into 'smitype' dialect.
 #' @return Nothing, writes SQLite database to 'outfolder'.
 #' @seealso
 #'  \code{\link[data.table]{fread}},\code{\link[data.table]{as.data.table}}
@@ -266,20 +267,26 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path = NULL, smitype = "Ca
   removeDB(outfolder, paste0(dbname, ".db"))
   conn <- openBaseDB(outfolder, paste0(dbname, ".db"))
   if (is.null(custom_csv_path)) {
-    db.formatted.all <- switch(dbname, chebi = build.CHEBI(outfolder),
-                               maconda = build.MACONDA(outfolder, conn), kegg = build.KEGG(outfolder),
-                               bloodexposome = build.BLOODEXPOSOME(outfolder), dimedb = build.DIMEDB(outfolder),
-                               expoexplorer = build.EXPOSOMEEXPLORER(outfolder), foodb = build.FOODB(outfolder),
-                               drugbank = build.DRUGBANK(outfolder), lipidmaps = build.LIPIDMAPS(outfolder),
-                               massbank = build.MASSBANK(outfolder), metabolights = build.METABOLIGHTS(outfolder),
-                               metacyc = build.METACYC(outfolder),
-                               phenolexplorer = build.PHENOLEXPLORER(outfolder),
-                               respect = build.RESPECT(outfolder), wikidata = build.WIKIDATA(outfolder), wikipathways = build.WIKIPATHWAYS(outfolder), t3db = build.T3DB(outfolder), vmh = build.VMH(outfolder), hmdb = build.HMDB(outfolder), smpdb = build.SMPDB(outfolder), lmdb = build.LMDB(outfolder), ymdb = build.YMDB(outfolder), ecmdb = build.ECMDB(outfolder), bmdb = build.BMDB(outfolder), rmdb = build.RMDB(outfolder), stoff = build.STOFF(outfolder), anpdb = build.ANPDB(outfolder),
-                               mcdb = build.MCDB(outfolder), mvoc = build.mVOC(outfolder),
-                               pamdb = build.PAMDB(outfolder), pharmgkb = build.PHARMGKB(outfolder),
-                               reactome = build.REACTOME(outfolder),
-                               metabolomicsworkbench = build.METABOLOMICSWORKBENCH(outfolder)
+    db.error = simpleError(paste(toupper(dbname), "not available. Please submit an issue to the joannawolthuis/MetaDBparse GitHub repository."))
+    db.formatted.all <- tryCatch(switch(dbname, chebi = build.CHEBI(outfolder),
+                                        maconda = build.MACONDA(outfolder, conn), kegg = build.KEGG(outfolder),
+                                        bloodexposome = build.BLOODEXPOSOME(outfolder), dimedb = build.DIMEDB(outfolder),
+                                        expoexplorer = build.EXPOSOMEEXPLORER(outfolder), foodb = build.FOODB(outfolder),
+                                        drugbank = build.DRUGBANK(outfolder), lipidmaps = build.LIPIDMAPS(outfolder),
+                                        massbank = build.MASSBANK(outfolder), metabolights = build.METABOLIGHTS(outfolder),
+                                        metacyc = build.METACYC(outfolder),
+                                        phenolexplorer = build.PHENOLEXPLORER(outfolder),
+                                        respect = build.RESPECT(outfolder), wikidata = build.WIKIDATA(outfolder), wikipathways = build.WIKIPATHWAYS(outfolder), t3db = build.T3DB(outfolder), vmh = build.VMH(outfolder), hmdb = build.HMDB(outfolder), smpdb = build.SMPDB(outfolder), lmdb = build.LMDB(outfolder), ymdb = build.YMDB(outfolder), ecmdb = build.ECMDB(outfolder), bmdb = build.BMDB(outfolder), rmdb = build.RMDB(outfolder), stoff = build.STOFF(outfolder), anpdb = build.ANPDB(outfolder),
+                                        mcdb = build.MCDB(outfolder), mvoc = build.mVOC(outfolder),
+                                        pamdb = build.PAMDB(outfolder), pharmgkb = build.PHARMGKB(outfolder),
+                                        reactome = build.REACTOME(outfolder),
+                                        metabolomicsworkbench = build.METABOLOMICSWORKBENCH(outfolder),
+                                 error = function(e) e,
+                                 finally = data.table::data.table())
     )
+    if(is.null(db.formatted.all)){
+      stop("This DB is not included in MetaDBparse (anymore).")
+    }
   } else {
     db.formatted.all <- list(db = data.table::fread(custom_csv_path, header = TRUE), version = Sys.time())
   }

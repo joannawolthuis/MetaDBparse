@@ -349,6 +349,7 @@ build.HMDB <- function(outfolder, testMode = FALSE) {
 #' @importFrom data.table fread data.table
 #' @importFrom pbapply pbsapply
 build.METACYC <- function(outfolder) {
+  identifier <- NULL
   currurl = "https://metacyc.org/group?id=biocyc17-31223-3787684059"
   base.loc <- file.path(outfolder, "metacyc_source")
   if (!dir.exists(base.loc)) {
@@ -868,6 +869,7 @@ build.T3DB <- function(outfolder, testMode = FALSE) {
 #' @examples
 #' \dontrun{build.BLOODEXPOSOME(outfolder=tempdir(), testMode=TRUE)}
 build.BLOODEXPOSOME <- function(outfolder, testMode = FALSE) {
+  . <- PMID <- CID <- NULL
   file.url <- "http://exposome1.fiehnlab.ucdavis.edu/download/BloodExpsomeDatabase_version_1.0.xlsx"
   base.loc <- file.path(outfolder, "bloodexposome_source")
   if (!dir.exists(base.loc)) {
@@ -1885,16 +1887,18 @@ build.RMDB <- function(outfolder, testMode = FALSE) {
 #' @examples
 #' \dontrun{build.ECMDB(outfolder=tempdir(), testMode=TRUE)}
 build.ECMDB <- function(outfolder, testMode = FALSE) {
-  theurl <- "http://ecmdb.ca/downloads"
-  header <- RCurl::getURL(theurl, .opts = list(ssl.verifypeer = FALSE))
-  version <- stringr::str_match(header, pattern = "Version <strong>(\\d.\\d)")[, 2]
-  file.url <- "http://ecmdb.ca/download/ecmdb.json.zip"
   base.loc <- file.path(outfolder, "ecmdb_source")
   if (!dir.exists(base.loc)) {
     dir.create(base.loc, recursive = TRUE)
   }
+  theurl <- "http://ecmdb.ca/downloads"
+  header <- RCurl::getURL(theurl, .opts = list(ssl.verifypeer = FALSE))
+  version <- stringr::str_match(header, pattern = "Version <strong>(\\d.\\d)")[, 2]
+  file.url <- "http://ecmdb.ca/download/ecmdb.json.zip"
   zip.file <- file.path(base.loc, "ecmdb.zip")
+
   utils::download.file(file.url, zip.file, mode = "wb", cacheOK = TRUE, method = "auto")
+
   utils::unzip(zip.file, exdir = base.loc)
   json <- file.path(base.loc, "ecmdb.json")
   json.rows <- RJSONIO::fromJSON(json)
@@ -2201,7 +2205,7 @@ build.ANPDB <- function(outfolder, testMode = FALSE) {
 #' @examples
 #' \dontrun{build.STOFF(outfolder=tempdir())}
 build.STOFF <- function(outfolder) {
-  . <- Name <- Formula <- SMILES <- `Additional Names` <- Index <- compoundname <- NULL
+  . <- Name <- Formula <- SMILES <- `Additional Names` <- Index <- compoundname <- Categories <- NULL
   file.url = "https://water.for-ident.org/download/STOFF-IDENT_content_17.10.17.zip"
   base.loc <- file.path(outfolder, "stoff_source")
   if (!dir.exists(base.loc)) {
@@ -2277,7 +2281,23 @@ build.REACTOME <- function(outfolder) {
   db.formatted.all
 }
 
+#' @title Build METABOLOMICSWORKBENCH db
+#' @description Parses the METABOLOMICSWORKBENCH db, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
+#' @param outfolder Which folder to save temp files to?
+#' @return data table with parsed database
+#' @seealso
+#'  \code{\link[data.table]{as.data.table}}
+#'  \code{\link[rvest]{html_nodes}}
+#'  \code{\link[xml2]{read_html}}
+#' @rdname build.REACTOME
+#' @export
+#' @importFrom rvest html_nodes
+#' @importFrom xml2 read_html
+#' @importFrom data.table as.data.table fread
+#' @examples
+#' \dontrun{build.METABOLOMICSWORKBENCH(outfolder=tempdir())}
 build.METABOLOMICSWORKBENCH <- function(outfolder){
+  . <- study <- disease <- identifier <- compoundname <- NULL
   study_url = "https://www.metabolomicsworkbench.org/rest/study/study_id/ST/species"
   studies = jsonlite::read_json(study_url)
   study_tbl = data.table::rbindlist(pbapply::pblapply(studies,function(l){

@@ -234,6 +234,7 @@ doAdduct <- function(structure, formula, charge, adduct_table, query_adduct) {
 #' @description Takes in formula and returns isotope pattern m/z values.
 #' @param formula Molecular formula
 #' @param charge Final charge
+#' @param count.isos Add columns for amounts of 2H, 13C, 15N atoms? Useful for heavy isotope experiments.
 #' @return Table with isotopes of this molecular formula
 #' @examples
 #'  doIsotopes(formula="C6H12O6", charge=0)
@@ -290,6 +291,8 @@ doIsotopes <- function(formula, charge, count.isos=F) {
 #' @param adduct_rules Adduct rule table, Default: adduct_rules
 #' @param silent Silence warnings?, Default: silent
 #' @param use.rules Use adduct rules?, Default: TRUE
+#' @param all.isos Include and calculate all isotopes? (if FALSE, only takes the 100/main isotope).
+#' @param count.isos Add columns for amounts of 2H, 13C, 15N atoms? Useful for heavy isotope experiments.
 #' @seealso
 #'  \code{\link[RSQLite]{SQLite}}
 #'  \code{\link[gsubfn]{fn}}
@@ -317,7 +320,7 @@ buildExtDB <- function(outfolder, ext.dbname = "extended", base.dbname, cl = 0,
                        blocksize = 600, mzrange = c(60, 600), adduct_table = adducts,
                        adduct_rules = adduct_rules, silent = silent, use.rules = TRUE,
                        count.isos = F, all.isos = T) {
-  Name <- charge <- ..add <- NULL
+  Name <- charge <- ..add <- ..keepcols <- NULL
   outfolder <- normalizePath(outfolder)
   print(paste("Will calculate adducts + isotopes for the", base.dbname, "database."))
   full.db <- file.path(outfolder, paste0(ext.dbname, ".db"))
