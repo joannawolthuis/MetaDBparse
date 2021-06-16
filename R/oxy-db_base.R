@@ -281,6 +281,7 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path = NULL, smitype = "Ca
                                         pamdb = build.PAMDB(outfolder), pharmgkb = build.PHARMGKB(outfolder),
                                         reactome = build.REACTOME(outfolder),
                                         metabolomicsworkbench = build.METABOLOMICSWORKBENCH(outfolder),
+                                        npa = build.NPA(outfolder),
                                  error = function(e) e,
                                  finally = data.table::data.table())
     )
