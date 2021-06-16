@@ -268,7 +268,8 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path = NULL, smitype = "Ca
   conn <- openBaseDB(outfolder, paste0(dbname, ".db"))
   if (is.null(custom_csv_path)) {
     db.error = simpleError(paste(toupper(dbname), "not available. Please submit an issue to the joannawolthuis/MetaDBparse GitHub repository."))
-    db.formatted.all <- tryCatch(switch(dbname, chebi = build.CHEBI(outfolder),
+    db.formatted.all <- tryCatch(switch(dbname,
+                                        chebi = build.CHEBI(outfolder),
                                         maconda = build.MACONDA(outfolder, conn), kegg = build.KEGG(outfolder),
                                         bloodexposome = build.BLOODEXPOSOME(outfolder), dimedb = build.DIMEDB(outfolder),
                                         expoexplorer = build.EXPOSOMEEXPLORER(outfolder), foodb = build.FOODB(outfolder),
@@ -286,7 +287,7 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path = NULL, smitype = "Ca
                                  finally = data.table::data.table())
     )
     if(is.null(db.formatted.all)){
-      stop("This DB is not included in MetaDBparse (anymore).")
+      stop("This DB is currently not included in MetaDBparse.")
     }
   } else {
     db.formatted.all <- list(db = data.table::fread(custom_csv_path, header = TRUE), version = Sys.time())
