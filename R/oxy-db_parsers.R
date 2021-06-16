@@ -2371,4 +2371,59 @@ build.METABOLOMICSWORKBENCH <- function(outfolder){
                           version = version)
 
   return(db.formatted.all)
-  }
+}
+
+#' @title Build Natural Products Atlas db
+#' @description Parses the Natural Products Atlas db, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
+#' @param outfolder Which folder to save temp files to?
+#' @return data table with parsed database
+#' @seealso
+#'  \code{\link[data.table]{as.data.table}}
+#'  \code{\link[rvest]{html_nodes}}
+#'  \code{\link[xml2]{read_html}}
+#' @rdname build.NPA
+#' @export
+#' @importFrom data.table as.data.table fread
+#' @examples
+#' \dontrun{build.NPA(outfolder=tempdir())}
+build.NPA <- function(outfolder){
+  theurl = "https://www.npatlas.org/download"
+  html = rvest::read_html(theurl)
+  version = as.character(rvest::html_elements(html, css = "h5"))
+  version = stringr::str_match(version, "\\((.*?)\\)")[,2]
+
+  theurl = "https://www.npatlas.org/static/downloads/NPAtlas_download.tsv"
+
+  db.base = data.table::fread(theurl)
+  # - - - - - -
+  db.formatted <- data.table::data.table(identifier = db.base$npaid,
+                                         compoundname = db.base$compound_names,
+                                         structure = db.base$compound_smiles,
+                                         baseformula = db.base$compound_molecular_formula,
+                                         description = sapply(1:nrow(db.base), function(i){
+                                           row = db.base[i,]
+                                           if(grepl(pattern = "unknown", row$genus,ignore.case = T)){
+                                             paste0("Found in unknown ",
+                                                    tolower(row$origin_type),
+                                                    " (DOI:", row$original_reference_doi, ")."
+                                             )
+                                           }else{
+                                             paste0("Found in the ",
+                                                    tolower(row$origin_type), " ",
+                                                    Hmisc::capitalize(row$genus), " ",
+                                                    Hmisc::capitalize(row$origin_species),
+                                                    " (DOI:", row$original_reference_doi, ")."
+                                             )
+                                           }
+                                         }))
+
+  date <- Sys.Date()
+  db.formatted.all = list(db = db.formatted,
+                          version = version)
+
+  return(db.formatted.all)
+}
+
+
+
+

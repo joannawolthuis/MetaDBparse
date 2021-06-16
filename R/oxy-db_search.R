@@ -337,7 +337,11 @@ searchCMMR <- function(cmm_url = "http://ceumass.eps.uspceu.es/mediator/api/v3/b
 #' \dontrun{searchMZonline(mz = 170.09240307, mode = "positive", which_db = "cmmr")}
 searchMZonline <- function(mz = 178.1219, mode = "positive", adducts, ppm = 2, which_db = "cmmr", apikey = "") {
   switch(which_db, cmmr = {
-    results <- searchCMMR("http://ceumass.eps.uspceu.es/mediator/api/v3/batch", masses_mode = "mz", ion_mode = "positive", tolerance = ppm, tolerance_mode = "ppm", unique_mz = mz)
+    results <- searchCMMR("http://ceumass.eps.uspceu.es/mediator/api/v3/batch", masses_mode = "mz",
+                          ion_mode = "positive",
+                          tolerance = ppm,
+                          tolerance_mode = "ppm",
+                          unique_mz = mz)
     if (typeof(results) == "character") {
       data.table::data.table()
     } else {
