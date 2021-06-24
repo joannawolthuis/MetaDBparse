@@ -2424,6 +2424,33 @@ build.NPA <- function(outfolder){
   return(db.formatted.all)
 }
 
+build.MARKERDB <- function(outfolder){
+  apikey = "cc69fb7c1a4809bbae7c0701d5188c17"
+  page = 1
+  first.page = gsubfn::fn$paste("https://markerdb.ca/api/v1/chemicalapi/chemicalrequest?api_key=$apikey&name=&page=$page")
+  first.page.info = jsonlite::read_json(first.page)
+  npages = first.page.info$total_page
+  cpd.info.rows <- pbapply::pblapply(1:npages, function(page){
+    page.json = jsonlite::read_json(gsubfn::fn$paste("https://markerdb.ca/api/v1/chemicalapi/chemicalrequest?api_key=$apikey&name=&page=$page"))
+    row = data.table::data.table()
+    page.rows = lapply(page.json$chemicals, function(json){
+      row = data.table::data.table(
+        identifier = paste0("MDB", stringr::str_pad(json$id, width = 8, pad = "0", side = "left")),
+        compoundname = json$mdbid,
+        structure = json$moldb_smiles,
+        baseformula = json$moldb_formula,
+        description = json$description
+      )
+    })
+    data.table::rbindlist(page.rows, fill = TRUE)
+  })
+  db.formatted = data.table::rbindlist(cpd.info.rows, fill = TRUE)
+
+  db.formatted.all = list(db = db.formatted,
+                         version = Sys.Date())
+
+  return(db.formatted.all)
+}
 
 
 

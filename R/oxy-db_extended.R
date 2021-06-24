@@ -567,7 +567,7 @@ buildExtDB <- function(outfolder, ext.dbname = "extended", base.dbname, cl = 0,
   adduct_table$dbname <- base.dbname
   if (!first.db) {
     existing_adducts <- RSQLite::dbReadTable(full.conn, "adducts")
-    adduct_tbl_named <- unique(rbind(adduct_table, existing_adducts))
+    adduct_tbl_named <- unique(rbind(adduct_table[,1:11], existing_adducts))
   }
   else {
     adduct_tbl_named <- adduct_table
