@@ -269,7 +269,6 @@ doIsotopes <- function(formula, charge, count.isos=F) {
     result
   })
   isolist.nonas <- isolist[!is.na(isolist)]
-  print(isolist.nonas[[1]])
   isotable <- data.table::rbindlist(isolist.nonas)
   keep.isos <- names(isolist.nonas)
   charges <- charge[!is.na(isolist)]
