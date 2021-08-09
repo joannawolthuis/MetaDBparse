@@ -50,7 +50,8 @@ showAllBase <- function(outfolder, base.dbname) {
 #'  \dontrun{buildExtDB(outfolder = myFolder, base.dbname = "lmdb",
 #'  silent=FALSE, adduct_table = adducts, adduct_rules = adduct_rules)}
 #'  \dontrun{searchMZ(c("104.3519421"), "positive", outfolder = myFolder, "lmdb", ppm = 3)}
-searchMZ <- function(mzs, ionmodes, outfolder, base.dbname, ppm, ext.dbname = "extended", append = FALSE) {
+searchMZ <- function(mzs, ionmodes, outfolder, base.dbname, ppm,
+                     ext.dbname = "extended", append = FALSE, addtable = adducts) {
   conn <- RSQLite::dbConnect(RSQLite::SQLite(), file.path(outfolder, paste0(ext.dbname, ".db")))
 
   ### check for isotope header ###
@@ -82,6 +83,19 @@ searchMZ <- function(mzs, ionmodes, outfolder, base.dbname, ppm, ext.dbname = "e
   RSQLite::dbExecute(conn, sql.make.rtree)
   RSQLite::dbWriteTable(conn, "mzranges", mzranges, append = TRUE)
   RSQLite::dbExecute(conn, "DROP TABLE IF EXISTS unfiltered")
+
+  # custom adduct pre-filter
+  in_db_adducts = RSQLite::dbReadTable(conn, "adducts")
+
+  if(length(intersect(in_db_adducts$Name, addtable$Name)) != nrow(in_db_adducts)){
+    addtablename = "adducts_temp"
+    RSQLite::dbWriteTable(conn = conn,
+                          name = addtablename,
+                          value = addtable, overwrite=T)
+  }else{
+    addtablename = "adducts"
+  }
+
   query <- if(hasIsoLabel){
     "CREATE TABLE unfiltered AS SELECT DISTINCT cpd.adduct as adduct,
                                                        cpd.isoprevalence as isoprevalence,
@@ -97,9 +111,9 @@ searchMZ <- function(mzs, ionmodes, outfolder, base.dbname, ppm, ext.dbname = "e
                                                        JOIN mzranges rng ON rng.ID = mz.ID
                                                        JOIN extended cpd indexed by e_idx2
                                                        ON cpd.fullmz BETWEEN rng.mzmin AND rng.mzmax
-                                                       JOIN adducts
-                                                       ON cpd.adduct = adducts.Name
-                                                       AND mz.foundinmode = adducts.Ion_Mode
+                                                       JOIN $addtablename myadducts
+                                                       ON cpd.adduct = myadducts.Name
+                                                       AND mz.foundinmode = myadducts.Ion_Mode
                                                        JOIN structures struc
                                                        ON cpd.struct_id = struc.struct_id"
   }else{
@@ -114,13 +128,14 @@ searchMZ <- function(mzs, ionmodes, outfolder, base.dbname, ppm, ext.dbname = "e
                                                        JOIN mzranges rng ON rng.ID = mz.ID
                                                        JOIN extended cpd indexed by e_idx2
                                                        ON cpd.fullmz BETWEEN rng.mzmin AND rng.mzmax
-                                                       JOIN adducts
-                                                       ON cpd.adduct = adducts.Name
-                                                       AND mz.foundinmode = adducts.Ion_Mode
+                                                       JOIN $addtablename myadducts
+                                                       ON cpd.adduct = myadducts.Name
+                                                       AND mz.foundinmode = myadducts.Ion_Mode
                                                        JOIN structures struc
                                                        ON cpd.struct_id = struc.struct_id"
   }
 
+  query = strwrap(gsubfn::fn$paste(query), width = 10000, simplify = TRUE)
 
   RSQLite::dbExecute(conn, query)
   table.per.db <- lapply(base.dbname, function(db) {
