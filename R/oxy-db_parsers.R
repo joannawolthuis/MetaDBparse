@@ -92,7 +92,7 @@ build.MCDB <- function(outfolder, testMode = FALSE) {
   dir.create(base.loc, recursive = TRUE)
   zip.file <- file.path(base.loc, "MCDB.zip")
   utils::download.file(file.url, zip.file, mode = "wb", cacheOK = TRUE, method = "auto")
-  utils::unzip(zip.file, exdir = base.loc)
+  utils::unzip(zip.file, exdir = base.loc, unzip = getOption("unzip"))
   input <- file.path(base.loc, "milk_metabolites.xml")
   header <- readLines(input, n = 10)
   version <- trimws(gsub(grep(pattern = "<version", header, value = TRUE), pattern = "<\\/?version>", replacement = ""))
@@ -229,7 +229,9 @@ build.HMDB <- function(outfolder, testMode = FALSE) {
   dir.create(base.loc, recursive = TRUE)
   zip.file <- file.path(base.loc, "HMDB.zip")
   utils::download.file(file.url, zip.file, mode = "wb", cacheOK = TRUE, method = "auto")
-  utils::unzip(zip.file, exdir = base.loc)
+  utils::unzip(zip.file,
+               exdir = base.loc,
+               unzip = getOption("unzip"))
   input <- file.path(base.loc, "hmdb_metabolites.xml")
   header <- readLines(input, n = 10)
   version <- trimws(gsub(grep(pattern = "<version", header, value = TRUE), pattern = "<\\/?version>", replacement = ""))
@@ -251,9 +253,7 @@ build.HMDB <- function(outfolder, testMode = FALSE) {
     os <- sysinf["sysname"]
     if (os == "Darwin") {
       os <- "osx"
-    }
-  }
-  else {
+    }}else {
     os <- .Platform$OS.type
     if (grepl("^darwin", R.version$os)) {
       os <- "osx"
@@ -494,13 +494,17 @@ build.PHARMGKB <- function(outfolder) {
   dir.create(base.loc, recursive = TRUE)
   zip.file <- file.path(base.loc, "drugs.zip")
   utils::download.file(file.url, zip.file, mode = "wb", method = "auto")
-  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+  utils::unzip(zip.file,
+               exdir = normalizePath(base.loc),
+               unzip = getOption("unzip"))
   drug.db <- data.table::fread(file.path(base.loc, "drugs.tsv"), quote = "")
   drug.db <- drug.db[SMILES != ""]
   file.url <- "https://s3.pgkb.org/data/chemicals.zip"
   zip.file <- file.path(base.loc, "chemicals.zip")
   utils::download.file(file.url, zip.file, mode = "wb", method = "auto")
-  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+  utils::unzip(zip.file,
+               exdir = normalizePath(base.loc),
+               unzip = getOption("unzip"))
   chem.db <- data.table::fread(file.path(base.loc, "chemicals.tsv"), quote = "")
   chem.db <- chem.db[SMILES != ""]
   both.db <- data.table::rbindlist(list(drug.db, chem.db))
@@ -644,7 +648,9 @@ build.RESPECT <- function(outfolder, testMode = FALSE) {
   dir.create(base.loc, recursive = TRUE)
   zip.file <- file.path(base.loc, "respect.zip")
   utils::download.file(file.url, zip.file, mode = "wb", method = "auto")
-  utils::unzip(normalizePath(zip.file), exdir = (base.loc))
+  utils::unzip(zip.file,
+               exdir = normalizePath(base.loc),
+               unzip = getOption("unzip"))
   theurl <- RCurl::getURL("http://spectra.psc.riken.jp/menta.cgi/respect/download/download", .opts = list(ssl.verifypeer = FALSE))
   version <- stringr::str_match(theurl, pattern = "<b>(.{1,30}) Update")[, 2]
   version <- gsub(version, pattern = "\\.", replacement = "-")
@@ -711,7 +717,10 @@ build.MACONDA <- function(outfolder, testMode = FALSE, conn, apikey) {
   version <- gsub(version, pattern = "\\.", replacement = "-")
   date <- Sys.Date()
   utils::download.file(file.url, zip.file, mode = "wb", extra = "-k", method = "auto")
-  utils::unzip(normalizePath(zip.file), files = "MaConDa__v1_0__extensive.csv", exdir = normalizePath(base.loc))
+  utils::unzip(normalizePath(zip.file),
+               files = "MaConDa__v1_0__extensive.csv",
+               exdir = normalizePath(base.loc),
+               unzip = getOption("unzip"))
   base.table <- data.table::fread(file = file.path(base.loc, "MaConDa__v1_0__extensive.csv"))
   mysterious <- which(base.table$name == "unknown")
   base.table$formula[mysterious] <- paste0("IDK", 1:length(mysterious))
@@ -840,7 +849,7 @@ build.T3DB <- function(outfolder, testMode = FALSE) {
   dir.create(base.loc, recursive = TRUE)
   zip.file <- file.path(base.loc, "T3DB.zip")
   utils::download.file(file.url, zip.file, mode = "wb", method = "auto")
-  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc), unzip = getOption("unzip"))
   theurl <- RCurl::getURL("http://www.t3db.ca/downloads", .opts = list(ssl.verifypeer = FALSE))
   version <- stringr::str_match(theurl, pattern = "T3DB Version <strong>(...)")[, 2]
   date <- Sys.Date()
@@ -901,14 +910,14 @@ build.BLOODEXPOSOME <- function(outfolder, testMode = FALSE) {
   cid.pmid.zip = "https://exposome1.fiehnlab.ucdavis.edu/download/cid_pmid_mapping.zip"
   zip.file <- file.path(base.loc, "mapping.zip")
   utils::download.file(cid.pmid.zip, zip.file, mode = "wb", method = "auto")
-  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc), unzip = getOption("unzip"))
   mapping = data.table::fread(file.path(base.loc, "master_cid_pmid.txt"))
   colnames(mapping) = c("CID", "PMID")
   # -- GET TITLES --
   pmid.zip = "https://exposome1.fiehnlab.ucdavis.edu/download/pmid_title_abstract_sb.zip"
   zip.file <- file.path(base.loc, "pubmed.zip")
   utils::download.file(pmid.zip, zip.file, mode = "wb", method = "auto")
-  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc), unzip = getOption("unzip"))
   papers = data.table::fread(file.path(base.loc, "pmid_title_abstract_sb.txt"))
   # -- MERGE --
   merged = merge(mapping, papers)
@@ -961,7 +970,7 @@ build.EXPOSOMEEXPLORER <- function(outfolder, testMode = FALSE) {
   dir.create(base.loc, recursive = TRUE)
   zip.file <- file.path(base.loc, "expoexpo_comp.zip")
   utils::download.file(file.url, zip.file, mode = "wb", method = "auto")
-  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc), unzip = getOption("unzip"))
   version <- stringr::str_match(RCurl::getURL("http://exposome-explorer.iarc.fr/releases", .opts = list(ssl.verifypeer = FALSE)), pattern = "Release (...)")[, 2]
   date <- stringr::str_match(RCurl::getURL("http://exposome-explorer.iarc.fr/downloads", .opts = list(ssl.verifypeer = FALSE)), pattern = "(\\d{4}-\\d{2}-\\d{2})")[, 2]
   base.table <- data.table::fread(file = file.path(base.loc, "biomarkers.csv"))
@@ -970,7 +979,7 @@ build.EXPOSOMEEXPLORER <- function(outfolder, testMode = FALSE) {
   file.url <- "http://exposome-explorer.iarc.fr/system/downloads/current/correlations.csv.zip"
   zip.file <- file.path(base.loc, "expoexpo_corr.zip")
   utils::download.file(file.url, zip.file, mode = "wb", method = "auto")
-  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc), unzip = getOption("unzip"))
   corr.table <- data.table::fread(file = file.path(base.loc, "correlations.csv"))
   descriptions <- pbapply::pbsapply(1:nrow(corr.table), function(i) {
     row <- corr.table[i, ]
@@ -1023,7 +1032,7 @@ build.SMPDB <- function(outfolder, testMode = FALSE) {
   }
   zip.file <- file.path(base.loc, "SMPDB.zip")
   utils::download.file(file.url, zip.file, mode = "wb", method = "auto")
-  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc), unzip = getOption("unzip"))
   theurl <- "https://smpdb.ca/release_notes"
   header <- RCurl::getURL(theurl, .opts = list(ssl.verifypeer = FALSE))
   versions <- stringr::str_match_all(header, pattern = "Release (.{1,30}) -")[[1]]
@@ -1197,7 +1206,7 @@ build.DRUGBANK <- function(outfolder) {
   if (!file.exists(zip.file)) {
     file.rename(file.path(base.loc, "drugbank_all_full_database.xml.zip"), zip.file)
   }
-  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc), unzip = getOption("unzip"))
   input <- file.path(base.loc, "full database.xml")
   header <- readLines(input, n = 10)
   hasInfo <- grep(x = header, pattern = "version", value = TRUE, perl = TRUE)[2]
@@ -1329,7 +1338,7 @@ build.LIPIDMAPS <- function(outfolder, testMode = FALSE, apikey) {
   }
   zip.file <- file.path(base.loc, "lipidmaps.zip")
   utils::download.file(file.url, zip.file, mode = "wb", method = "auto")
-  zip::unzip(zipfile = normalizePath(zip.file), exdir = normalizePath(base.loc))
+  zip::unzip(zipfile = normalizePath(zip.file), exdir = normalizePath(base.loc), unzip = getOption("unzip"))
   version <- Sys.Date()
   sdf.path <- list.files(base.loc, pattern = "sdf", full.names = TRUE, recursive = TRUE)
   desc <- function(sdfset) {
@@ -1506,7 +1515,7 @@ build.DIMEDB <- function(outfolder, testMode = FALSE) {
   pbapply::pbsapply(file.urls, function(url) {
     zip.file <- file.path(base.loc, basename(url))
     utils::download.file(url, zip.file, mode = "wb", method = "auto")
-    utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+    utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc), unzip = getOption("unzip"))
   })
   version <- Sys.Date()
   atom <- data.table::fread(file.path(base.loc, "dimedb_pc_info.tsv"))
@@ -1633,7 +1642,7 @@ build.PHENOLEXPLORER <- function(outfolder, testMode = FALSE) {
   for (url in file.urls) {
     zip.file <- file.path(base.loc, basename(url))
     utils::download.file(url, destfile = zip.file, mode = "wb", method = "auto")
-    utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+    utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc), unzip = getOption("unzip"))
   }
   compo_tbl <- as.data.frame(readxl::read_xlsx(file.path(base.loc, "composition-data.xlsx"), sheet = 1))
   compo_tbl$description <- paste0("Present in ", tolower(compo_tbl$food), "(", tolower(compo_tbl$food_group), ", ", tolower(compo_tbl$food_sub_group), "). ", "Belongs to the compound class of ", tolower(compo_tbl$compound_group), " (", tolower(compo_tbl$compound_sub_group), "). ", "PMIDS: ", compo_tbl$pubmed_ids)
@@ -1687,7 +1696,7 @@ build.MASSBANK <- function(outfolder, testMode = FALSE) {
   dir.create(base.loc, recursive = TRUE)
   zip.file <- file.path(base.loc, "massbank.zip")
   utils::download.file(file.url, zip.file, mode = "wb", method = "auto")
-  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc), unzip = getOption("unzip"))
   cpd_files <- list.files(base.loc, pattern = ".txt$", full.names = TRUE, recursive = TRUE)
   if (testMode) {
     cpd_files <- cpd_files[1:10]
@@ -1756,7 +1765,7 @@ build.BMDB <- function(outfolder, testMode = FALSE) {
   dir.create(base.loc, recursive = TRUE)
   zip.file <- file.path(base.loc, "BMDB.zip")
   utils::download.file(file.url, zip.file, mode = "wb", cacheOK = TRUE, method = "auto")
-  utils::unzip(zip.file, exdir = base.loc)
+  utils::unzip(zip.file, exdir = base.loc, unzip = getOption("unzip"))
   input <- file.path(base.loc, "bmdb_metabolites.xml")
   header <- readLines(input, n = 10)
   version <- trimws(gsub(grep(pattern = "<version", header, value = TRUE), pattern = "<\\/?version>", replacement = ""))
@@ -1899,7 +1908,7 @@ build.ECMDB <- function(outfolder, testMode = FALSE) {
 
   utils::download.file(file.url, zip.file, mode = "wb", cacheOK = TRUE, method = "auto")
 
-  utils::unzip(zip.file, exdir = base.loc)
+  utils::unzip(zip.file, exdir = base.loc, unzip = getOption("unzip"))
   json <- file.path(base.loc, "ecmdb.json")
   json.rows <- RJSONIO::fromJSON(json)
   if (testMode) {
@@ -1976,7 +1985,7 @@ build.YMDB <- function(outfolder) {
   dir.create(base.loc, recursive = TRUE)
   zip.file <- file.path(base.loc, "ymdb.zip")
   utils::download.file(file.url, zip.file, mode = "wb", cacheOK = TRUE, method = "auto")
-  utils::unzip(zip.file, exdir = base.loc)
+  utils::unzip(zip.file, exdir = base.loc, unzip = getOption("unzip"))
   json <- file.path(base.loc, "ymdb.json")
   line <- readLines(json)[[1]]
   fixed_lines <- gsub(line, pattern = "\\]\\}\\{", replacement = "]},{")
@@ -1985,7 +1994,7 @@ build.YMDB <- function(outfolder) {
   sdf.url <- "http://www.ymdb.ca/system/downloads/current/ymdb.sdf.zip"
   zip.file <- file.path(base.loc, "ymdb_sdf.zip")
   utils::download.file(sdf.url, zip.file, mode = "wb", cacheOK = TRUE, method = "auto")
-  utils::unzip(zip.file, exdir = base.loc)
+  utils::unzip(zip.file, exdir = base.loc, unzip = getOption("unzip"))
   sdf.path <- list.files(base.loc, pattern = "sdf$", full.names = TRUE, recursive = TRUE)
   desc <- function(sdfset) {
     mat <- NULL
@@ -2213,7 +2222,7 @@ build.STOFF <- function(outfolder) {
   }
   zip.file <- file.path(base.loc, "stoff.zip")
   utils::download.file(file.url, zip.file, mode = "wb", cacheOK = TRUE, method = "auto")
-  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc))
+  utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc), unzip = getOption("unzip"))
   excel.file <- file.path(base.loc, "STOFF-IDENT_content_17.10.17.xlsx")
   xlsx.file <- gsub(excel.file, pattern = "xls", replacement = "xlsx")
   file.copy(excel.file, xlsx.file)
