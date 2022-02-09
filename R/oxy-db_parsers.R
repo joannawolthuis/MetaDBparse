@@ -34,7 +34,28 @@ build.WIKIPATHWAYS <- function(outfolder, testMode = FALSE) {
   }
   chebi <- data.table::as.data.table(showAllBase(outfolder, "chebi"))
   chebi$identifier <- as.numeric(chebi$identifier)
-  base.db <- SPARQL::SPARQL(url = "http://sparql.wikipathways.org/sparql", query = "prefix wp: <http://vocabularies.wikipathways.org/wp#>\n                                                   prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#>\n                                                   prefix dcterms: <http://purl.org/dc/terms/>\n                                                   prefix xsd:     <http://www.w3.org/2001/XMLSchema#>\n                                                   PREFIX wdt: <http://www.wikidata.org/prop/direct/>\n\n                                                   select  ?mb\n                                                   (group_concat(distinct str(?labelLit);separator=\", \") as ?label )\n                                                   ?idurl as ?csid\n                                                   (group_concat(distinct ?pwTitle;separator=\", \") as ?description)\n                                                   ?pathway\n                                                   where {\n                                                   ?mb a wp:Metabolite ;\n                                                   rdfs:label ?labelLit ;\n                                                   wp:bdbChEBI ?idurl ;\n                                                   dcterms:isPartOf ?pathway .\n                                                   ?pathway a wp:Pathway ;\n                                                   dc:title ?pwTitle .\n                                                   FILTER (BOUND(?idurl))\n                                                   }\n                                                   GROUP BY ?mb ?wp ?idurl ?pathway")
+  base.db <- SPARQL::SPARQL(url = "https://sparql.wikipathways.org/sparql",
+                           query = "prefix wp: <http://vocabularies.wikipathways.org/wp#>
+                                    prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#>
+                                    prefix dcterms: <http://purl.org/dc/terms/>
+                                    prefix xsd:     <http://www.w3.org/2001/XMLSchema#>
+                                    prefix wdt:     <http://www.wikidata.org/prop/direct/>
+                                    select  ?mb
+                                    (group_concat(distinct str(?labelLit);separator=\", \") as ?label )
+                                    ?idurl as ?csid
+                                    (group_concat(distinct ?pwTitle;separator=\", \") as ?description)
+                                    ?pathway
+                                    where {
+                                    ?mb a wp:Metabolite ;
+                                    rdfs:label ?labelLit ;
+                                    wp:bdbChEBI ?idurl ;
+                                    dcterms:isPartOf ?pathway .
+                                    ?pathway a wp:Pathway ;
+                                    dc:title ?pwTitle .
+                                    FILTER (BOUND(?idurl))
+                                    }
+                                    GROUP BY ?mb ?wp ?idurl ?pathway",
+                           curl_args=list(useragent=R.version.string))
   base.db$results$identifier <- as.numeric(gsub(base.db$results$csid, pattern = ".*:|>", replacement = ""))
   chebi.join.table <- data.table::data.table(identifier = base.db$results$identifier,
                                              description = base.db$results$description,
@@ -1331,14 +1352,15 @@ build.DRUGBANK <- function(outfolder) {
 #' @examples
 #' \dontrun{build.LIPIDMAPS(outfolder=tempdir(), testMode=TRUE)}
 build.LIPIDMAPS <- function(outfolder, testMode = FALSE, apikey) {
-  file.url <- "https://www.lipidmaps.org/files/?file=LMSD_20191002&ext=sdf.zip"
+  file.url <- "https://www.lipidmaps.org/files/?file=LMSD&ext=sdf.zip"
   base.loc <- file.path(outfolder, "lipidmaps_source")
-  if (!dir.exists(base.loc)) {
-    dir.create(base.loc)
+  if (dir.exists(base.loc)) {
+   unlink(base.loc,recursive = T)
   }
+  dir.create(base.loc)
   zip.file <- file.path(base.loc, "lipidmaps.zip")
   utils::download.file(file.url, zip.file, mode = "wb", method = "auto")
-  zip::unzip(zipfile = normalizePath(zip.file), exdir = normalizePath(base.loc), unzip = getOption("unzip"))
+  utils::unzip(zipfile = normalizePath(zip.file), exdir = normalizePath(base.loc), unzip = getOption("unzip"))
   version <- Sys.Date()
   sdf.path <- list.files(base.loc, pattern = "sdf", full.names = TRUE, recursive = TRUE)
   desc <- function(sdfset) {
@@ -1380,7 +1402,9 @@ build.LIPIDMAPS <- function(outfolder, testMode = FALSE, apikey) {
     }
     as.matrix(mat)
   }
-  sdfStream.joanna(input = sdf.path, output = file.path(base.loc, "lipidmaps_parsed.csv"), append = FALSE, fct = desc, silent = TRUE)
+  sdfStream.joanna(input = sdf.path,
+                   output = file.path(base.loc, "lipidmaps_parsed.csv"),
+                   append = FALSE, fct = desc, silent = TRUE)
   db.base <- data.table::fread(file.path(base.loc, "lipidmaps_parsed.csv"), fill = TRUE, header = TRUE)
   db.base$charge <- c(NA)
   doc <- xml2::read_html("https://www.lipidmaps.org/data/classification/LM_classification_exp.php")
@@ -2163,6 +2187,7 @@ build.mVOC <- function(outfolder, testMode = FALSE) {
 #' @examples
 #' \dontrun{build.NANPDB(outfolder=tempdir(), testMode=TRUE)}
 build.ANPDB <- function(outfolder, testMode = FALSE) {
+  library(rvest)
   . <- V2 <- V1 <- V3 <- NULL
   n <- 13141
   if (testMode) {
