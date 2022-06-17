@@ -345,7 +345,8 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path = NULL, smitype = "Ca
   print(head(db.final))
 
   db.final <- db.final[, lapply(.SD, as.character)]
-  writeDB(conn, data.table::data.table(date = Sys.Date(), version = db.formatted.all$version), "metadata")
+  writeDB(conn, data.table::data.table(date = Sys.Date(), version = db.formatted.all$version),
+          "metadata")
   writeDB(conn, table = db.final, "base")
   if("path" %in% names(db.formatted.all)){
     writeDB(conn, table = db.formatted.all$path, "pathways")

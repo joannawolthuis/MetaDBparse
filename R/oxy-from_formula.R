@@ -105,7 +105,7 @@ filterFormula <- function(formulas, rules = c("senior", "lewis", "hc", "chnops",
     })
     res
   })
-  checks <- data.table::rbindlist(ch_nops_chnops_rows)
+  checks <- data.table::rbindlist(ch_nops_chnops_rows, fill = T)
   deconstructed <- cbind(deconstructed, checks)
   if (length(rules) > 0) {
     passes.checks <- rep(TRUE, nrow(deconstructed))
@@ -236,7 +236,7 @@ getPredicted <- function(mz, ppm = 2, mode = "positive",
         }
       }
       res_proc <- flattenlist(res)
-      tbl <- data.table::rbindlist(res_proc[!sapply(res_proc, is.null)])
+      tbl <- data.table::rbindlist(res_proc[!sapply(res_proc, is.null)], fill = T)
     }
     uniques <- unique(tbl$baseformula)
     if (is.null(uniques)) {
@@ -244,7 +244,8 @@ getPredicted <- function(mz, ppm = 2, mode = "positive",
     }
     unique(tbl)
   })
-  total_tbl <- data.table::rbindlist(per_adduct_results[sapply(per_adduct_results, function(x) nrow(x) > 0)], fill = TRUE)
+  total_tbl <- data.table::rbindlist(per_adduct_results[sapply(per_adduct_results,
+                                                               function(x) nrow(x) > 0)], fill = TRUE)
   total_tbl
 }
 
@@ -362,7 +363,7 @@ searchFormulaWeb <- function(formulas, search = c("pubchem", "chemspider", "knap
                     data.table::data.table()
                   }
                 })
-                db.frag <- data.table::rbindlist(rows)
+                db.frag <- data.table::rbindlist(rows, fill = T)
                 db.frag$identifier <- identifiers
                 db.frag$structure <- smiles
                 if (nrow(db.frag) > 0) {
@@ -405,7 +406,7 @@ searchFormulaWeb <- function(formulas, search = c("pubchem", "chemspider", "knap
                 flipped <- as.data.frame(flipped[-1, ])
                 data.table::data.table(identifier = id, structure = flipped$SMILES[1])
               })
-              res <- merge(res.aggr, data.table::rbindlist(rows.detailed), by = "identifier")
+              res <- merge(res.aggr, data.table::rbindlist(rows.detailed), by = "identifier", fill = T)
             } else {
               res <- res.aggr
             }
@@ -621,5 +622,5 @@ pubChemInfo <- function(ids, maxn = 30) {
     })
     returnme
   })]
-  data.table::rbindlist(res)
+  data.table::rbindlist(res, fill = T)
 }

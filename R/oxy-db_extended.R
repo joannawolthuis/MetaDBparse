@@ -269,7 +269,7 @@ doIsotopes <- function(formula, charge, count.isos=F) {
     result
   })
   isolist.nonas <- isolist[!is.na(isolist)]
-  isotable <- data.table::rbindlist(isolist.nonas)
+  isotable <- data.table::rbindlist(isolist.nonas, fill = T)
   keep.isos <- names(isolist.nonas)
   charges <- charge[!is.na(isolist)]
   repeat.times <- c(unlist(lapply(isolist.nonas, FUN = function(list) nrow(list))))
@@ -535,7 +535,7 @@ buildExtDB <- function(outfolder, ext.dbname = "extended", base.dbname, cl = 0,
         return(res)
       }
     })
-    to.write <- data.table::rbindlist(per.adduct.tables)
+    to.write <- data.table::rbindlist(per.adduct.tables, fill = T)
     to.write <<- to.write
     if (nrow(to.write) > 0) {
       structs <- unique(blocks[[i]][, c("struct_id", "smiles")])
@@ -564,12 +564,24 @@ buildExtDB <- function(outfolder, ext.dbname = "extended", base.dbname, cl = 0,
   })
   full.conn <- RSQLite::dbConnect(RSQLite::SQLite(), full.db)
   adduct_table$dbname <- base.dbname
+  addcols = c("Name",
+              "Ion_mode",
+              "Charge",
+              "xM",
+              "AddAt",
+              "RemAt",
+              "AddEx",
+              "RemEx",
+              "Nelec",
+              "Rule",
+              "Info",
+              "dbname")
   if (!first.db) {
-    existing_adducts <- RSQLite::dbReadTable(full.conn, "adducts")
-    adduct_tbl_named <- unique(rbind(adduct_table[,1:11], existing_adducts))
+    existing_adducts <- data.table::as.data.table(RSQLite::dbReadTable(full.conn, "adducts"))
+    adduct_tbl_named <- unique(rbind(adduct_table[,..addcols], existing_adducts[,..addcols]))
   }
   else {
-    adduct_tbl_named <- adduct_table
+    adduct_tbl_named <- adduct_table[,..addcols]
   }
   RSQLite::dbWriteTable(full.conn, "adducts", as.data.frame(adduct_tbl_named), overwrite = TRUE)
   RSQLite::dbDisconnect(full.conn)

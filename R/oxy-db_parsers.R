@@ -32,10 +32,11 @@ build.WIKIPATHWAYS <- function(outfolder, testMode = FALSE) {
     print("Requires ChEBI. Building...")
     buildBaseDB(outfolder, "chebi")
   }
+  remotes::install_github("lvaudor/glitter")
+
   chebi <- data.table::as.data.table(showAllBase(outfolder, "chebi"))
   chebi$identifier <- as.numeric(chebi$identifier)
-  base.db <- SPARQL::SPARQL(url = "https://sparql.wikipathways.org/sparql",
-                           query = "prefix wp: <http://vocabularies.wikipathways.org/wp#>
+  q = "prefix wp: <http://vocabularies.wikipathways.org/wp#>
                                     prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#>
                                     prefix dcterms: <http://purl.org/dc/terms/>
                                     prefix xsd:     <http://www.w3.org/2001/XMLSchema#>
@@ -54,21 +55,28 @@ build.WIKIPATHWAYS <- function(outfolder, testMode = FALSE) {
                                     dc:title ?pwTitle .
                                     FILTER (BOUND(?idurl))
                                     }
-                                    GROUP BY ?mb ?wp ?idurl ?pathway",
-                           curl_args=list(useragent=R.version.string))
-  base.db$results$identifier <- as.numeric(gsub(base.db$results$csid, pattern = ".*:|>", replacement = ""))
-  chebi.join.table <- data.table::data.table(identifier = base.db$results$identifier,
-                                             description = base.db$results$description,
-                                             widentifier = base.db$results$mb,
-                                             pathway = base.db$results$pathway)
+                                    GROUP BY ?mb ?wp ?idurl ?pathway"
+  base.db <- glitter::send_sparql(.query = q,
+                                  endpoint = "https://sparql.wikipathways.org/sparql")
+
+  # curl_args=list(useragent=R.version.string)) # may require this, was used in SPARQL package...
+
+  base.db$identifier <- as.numeric(gsub(base.db$csid, pattern = ".*:|>", replacement = ""))
+  chebi.join.table <- data.table::data.table(identifier = base.db$identifier,
+                                             description = base.db$description,
+                                             widentifier = base.db$mb,
+                                             pathway = base.db$pathway)
   chebi <- chebi[, -"description", with = FALSE]
   db.formatted <- merge(chebi.join.table, chebi, by = "identifier")
   db.formatted <- data.table::as.data.table(db.formatted)
-  db.formatted <- unique(db.formatted[, .(compoundname = paste0(unique(compoundname), collapse = ", "), description = paste0("Found in pathways: ", paste0(unique(description), collapse = ", "))), by = c("structure", "identifier", "charge")])
+  db.formatted <- unique(db.formatted[, .(compoundname = paste0(unique(compoundname), collapse = ", "),
+                                          description = paste0("Found in pathways: ",
+                                                               paste0(unique(description), collapse = ", "))),
+                                      by = c("structure", "identifier", "charge")])
   page <- RCurl::getURL("https://www.wikipathways.org/index.php/WikiPathways")
   ver <- stringr::str_match(page, ">([\\w| ]*?) Release<")[, 2]
   # pathways
-  pathway.table = base.db$results[,c("pathway","identifier","description")]
+  pathway.table = base.db[,c("pathway","identifier","description")]
   pathway.table$pathway <- gsub(".*/|>","",pathway.table$pathway)
   db.formatted.all = list(db = db.formatted, version = ver, path = pathway.table)
   db.formatted.all
@@ -1112,7 +1120,8 @@ build.SMPDB <- function(outfolder, testMode = FALSE) {
 #' @examples
 #' \dontrun{build.KEGG(outfolder=tempdir(), testMode=TRUE)}
 build.KEGG <- function(outfolder, testMode = FALSE) {
-  batches <- split(0:2300, ceiling(seq_along(0:2300) / 100))
+  batches <- split(0:5000, ceiling(seq_along(0:5000) / 100))
+  print("Downloading compound IDs")
   cpds <- pbapply::pblapply(batches, FUN = function(batch) {
     names(KEGGREST::keggFind("compound", batch, "mol_weight"))
   })
@@ -1125,6 +1134,8 @@ build.KEGG <- function(outfolder, testMode = FALSE) {
   header <- RCurl::getURL(theurl, .opts = list(ssl.verifypeer = FALSE))
   version <- stringr::str_match(header, pattern = "Last updated: (.{1,30})<")[, 2]
   date <- as.Date(version, format = "%B%d, %Y")
+
+  print("Downloading general info")
   kegg.cpd.list <- pbapply::pblapply(id.batches, FUN = function(batch) {
     rest.result <- KEGGREST::keggGet(batch)
     base.list <- lapply(rest.result, FUN = function(cpd) {
@@ -1165,6 +1176,7 @@ build.KEGG <- function(outfolder, testMode = FALSE) {
   if (!dir.exists(base.loc)) {
     dir.create(base.loc)
   }
+  print("Downloading structural info")
   kegg.mol.paths <- pbapply::pblapply(id.batches, FUN = function(batch) {
     bigmol <- KEGGREST::keggGet(batch, "mol")
     mols <- strsplit(x = paste0("\n \n \n", bigmol), split = "\\$\\$\\$\\$\n")[[1]]
@@ -2187,7 +2199,6 @@ build.mVOC <- function(outfolder, testMode = FALSE) {
 #' @examples
 #' \dontrun{build.NANPDB(outfolder=tempdir(), testMode=TRUE)}
 build.ANPDB <- function(outfolder, testMode = FALSE) {
-  library(rvest)
   . <- V2 <- V1 <- V3 <- NULL
   n <- 13141
   if (testMode) {

@@ -17,7 +17,7 @@ Depends:
   rvest,
   RCurl,
   XML,
-  SPARQL
+  glitter
 Imports:
   methods,
   pacman,
