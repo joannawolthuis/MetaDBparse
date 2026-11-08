@@ -47,8 +47,13 @@ Imports:
   httr,
   RJSONIO,
   readxl,
+  pmd,
   cmmr,
   progress,
   Rdisop,
   rlist
+Suggests:
+  dbdataset
+Remotes:
+  interstellar-Consultation-Services/dbdataset
 RoxygenNote: 7.1.1

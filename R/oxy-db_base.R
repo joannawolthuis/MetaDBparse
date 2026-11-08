@@ -262,7 +262,7 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path = NULL, smitype = "Ca
                         silent = TRUE, cl = 0, test = FALSE, doBT = FALSE, btOpts = "phaseII:1", btLoc, skipClean=F) {
   httr::set_config(httr::config(ssl_verifypeer = 0))
   oldpar <- options()
-  options(stringsAsFactors = FALSE, timeout=1000)
+  options(stringsAsFactors = FALSE, timeout=1e7)
   on.exit(options(oldpar))
   removeDB(outfolder, paste0(dbname, ".db"))
   conn <- openBaseDB(outfolder, paste0(dbname, ".db"))
