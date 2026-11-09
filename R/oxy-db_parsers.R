@@ -326,116 +326,19 @@ build.WIKIPATHWAYS <- function(outfolder, testMode = FALSE) {
 #' @examples
 #' \dontrun{build.MCDB(outfolder=tempdir(), testMode=TRUE)}
 build.MCDB <- function(outfolder, testMode = FALSE) {
-  Description <- NULL
-  oldpar <- options()
-  options(stringsAsFactors = FALSE, timeout=1e7)
-  on.exit(options(oldpar))
+  # mcdb.ca is behind Cloudflare (incl. the /statistics page the old code needed for a row count),
+  # so: Wayback copy of the download, cached + resumable, streamed with the shared XML reader.
   file.url <- "https://web.archive.org/web/20250811072449id_/https://mcdb.ca/system/downloads/current/milk_metabolites.zip"
   base.loc <- file.path(outfolder, "mcdb_source")
-  if (dir.exists(base.loc)) {
-    (unlink(base.loc, recursive = TRUE))
-  }
-  dir.create(base.loc, recursive = TRUE)
+  dir.create(base.loc, recursive = TRUE, showWarnings = FALSE)
   zip.file <- file.path(base.loc, "MCDB.zip")
-  utils::download.file(file.url, zip.file, mode = "wb", cacheOK = TRUE, method = "auto")
-  utils::unzip(zip.file, exdir = base.loc, unzip = getOption("unzip"))
-  input <- file.path(base.loc, "milk_metabolites.xml")
-  header <- readLines(input, n = 10)
-  version <- trimws(gsub(grep(pattern = "<version", header, value = TRUE), pattern = "<\\/?version>", replacement = ""))
-  date <- trimws(gsub(grep(pattern = "update_date", header, value = TRUE), pattern = "<\\/?update_date>", replacement = ""))
-  theurl <- RCurl::getURL("https://mcdb.ca/statistics", .opts = list(ssl.verifypeer = FALSE))
-  tables <- XML::readHTMLTable(theurl)
-  stats <- data.table::rbindlist(tables)
-  n <- as.numeric(as.character(gsub(x = stats[Description == "Total Metabolites"]$Count, pattern = ",", replacement = "")))
-  if (testMode) {
-    n <- 10
-  }
-  envir <- environment()
-  envir$db.formatted <- data.frame(compoundname = rep(NA, n), baseformula = rep(NA, n), identifier = rep(NA, n), structure = rep(NA, n), charge = rep(NA, n), description = rep("", n))
-  envir$idx <- 1
-  envir$maxn <- n
-  envir$pb <- pbapply::startpb(min = envir$idx, max = envir$maxn)
-  sysinf <- Sys.info()
-  if (!is.null(sysinf)) {
-    os <- sysinf["sysname"]
-    if (os == "Darwin") {
-      os <- "osx"
-    }
-  }
-  else {
-    os <- .Platform$OS.type
-    if (grepl("^darwin", R.version$os)) {
-      os <- "osx"
-    }
-    if (grepl("linux-gnu", R.version$os)) {
-      os <- "linux"
-    }
-  }
-  if (tolower(os) == "windows") {
-    acc <- "primary"
-    nm <- "primary"
-    desc <- "primary"
-    con <- base::file(input, "r")
-    while (TRUE) {
-      line <- readLines(con, n = 1, skipNul = TRUE)
-      if (length(line) == 0 | envir$idx == envir$maxn) {
-        break
-      }
-      if (line == "</metabolite>") {
-        envir$idx <- envir$idx + 1
-        pbapply::setpb(envir$pb, envir$idx)
-        acc <- "primary"
-        nm <- "primary"
-        desc <- "primary"
-      }
-      tag <- stringr::str_match(line, pattern = "<(.*?)>")[, 2]
-      switch(tag, accession = {
-        if (acc == "primary") {
-          envir$db.formatted[envir$idx, ]$identifier <- trimws(gsub(line, pattern = "(<.*?>)", replacement = ""))
-          acc <- "secondary"
-        }
-      }, name = {
-        if (nm == "primary") {
-          envir$db.formatted[envir$idx, ]$compoundname <- trimws(gsub(line, pattern = "(<.*?>)", replacement = ""))
-          nm <- "secondary"
-        }
-      }, smiles = {
-        envir$db.formatted[envir$idx, ]$structure <- trimws(gsub(line, pattern = "(<.*?>)", replacement = ""))
-      }, description = {
-        if (desc == "primary") {
-          envir$db.formatted[envir$idx, ]$description <- paste0(envir$db.formatted[envir$idx, ]$description, " HMDB: ", trimws(gsub(line, pattern = "(<.*?>)", replacement = "")))
-          desc <- "secondary"
-        }
-      }, cs_description = {
-        envir$db.formatted[envir$idx, ]$description <- paste0(envir$db.formatted[envir$idx, ]$description, "From ChemSpider: ", trimws(gsub(line, pattern = "(<.*?>)", replacement = "")))
-      }, chemical_formula = {
-        envir$db.formatted[envir$idx, ]$baseformula <- trimws(gsub(line, pattern = "(<.*?>)", replacement = ""))
-      })
-    }
-    close(con)
-  } else {
-    metabolite <- function(currNode, currEnvir = envir) {
-      if (currEnvir$idx %% 1000 == 0) {
-        pbapply::setpb(currEnvir$pb, currEnvir$idx)
-      }
-      if (currEnvir$idx == currEnvir$maxn) {
-        return()
-      }
-      currEnvir$db.formatted[currEnvir$idx, "compoundname"] <- XML::xmlValue(currNode[["name"]])
-      currEnvir$db.formatted[currEnvir$idx, "identifier"] <- XML::xmlValue(currNode[["accession"]])
-      currEnvir$db.formatted[currEnvir$idx, "baseformula"] <- XML::xmlValue(currNode[["chemical_formula"]])
-      currEnvir$db.formatted[currEnvir$idx, "structure"] <- XML::xmlValue(currNode[["smiles"]])
-      currEnvir$db.formatted[currEnvir$idx, "description"] <- paste(XML::xmlValue(currNode[["description"]]))
-      x <- currNode[["predicted_properties"]]
-      properties <- currNode[["predicted_properties"]]
-      currEnvir$db.formatted[currEnvir$idx, "charge"] <- stringr::str_match(XML::xmlValue(properties), pattern = "formal_charge([+|\\-]\\d*|\\d*)")[, 2]
-      currEnvir$idx <- currEnvir$idx + 1
-    }
-    XML::xmlEventParse(file = input,
-                       branches = list(metabolite = metabolite),
-                       replaceEntities = TRUE)
-  }
-  list(db = envir$db.formatted, version = version)
+  if (!.metadb_resume_download(file.url, zip.file, valid = .metadb_zip_ok)) stop("Could not download MCDB from ", file.url)
+  member <- grep("metabolites\\.xml$", utils::unzip(zip.file, list = TRUE)$Name, value = TRUE)[1]
+  if (is.na(member)) stop("No metabolites XML in ", zip.file)
+  res <- .metadb_xml_zip(zip.file, member, testMode = testMode)
+  db <- data.table::as.data.table(res$db)
+  list(db = db[, c("compoundname", "description", "baseformula", "identifier", "charge", "structure")],
+       version = res$version)
 }
 
 #' @title Build HMDB
@@ -1642,7 +1545,10 @@ build.MASSBANK <- function(outfolder, testMode = FALSE) {
   members <- utils::unzip(zip.file, list = TRUE)$Name
   members <- members[grepl("\\.txt$", members) & grepl("^MSBNK-", basename(members))]  # records only, no README/licence
   if (testMode) members <- head(members, 50)
-  utils::unzip(normalizePath(zip.file), files = members, exdir = normalizePath(base.loc), unzip = getOption("unzip"))
+  # extract everything (passing ~100k file names to unzip overflows the command line)
+  if (!all(file.exists(file.path(base.loc, members)))) {
+    utils::unzip(normalizePath(zip.file), exdir = normalizePath(base.loc), unzip = "internal")
+  }
   cpd_files <- file.path(base.loc, members)
   field <- function(lines, key) {
     hit <- grep(paste0("^", gsub("$", "\\$", key, fixed = TRUE), ": "), lines, value = TRUE)
