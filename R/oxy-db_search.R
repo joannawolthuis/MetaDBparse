@@ -278,7 +278,7 @@ searchRev <- function(structure, ext.dbname = "extended", outfolder) {
 
 #' @title Search CMMR
 #' @description Queries Ceu Mass Mediator through their API
-#' @param cmm_url API base url, Default: 'http://ceumass.eps.uspceu.es/mediator/api/v3/batch'
+#' @param cmm_url API base url, Default: 'https://ceumass.eps.uspceu.es/mediator/api/v3/batch'
 #' @param metabolites_type Which type of metabolites to consider?, Default: 'all-except-peptides'
 #' @param databases Which databases to consider?, Default: '["all-except-mine"]'
 #' @param masses_mode Format of input compound, Default: 'mz'
@@ -304,9 +304,9 @@ searchRev <- function(structure, ext.dbname = "extended", outfolder) {
 #' @importFrom data.table rbindlist
 #' @examples
 #' searchCMMR(unique_mz = "170.09240307", ion_mode = "positive")
-searchCMMR <- function(cmm_url = "http://ceumass.eps.uspceu.es/mediator/api/v3/batch", metabolites_type = "all-except-peptides", databases = "[\"all-except-mine\"]", masses_mode = "mz", ion_mode = "positive", adducts = switch(ion_mode, positive = "[\"M+H\", \"M+2H\", \"M+Na\", \"M+K\", \"M+NH4\", \"M+H-H2O\"]", negative = "[\"M-H\", \"M+Cl\", \"M+FA-H\", \"M-H-H2O\"]"), tolerance = 10, tolerance_mode = "ppm", unique_mz) {
+searchCMMR <- function(cmm_url = "https://ceumass.eps.uspceu.es/mediator/api/v3/batch", metabolites_type = "all-except-peptides", databases = "[\"all-except-mine\"]", masses_mode = "mz", ion_mode = "positive", adducts = switch(ion_mode, positive = "[\"M+H\", \"M+2H\", \"M+Na\", \"M+K\", \"M+NH4\", \"M+H-H2O\"]", negative = "[\"M-H\", \"M+Cl\", \"M+FA-H\", \"M-H-H2O\"]"), tolerance = 10, tolerance_mode = "ppm", unique_mz) {
   body <- cmmr::create_batch_body(metabolites_type, databases, masses_mode, ion_mode, adducts, tolerance, tolerance_mode, unique_mz)
-  if (cmm_url == "http://ceumass.eps.uspceu.es/mediator/api/v3/batch") {
+  if (cmm_url == "https://ceumass.eps.uspceu.es/mediator/api/v3/batch") {
     cat("Using the CEU Mass Mediator server API.\n")
   }
   else {
@@ -352,7 +352,7 @@ searchCMMR <- function(cmm_url = "http://ceumass.eps.uspceu.es/mediator/api/v3/b
 #' \dontrun{searchMZonline(mz = 170.09240307, mode = "positive", which_db = "cmmr")}
 searchMZonline <- function(mz = 178.1219, mode = "positive", adducts, ppm = 2, which_db = "cmmr", apikey = "") {
   switch(which_db, cmmr = {
-    results <- searchCMMR("http://ceumass.eps.uspceu.es/mediator/api/v3/batch", masses_mode = "mz",
+    results <- searchCMMR("https://ceumass.eps.uspceu.es/mediator/api/v3/batch", masses_mode = "mz",
                           ion_mode = "positive",
                           tolerance = ppm,
                           tolerance_mode = "ppm",

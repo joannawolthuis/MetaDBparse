@@ -242,6 +242,50 @@
   list(db = db.formatted, version = paste0(ver, " (dbdataset R package)"))
 }
 
+
+# ---- KEGG / PubChem bulk helpers ----
+# KEGG REST 'list'/'conv'/'link' operations return whole tables in one request.
+.kegg_rest <- function(path) {
+  txt <- readLines(paste0("https://rest.kegg.jp/", path), warn = FALSE, encoding = "UTF-8")
+  parts <- strsplit(txt[nzchar(txt)], "\t", fixed = TRUE)
+  data.table::data.table(a = sub("^[a-z]+:", "", vapply(parts, `[`, "", 1)),
+                         b = vapply(parts, function(x) if (length(x) > 1) sub("^[a-z]+:", "", x[2]) else NA_character_, ""))
+}
+
+# PubChem substance IDs -> SMILES (via CIDs), batched POSTs with retries.
+.pubchem_post <- function(url, body) {
+  for (attempt in 1:4) {
+    r <- try(httr::POST(url, body = body, encode = "form", httr::timeout(120)), silent = TRUE)
+    if (!inherits(r, "try-error") && httr::status_code(r) == 200) return(httr::content(r, as = "text", encoding = "UTF-8"))
+    Sys.sleep(2^attempt)
+  }
+  NULL
+}
+.pubchem_sid_smiles <- function(sids, batch_size = 200) {
+  sids <- unique(stats::na.omit(sids))
+  if (!length(sids)) return(data.table::data.table(sid = character(), smiles = character()))
+  map <- data.table::rbindlist(lapply(split(sids, ceiling(seq_along(sids) / batch_size)), function(b) {
+    Sys.sleep(0.25)
+    txt <- .pubchem_post("https://pubchem.ncbi.nlm.nih.gov/rest/pug/substance/sid/cids/JSON", list(sid = paste(b, collapse = ",")))
+    if (is.null(txt)) return(NULL)
+    info <- jsonlite::fromJSON(txt)$InformationList$Information
+    if (is.null(info) || is.null(info$CID)) return(NULL)
+    data.table::data.table(sid = as.character(info$SID),
+                           cid = vapply(info$CID, function(x) if (length(x)) as.character(x[1]) else NA_character_, ""))
+  }), fill = TRUE)
+  if (!nrow(map)) return(data.table::data.table(sid = character(), smiles = character()))
+  cids <- unique(stats::na.omit(map$cid))
+  props <- data.table::rbindlist(lapply(split(cids, ceiling(seq_along(cids) / batch_size)), function(b) {
+    Sys.sleep(0.25)
+    txt <- .pubchem_post("https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/property/SMILES/CSV", list(cid = paste(b, collapse = ",")))
+    if (is.null(txt)) return(NULL)
+    d <- data.table::fread(text = txt, colClasses = list(character = "CID"))
+    if (!"SMILES" %in% names(d) && "IsomericSMILES" %in% names(d)) data.table::setnames(d, "IsomericSMILES", "SMILES")
+    d[, .(cid = CID, smiles = SMILES)]
+  }), fill = TRUE)
+  merge(map, props, by = "cid")[, .(sid, smiles)]
+}
+
 #' @title Build WikiPathways
 #' @description Parses WikiPathways chemical compound database, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
 #' @param outfolder Which folder to save temp files to?
@@ -387,6 +431,285 @@ build.HMDB <- function(outfolder, testMode = FALSE,
   db <- data.table::as.data.table(res$db)
   list(db = db[, c("compoundname", "description", "baseformula", "identifier", "charge", "structure")],
        version = res$version)
+}
+
+#' @title Build MIMEDB
+#' @description Parses MiMeDB 2.0 (Human Microbial Metabolome Database), returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
+#' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
+#' @return data table with parsed database
+#' @details mimedb.org is behind a Cloudflare browser check, so the file must be downloaded manually once:
+#' open https://mimedb.org/system/downloads/2.0/mimedb_metabolites_v2.csv in a browser and save it as
+#' mimedb_metabolites_v2.csv in the mimedb_source folder inside outfolder.
+#' @rdname build.MIMEDB
+#' @export
+build.MIMEDB <- function(outfolder, testMode = FALSE) {
+  currurl <- "https://mimedb.org/system/downloads/2.0/mimedb_metabolites_v2.csv"
+  base.loc <- file.path(outfolder, "mimedb_source")
+  dir.create(base.loc, recursive = TRUE, showWarnings = FALSE)
+  source.file <- file.path(base.loc, "mimedb_metabolites_v2.csv")
+  is_html <- function(p) grepl("<!DOCTYPE|<html", readChar(p, 200, useBytes = TRUE), ignore.case = TRUE)
+  if (!file.exists(source.file) || isTRUE(file.info(source.file)$size < 1e5) || is_html(source.file)) {
+    message("MiMeDB blocks automated downloads (Cloudflare). Please open\n  ", currurl,
+            "\nin your browser and save the file as\n  ", normalizePath(source.file, mustWork = FALSE))
+    return(NULL)
+  }
+  tab <- data.table::fread(source.file, encoding = "UTF-8", colClasses = "character", na.strings = c("", "NULL"),
+                           select = c("mime_id", "name", "description", "moldb_smiles", "moldb_formula",
+                                      "moldb_formal_charge", "microbe_relations", "updated_at"))
+  if (testMode) tab <- tab[seq_len(min(10L, nrow(tab)))]
+  n_mic <- suppressWarnings(as.integer(tab$microbe_relations))
+  desc <- tab$description
+  mic <- ifelse(!is.na(n_mic) & n_mic > 0, paste0("Linked to ", n_mic, " microbe", ifelse(n_mic == 1, "", "s"), " in MiMeDB."), NA_character_)
+  desc <- ifelse(is.na(desc), mic, ifelse(is.na(mic), desc, paste(desc, mic)))
+  db <- data.table::data.table(compoundname = tab$name, description = desc, baseformula = tab$moldb_formula,
+                               identifier = tab$mime_id, charge = suppressWarnings(as.integer(tab$moldb_formal_charge)),
+                               structure = tab$moldb_smiles)
+  db <- unique(db, by = "identifier")
+  last <- suppressWarnings(max(as.Date(substr(tab$updated_at, 1, 10)), na.rm = TRUE))
+  list(db = db, version = paste0("2.0", if (is.finite(last)) paste0(" (updated ", last, ")") else ""))
+}
+
+#' @title Build PUBCHEMLITE
+#' @description Parses PubChemLite for Exposomics (latest Zenodo release, CC BY 4.0), returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
+#' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten compounds
+#' @return data table with parsed database
+#' @details PubChemLite has no text descriptions; the description summarises its evidence counts
+#' (annotation categories, PubMed and patent counts), which is useful for ranking candidate annotations.
+#' @rdname build.PUBCHEMLITE
+#' @export
+build.PUBCHEMLITE <- function(outfolder, testMode = FALSE) {
+  base.loc <- file.path(outfolder, "pubchemlite_source")
+  dir.create(base.loc, recursive = TRUE, showWarnings = FALSE)
+  # newest version of the PubChemLite(+CCSbase) Zenodo record
+  rec <- jsonlite::fromJSON("https://zenodo.org/api/records/17775114/versions/latest")
+  files <- rec$files
+  keys <- if (!is.null(files$key)) files$key else files$filename
+  hit <- grep("^PubChemLite.*\\.csv$", keys)[1]
+  if (is.na(hit)) stop("No PubChemLite CSV in Zenodo record ", rec$id)
+  url <- files$links$self[hit]
+  size <- files$size[hit]
+  csv.file <- file.path(base.loc, keys[hit])
+  ok <- .metadb_resume_download(url, csv.file, valid = function(p) file.exists(p) && isTRUE(file.info(p)$size == size))
+  if (!ok) stop("Could not download ", url)
+  cats <- c(FoodRelated = "food", DrugMedicInfo = "drug/medical", AgroChemInfo = "agrochemical",
+            ToxicityInfo = "toxicity", SafetyInfo = "safety", DisorderDisease = "disease",
+            BioPathway = "biological pathway", PharmacoInfo = "pharmacology", KnownUse = "known use",
+            Identification = "identification", ChemClass = "chemical class")
+  tab <- data.table::fread(csv.file, nrows = if (testMode) 10L else Inf, encoding = "UTF-8",
+                           select = c("Identifier", "CompoundName", "MolecularFormula", "SMILES",
+                                      "PubMed_Count", "Patent_Count", "AnnoTypeCount", names(cats)))
+  parts <- vapply(names(cats), function(cl) {
+    n <- suppressWarnings(as.integer(tab[[cl]]))
+    ifelse(!is.na(n) & n > 0, paste0(cats[[cl]], " (", n, ")"), NA_character_)
+  }, character(nrow(tab)))
+  if (is.null(dim(parts))) parts <- matrix(parts, nrow = nrow(tab))
+  known <- apply(parts, 1, function(x) paste(x[!is.na(x)], collapse = ", "))
+  fmt <- function(x) format(suppressWarnings(as.numeric(x)), big.mark = ",", scientific = FALSE, trim = TRUE)
+  desc <- paste0("PubChemLite: annotated in ", tab$AnnoTypeCount, "/11 categories",
+                 ifelse(nzchar(known), paste0(" - ", known), ""), ". ",
+                 fmt(tab$PubMed_Count), " PubMed articles, ", fmt(tab$Patent_Count), " patents.")
+  db <- data.table::data.table(compoundname = tab$CompoundName, description = desc,
+                               baseformula = tab$MolecularFormula, identifier = paste0("CID", tab$Identifier),
+                               charge = NA_integer_, structure = tab$SMILES)
+  db <- unique(db[!is.na(structure) & nzchar(structure)], by = "identifier")
+  version <- sub(".*_(\\d{8})\\.csv$", "\\1", keys[hit])
+  list(db = db, version = if (grepl("^\\d{8}$", version)) as.character(as.Date(version, "%Y%m%d")) else keys[hit])
+}
+
+#' @title Build CTD
+#' @description Parses the Comparative Toxicogenomics Database (CTD): chemicals with curated (direct-evidence)
+#' disease associations, returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
+#' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten chemicals
+#' @param maxDiseases maximum number of diseases listed per chemical in the description
+#' @return data table with parsed database
+#' @details Uses the bulk files under ctdbase.org/reports/ (the rest of ctdbase.org is behind a CAPTCHA).
+#' CTD has no structures: SMILES come from PubChem, matched via PubChem's CID-MeSH file (CTD chemical names
+#' are MeSH headings), with a CAS-number lookup as fallback. CTD data: free for research use, cite CTD.
+#' @rdname build.CTD
+#' @export
+build.CTD <- function(outfolder, testMode = FALSE, maxDiseases = 25) {
+  base.loc <- file.path(outfolder, "ctd_source")
+  dir.create(base.loc, recursive = TRUE, showWarnings = FALSE)
+  get <- function(url, dest) {
+    looks_ok <- function(p) {
+      if (!file.exists(p) || !isTRUE(file.info(p)$size > 1e4)) return(FALSE)
+      con <- file(p, "rb"); on.exit(close(con)); b <- readBin(con, "raw", 300)
+      if (grepl("\\.gz$", p)) return(identical(b[1:2], as.raw(c(0x1f, 0x8b))))   # gzip magic
+      !grepl("<html|<!DOCTYPE", rawToChar(b[b != as.raw(0)]), ignore.case = TRUE, useBytes = TRUE)
+    }
+    if (!.metadb_resume_download(url, dest, valid = looks_ok))
+      stop("Could not download ", url)
+    dest
+  }
+  chem.file <- get("https://ctdbase.org/reports/CTD_chemicals.tsv.gz", file.path(base.loc, "CTD_chemicals.tsv.gz"))
+  dis.file  <- get("https://ctdbase.org/reports/CTD_chemicals_diseases.tsv.gz", file.path(base.loc, "CTD_chemicals_diseases.tsv.gz"))
+  read_ctd <- function(path, cols, keep = NULL, chunk = 500000L) {
+    con <- gzfile(path, "rt"); on.exit(close(con))
+    out <- list(); header <- character()
+    repeat {
+      l <- readLines(con, n = chunk, warn = FALSE, encoding = "UTF-8")
+      if (!length(l)) break
+      header <- c(header, head(grep("^#", l, value = TRUE), 50))
+      l <- l[!startsWith(l, "#") & nzchar(l)]
+      if (!is.null(keep)) l <- l[keep(l)]
+      if (length(l)) out[[length(out) + 1L]] <- l
+    }
+    l <- unlist(out)
+    f <- lapply(strsplit(l, "\t", fixed = TRUE), function(x) { length(x) <- length(cols); x })
+    d <- data.table::as.data.table(do.call(rbind, f))
+    data.table::setnames(d, cols)
+    attr(d, "header") <- header
+    d
+  }
+  # curated associations only (DirectEvidence = marker/mechanism or therapeutic); inferred ones are ~99% of the file
+  dis <- read_ctd(dis.file, c("ChemicalName", "ChemicalID", "CasRN", "DiseaseName", "DiseaseID", "DirectEvidence",
+                              "InferenceGeneSymbol", "InferenceScore", "OmimIDs", "PubMedIDs"),
+                  keep = function(l) grepl("\t(marker/mechanism|therapeutic)", l))
+  dis <- dis[!is.na(DirectEvidence) & nzchar(DirectEvidence)]
+  dis[, ChemicalID := sub("^MESH:", "", ChemicalID)]   # chemicals_diseases uses bare IDs, CTD_chemicals uses MESH:
+  version <- {
+    h <- attr(dis, "header"); v <- grep("Report created", h, value = TRUE)[1]
+    if (is.na(v)) as.character(Sys.Date()) else trimws(sub(".*Report created:?", "", v))
+  }
+  chem <- read_ctd(chem.file, c("ChemicalName", "ChemicalID", "CasRN", "Definition", "ParentIDs",
+                                "TreeNumbers", "ParentTreeNumbers", "Synonyms"))
+  chem[, ChemicalID := sub("^MESH:", "", ChemicalID)]
+  chem <- chem[ChemicalID %in% dis$ChemicalID]
+  if (testMode) chem <- chem[seq_len(min(10L, nrow(chem)))]
+
+  # description: MeSH definition + curated disease links (with CTD disease pages) + PubMed count
+  link <- function(id) paste0("https://ctdbase.org/detail.go?type=disease&acc=", id)
+  dsum <- dis[ChemicalID %in% chem$ChemicalID, {
+    o <- order(DirectEvidence != "marker/mechanism", DiseaseName)
+    lab <- paste0(DiseaseName[o], " (", DirectEvidence[o], "; ", link(DiseaseID[o]), ")")
+    lab <- unique(lab)
+    pm <- unique(unlist(strsplit(PubMedIDs[!is.na(PubMedIDs)], "|", fixed = TRUE)))
+    .(diseases = paste0("Curated disease associations in CTD: ", paste(head(lab, maxDiseases), collapse = "; "),
+                        if (length(lab) > maxDiseases) paste0("; ... and ", length(lab) - maxDiseases, " more") else "", ". ",
+                        "Supported by ", length(pm), " PubMed article", if (length(pm) == 1) "" else "s", "."))
+  }, by = ChemicalID]
+  chem <- merge(chem, dsum, by = "ChemicalID", all.x = TRUE)
+  chem[, description := trimws(paste(ifelse(is.na(Definition) | !nzchar(Definition), "", Definition),
+                                     ifelse(is.na(diseases), "", diseases)))]
+
+  # structures: CTD names are MeSH headings -> PubChem CID-MeSH -> SMILES
+  meshmap.file <- get("https://ftp.ncbi.nlm.nih.gov/pubchem/Compound/Extras/CID-MeSH", file.path(base.loc, "CID-MeSH"))
+  mm <- strsplit(readLines(meshmap.file, warn = FALSE, encoding = "UTF-8"), "\t", fixed = TRUE)
+  mm <- data.table::data.table(cid = rep(vapply(mm, `[`, "", 1), lengths(mm) - 1L),
+                               term = tolower(unlist(lapply(mm, `[`, -1))))
+  mm <- unique(mm, by = "term")
+  chem[, cid := mm$cid[match(tolower(ChemicalName), mm$term)]]
+  # fallback: CAS number -> PubChem name lookup (one request each)
+  todo <- chem[is.na(cid) & !is.na(CasRN) & nzchar(CasRN), unique(CasRN)]
+  if (length(todo)) {
+    cas.cid <- vapply(todo, function(cas) {
+      Sys.sleep(0.22)
+      txt <- tryCatch(readLines(paste0("https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/", utils::URLencode(cas), "/cids/TXT"),
+                               warn = FALSE), error = function(e) character(), warning = function(w) character())
+      if (length(txt)) txt[1] else NA_character_
+    }, "")
+    chem[is.na(cid), cid := cas.cid[match(CasRN, names(cas.cid))]]
+  }
+  cids <- unique(stats::na.omit(chem$cid))
+  props <- data.table::rbindlist(lapply(split(cids, ceiling(seq_along(cids) / 200)), function(b) {
+    Sys.sleep(0.25)
+    txt <- .pubchem_post("https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/property/SMILES,MolecularFormula/CSV",
+                         list(cid = paste(b, collapse = ",")))
+    if (is.null(txt)) return(NULL)
+    d <- data.table::fread(text = txt, colClasses = list(character = "CID"))
+    if (!"SMILES" %in% names(d) && "IsomericSMILES" %in% names(d)) data.table::setnames(d, "IsomericSMILES", "SMILES")
+    d[, .(cid = CID, SMILES, MolecularFormula)]
+  }), fill = TRUE)
+  if (nrow(props)) chem <- merge(chem, props, by = "cid", all.x = TRUE) else chem[, `:=`(SMILES = NA_character_, MolecularFormula = NA_character_)]
+
+  db <- chem[, .(compoundname = ChemicalName, description, baseformula = MolecularFormula,
+                 identifier = ChemicalID, charge = NA_integer_, structure = SMILES)]
+  list(db = unique(db, by = "identifier"), version = version)
+}
+
+#' @title Build GUTSYATLAS
+#' @description Parses the Gutsy Atlas (Dekkers et al. 2022, Nat Commun 13:5370): significant partial Spearman
+#' correlations between 1,528 gut microbial species and 1,321 plasma metabolites in 8,583 SCAPIS participants.
+#' Returns data table with columns compoundname, description, charge, formula and structure (in SMILES)
+#' @param outfolder Which folder to save temp files to?
+#' @param testMode run in test mode? Only parses first ten metabolites
+#' @param topN number of strongest positively/negatively associated species listed per metabolite
+#' @return data table with parsed database
+#' @details Uses Supplementary Data 6 of the paper (manual download, saved in gutsyatlas_source):
+#' https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-022-33050-0/MediaObjects/41467_2022_33050_MOESM8_ESM.xlsx
+#' Metabolites are named only (Metabolon); structures are looked up in PubChem by name. Unidentified
+#' metabolites ("X - 12345") are left out.
+#' @rdname build.GUTSYATLAS
+#' @export
+build.GUTSYATLAS <- function(outfolder, testMode = FALSE, topN = 10) {
+  currurl <- "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-022-33050-0/MediaObjects/41467_2022_33050_MOESM8_ESM.xlsx"
+  base.loc <- file.path(outfolder, "gutsyatlas_source")
+  dir.create(base.loc, recursive = TRUE, showWarnings = FALSE)
+  xl <- list.files(base.loc, pattern = "\\.xlsx$", full.names = TRUE)[1]
+  if (is.na(xl)) {
+    message("Gutsy Atlas: please download Supplementary Data 6 of Dekkers et al. 2022 (Nat Commun) from\n  ",
+            currurl, "\nand save the .xlsx file in\n  ", normalizePath(base.loc, mustWork = FALSE))
+    return(NULL)
+  }
+  tab <- data.table::as.data.table(readxl::read_xlsx(xl, sheet = 1, skip = 7))
+  data.table::setnames(tab, 1:3, c("species", "metabolite", "rho"))
+  tab <- tab[!is.na(species) & !is.na(metabolite)]
+  tab[, rho := suppressWarnings(as.numeric(rho))]
+  tab <- tab[!grepl("^X - ", metabolite)]
+  mets <- unique(tab$metabolite)
+  if (testMode) mets <- head(mets, 10)
+  tab <- tab[metabolite %in% mets]
+
+  fmt <- function(d) paste0(d$species, " (", sprintf("%+.2f", d$rho), ")", collapse = ", ")
+  desc <- tab[, {
+    pos <- .SD[rho > 0][order(-rho)]; neg <- .SD[rho < 0][order(rho)]
+    .(description = paste0(
+      "Gutsy Atlas (plasma, SCAPIS, n = 8,583): significantly associated with ", .N, " gut microbial species (",
+      nrow(pos), " positive, ", nrow(neg), " negative; partial Spearman, FDR 5%).",
+      if (nrow(pos)) paste0(" Strongest positive: ", fmt(head(pos, topN)), ".") else "",
+      if (nrow(neg)) paste0(" Strongest negative: ", fmt(head(neg, topN)), ".") else ""))
+  }, by = metabolite]
+
+  # structures: PubChem name lookup (cached), trying cleaned name variants for Metabolon-style names
+  cache.file <- file.path(base.loc, "pubchem_names.rds")
+  cache <- if (file.exists(cache.file)) readRDS(cache.file) else
+    data.table::data.table(metabolite = character(), SMILES = character(), MolecularFormula = character())
+  variants <- function(m) {
+    m <- trimws(gsub("\\*+$", "", m))
+    v <- c(m,
+           trimws(gsub("\\s*\\[[^]]*\\]", "", m)),                 # drop [cis or trans] etc.
+           trimws(gsub("\\s*\\([^)]*\\)", "", m)),                  # drop (18:2), (1), (synonym)
+           trimws(regmatches(m, regexpr("(?<=\\()[^)]+(?=\\))", m, perl = TRUE))))  # synonym in brackets
+    unique(v[nzchar(v) & !grepl("^[0-9:;/ ]+$", v)])
+  }
+  lookup <- function(name) {
+    for (v in variants(name)) {
+      Sys.sleep(0.22)
+      txt <- tryCatch(suppressWarnings(readLines(paste0(
+        "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/", utils::URLencode(v, reserved = TRUE),
+        "/property/SMILES,MolecularFormula/CSV"), warn = FALSE)), error = function(e) character())
+      if (length(txt) > 1) {
+        d <- data.table::fread(text = paste(txt, collapse = "\n"))
+        if (!"SMILES" %in% names(d) && "IsomericSMILES" %in% names(d)) data.table::setnames(d, "IsomericSMILES", "SMILES")
+        return(data.table::data.table(metabolite = name, SMILES = d$SMILES[1], MolecularFormula = d$MolecularFormula[1]))
+      }
+    }
+    data.table::data.table(metabolite = name, SMILES = NA_character_, MolecularFormula = NA_character_)
+  }
+  todo <- setdiff(mets, cache$metabolite)
+  if (length(todo)) {
+    message("Looking up ", length(todo), " metabolite names in PubChem...")
+    new <- data.table::rbindlist(pbapply::pblapply(todo, lookup))
+    cache <- unique(data.table::rbindlist(list(cache, new)), by = "metabolite")
+    saveRDS(cache, cache.file)
+  }
+  db <- merge(desc, cache, by = "metabolite", all.x = TRUE)
+  db <- db[, .(compoundname = gsub("\\*+$", "", metabolite), description, baseformula = MolecularFormula,
+               identifier = metabolite, charge = NA_integer_, structure = SMILES)]
+  list(db = db, version = "Dekkers et al. 2022 (Nat Commun 13:5370), Supplementary Data 6")
 }
 
 #' @title Build METACYC
@@ -1042,85 +1365,54 @@ build.SMPDB <- function(outfolder, testMode = FALSE) {
 #' @examples
 #' \dontrun{build.KEGG(outfolder=tempdir(), testMode=TRUE)}
 build.KEGG <- function(outfolder, testMode = FALSE) {
-  print("Downloading compound IDs")
-  cpd.ids <- names(KEGGREST::keggList("compound"))
-  if (testMode) {
-    cpd.ids <- cpd.ids[1:10]
+  # Bulk KEGG REST tables (a handful of requests instead of 2 per compound; no KEGGREST needed).
+  # Structures: KEGG -> ChEBI mapping + parsed ChEBI SMILES; remaining compounds via KEGG -> PubChem SID -> SMILES.
+  b <- a <- NULL
+  cpd <- .kegg_rest("list/compound")
+  data.table::setnames(cpd, c("identifier", "names"))
+  if (testMode) cpd <- cpd[seq_len(min(10L, nrow(cpd)))]
+  cpd[, compoundname := gsub(";", ",", names)]
+
+  pw_names <- .kegg_rest("list/pathway")
+  data.table::setnames(pw_names, c("pathway", "pw_name"))
+  pw_link <- .kegg_rest("link/pathway/compound")
+  data.table::setnames(pw_link, c("identifier", "pathway"))
+  pw_link <- pw_link[identifier %in% cpd$identifier]
+  pw_link[, pathway := sub("^(map|ko|rn|ec)", "map", pathway)]
+  pw_link <- unique(merge(pw_link, pw_names, by = "pathway", all.x = TRUE))
+  path.tab <- pw_link[, .(pathway, identifier, description = pw_name)]
+  pw_desc <- pw_link[!is.na(pw_name), .(description = paste0("Involved in pathways: ", paste(unique(pw_name), collapse = ", "), ".")), by = identifier]
+  cpd <- merge(cpd, pw_desc, by = "identifier", all.x = TRUE)
+
+  # structures from ChEBI (full builds use/create parsed ChEBI; testMode only if it already exists)
+  cpd[, `:=`(structure = NA_character_, baseformula = NA_character_, charge = NA_integer_)]
+  chebi <- NULL
+  if (!testMode || file.exists(file.path(outfolder, "chebi_source", "parsed.rds")) || is.data.frame(getOption("metadbparse.chebi"))) {
+    chebi <- tryCatch(.metadb_chebi(outfolder), error = function(e) NULL)
   }
-  # KEGGREST 1.44.1 cannot parse current multi-record compound responses.
-  id.batches <- as.list(cpd.ids)
-  theurl <- "https://www.genome.jp/kegg/compound/"
-  header <- RCurl::getURL(theurl, .opts = list(ssl.verifypeer = FALSE))
-  version <- stringr::str_match(header, pattern = "Last updated: (.{1,30})<")[, 2]
-  date <- as.Date(version, format = "%B%d, %Y")
-
-  print("Downloading general info")
-  kegg.cpd.list <- pbapply::pblapply(id.batches, FUN = function(batch) {
-    rest.result <- KEGGREST::keggGet(batch)
-    base.list <- lapply(rest.result, FUN = function(cpd) {
-      cpd$NAME_FILT <- gsub(cpd$NAME, pattern = ";", replacement = "")
-      main = data.table::data.table(compoundname = c(paste(cpd$NAME_FILT, collapse = ", ")),
-                             description = paste0("Involved in pathways: ",
-                                                  paste0(cpd$PATHWAY, collapse = ", "),
-                                                  ". More specifically: ", paste0(cpd$MODULE, collapse = ", "),
-                                                  ". Also associated with compound classes: ",
-                                                  paste0(unique(trimws(gsub(cpd$BRITE, pattern = "\\[.*\\]|  D\\d* |\\(.*\\)|\\d*", replacement = ""))),
-                                                         collapse = ", ")),
-                             baseformula = c(cpd$FORMULA),
-                             identifier = c(cpd$ENTRY),
-                             charge = 0,
-                             structure = NA,
-                             pathway = if ("PATHWAY" %in% names(cpd)) {
-                               names(cpd$PATHWAY)
-                             } else {
-                               NA
-                             })
-      path = if (length(cpd$PATHWAY)) data.table::data.table(pathway = names(cpd$PATHWAY),
-                                    identifier = cpd$ENTRY,
-                                    description = cpd$PATHWAY) else data.table::data.table()
-      if(ncol(path) < 3){
-        path = data.table::data.table()
-      }
-
-      list(main = main, path = path)
-    })
-    res <- data.table::rbindlist(lapply(base.list, function(x) x$main), fill=T)
-    path <- data.table::rbindlist(lapply(base.list, function(x) x$path), fill=T)
-    list(main = res, path = path)
-  })
-  db.formatted <- data.table::rbindlist(lapply(kegg.cpd.list, function(x) x$main))
-  path.tab <- data.table::rbindlist(lapply(kegg.cpd.list, function(x) x$path))
-
-  base.loc <- file.path(outfolder, "kegg_source")
-  if (!dir.exists(base.loc)) {
-    dir.create(base.loc)
+  if (!is.null(chebi)) {
+    chebi <- data.table::as.data.table(chebi)[!startsWith(structure, "InChI="), .(chebi = as.character(identifier), c_smiles = structure, c_formula = baseformula)]
+    map <- .kegg_rest("conv/chebi/compound")[a %in% cpd$identifier]
+    map <- merge(map, unique(chebi, by = "chebi"), by.x = "b", by.y = "chebi")
+    map <- unique(map, by = "a")
+    cpd[map, on = .(identifier = a), `:=`(structure = i.c_smiles, baseformula = i.c_formula)]
   }
-  print("Downloading structural info")
-  kegg.mol.paths <- pbapply::pblapply(id.batches, FUN = function(batch) {
-    bigmol <- KEGGREST::keggGet(batch, "mol")
-    fp <- file.path(base.loc, paste0(sub("^cpd:", "", batch), ".mol"))
-    writeLines(bigmol, fp)
-    fp
-  })
-  fns <- unlist(kegg.mol.paths, use.names = FALSE)
-  can.convert <- requireNamespace("rcdk", quietly = TRUE)
-  if (!can.convert) warning("KEGG records and MOL files downloaded; SMILES and formal charges require rcdk with a working Java runtime")
-  smiles.rows <- pbapply::pblapply(fns, function(fn) {
-    smiles <- NA_character_
-    charge <- NA_integer_
-    if (can.convert) try({
-      iatom <- rcdk::load.molecules(molfiles = fn)[[1]]
-      smiles <- rcdk::get.smiles(molecule = iatom)
-      charge <- rcdk::get.total.formal.charge(mol = iatom)
-    })
-    id <- gsub(basename(fn), pattern = "\\.mol", replacement = "")
-    data.table::data.table(identifier = id, smiles = smiles, calcharge = charge)
-  })
-  smitable <- data.table::rbindlist(smiles.rows)
-  db.merged <- merge(db.formatted, smitable, by = "identifier")
-  db.formatted <- data.table::data.table(compoundname = db.merged$compoundname, description = db.merged$description, baseformula = db.merged$baseformula, identifier = db.merged$identifier, charge = db.merged$calcharge, structure = db.merged$smiles)
-  db.formatted.all = list(db = unique(db.formatted), version = version, path = path.tab)
-  db.formatted.all
+  # remaining via PubChem
+  todo <- cpd[is.na(structure), identifier]
+  if (length(todo)) {
+    sidmap <- .kegg_rest("conv/pubchem/compound")[a %in% todo]
+    if (nrow(sidmap)) {
+      smi <- .pubchem_sid_smiles(sidmap$b)
+      sidmap <- unique(merge(sidmap, smi, by.x = "b", by.y = "sid"), by = "a")
+      cpd[sidmap, on = .(identifier = a), structure := i.smiles]
+    }
+  }
+  version <- tryCatch({
+    info <- readLines("https://rest.kegg.jp/info/kegg", warn = FALSE)
+    trimws(sub(".*Release", "Release", grep("Release", info, value = TRUE)[1]))
+  }, error = function(e) as.character(Sys.Date()))
+  db <- cpd[, .(compoundname, description, baseformula, identifier, charge, structure)]
+  list(db = db, version = version, path = path.tab)
 }
 
 #' @title Build DRUGBANK

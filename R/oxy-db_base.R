@@ -237,7 +237,7 @@ cleanDB <- function(db.formatted, cl, silent = TRUE, blocksize, smitype = "Canon
 #' @title Build the base database
 #' @description This is a large wrapper function that calls upon all individual database parsers, cleans the resulting database and saves it in a SQLite database.
 #' @param outfolder In which folder are you building your databases? Temp folders etc. will be put here.
-#' @param dbname Which database do you want to build? Options: chebi,maconda,kegg,bloodexposome,dimedb,expoexplorer, foodb, drugbank, lipidmaps, massbank, metabolights, metacyc, phenolexplorer, respect, wikidata, wikipathways, t3db, vmh, hmdb, smpdb, lmdb, ymdb, ecmdb, bmdb, rmdb, stoff, anpdb, mcdb, mvoc, pamdb
+#' @param dbname Which database do you want to build? Options: chebi,maconda,kegg,bloodexposome,dimedb,expoexplorer, foodb, drugbank, lipidmaps, massbank, metabolights, metacyc, phenolexplorer, respect, wikidata, wikipathways, t3db, vmh, hmdb, smpdb, lmdb, ymdb, ecmdb, bmdb, rmdb, stoff, anpdb, mcdb, mvoc, pamdb, mimedb, pubchemlite, ctd, gutsyatlas
 #' @param custom_csv_path PARAM_DESCRIPTION, Default: NULL
 #' @param smitype Which SMILES format do you want?, Default: 'Canonical'
 #' @param silent Suppress warnings?, Default: TRUE
@@ -276,6 +276,10 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path = NULL, smitype = "Ca
                                         drugbank = build.DRUGBANK(outfolder), lipidmaps = build.LIPIDMAPS(outfolder),
                                         massbank = build.MASSBANK(outfolder), metabolights = build.METABOLIGHTS(outfolder),
                                         metacyc = build.METACYC(outfolder),
+                                        mimedb = build.MIMEDB(outfolder),
+                                        pubchemlite = build.PUBCHEMLITE(outfolder),
+                                        ctd = build.CTD(outfolder),
+                                        gutsyatlas = build.GUTSYATLAS(outfolder),
                                         phenolexplorer = build.PHENOLEXPLORER(outfolder),
                                         respect = build.RESPECT(outfolder), wikidata = build.WIKIDATA(outfolder), wikipathways = build.WIKIPATHWAYS(outfolder), t3db = build.T3DB(outfolder), vmh = build.VMH(outfolder), hmdb = build.HMDB(outfolder), smpdb = build.SMPDB(outfolder), lmdb = build.LMDB(outfolder), ymdb = build.YMDB(outfolder), ecmdb = build.ECMDB(outfolder), bmdb = build.BMDB(outfolder), rmdb = build.RMDB(outfolder), stoff = build.STOFF(outfolder), anpdb = build.ANPDB(outfolder),
                                         mcdb = build.MCDB(outfolder), mvoc = build.mVOC(outfolder),
@@ -288,7 +292,8 @@ buildBaseDB <- function(outfolder, dbname, custom_csv_path = NULL, smitype = "Ca
                                  finally = data.table::data.table())
     )
     if(is.null(db.formatted.all)){
-      stop("This DB is currently not included in MetaDBparse.")
+      stop(toupper(dbname), " returned no data. Some databases (MetaCyc, MiMeDB, Gutsy Atlas) need a manual download first; ",
+           "see the message above for where to save the file.")
     }
   } else {
     db.formatted.all <- list(db = data.table::fread(custom_csv_path, header = TRUE), version = Sys.time())

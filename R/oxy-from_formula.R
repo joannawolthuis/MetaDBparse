@@ -284,7 +284,15 @@ getPredicted <- function(mz, ppm = 2, mode = "positive",
 #' search = c("pubchem", "chemspider",
 #' "knapsack", "supernatural2",
 #' "chemidplus"), detailed = TRUE)}
-searchFormulaWeb <- function(formulas, search = c("pubchem", "chemspider", "knapsack", "supernatural2", "chemidplus"), apikey = "", detailed = TRUE) {
+searchFormulaWeb <- function(formulas, search = c("pubchem", "chemspider", "knapsack"), apikey = "", detailed = TRUE) {
+  # ChemIDplus was retired by NLM (2022; content now in PubChem) and SuperNatural's host
+  # (bioinf-applied.charite.de) no longer resolves (Nov 2026) -> skipped with a message.
+  gone <- intersect(search, c("chemidplus", "supernatural2"))
+  if (length(gone)) {
+    message("Skipping unavailable online source(s): ", paste(gone, collapse = ", "),
+            " (ChemIDplus retired, content now in PubChem; SuperNatural server offline).")
+    search <- setdiff(search, gone)
+  }
   V1 <- V2 <- . <- c_id <- metabolite <- organism <- NULL
   formulas <- unique(gsub(formulas, pattern = "\\[2\\]H", replacement = "D"))
   if (length(search) > 0) {
