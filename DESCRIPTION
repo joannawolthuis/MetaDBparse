@@ -16,8 +16,7 @@ Depends:
   R (>= 4.0.0),
   rvest,
   RCurl,
-  XML,
-  glitter
+  XML
 Imports:
   methods,
   pacman,
